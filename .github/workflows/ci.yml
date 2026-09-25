@@ -75,7 +75,9 @@ jobs:
       - name: Regenerate and diff
         run: |
           python3 tools/gen_golden_vectors.py
-          git diff --exit-code -- tests/generated/golden_vectors.hpp
+          python3 tools/gen_fuzz_corpus.py
+          git diff --exit-code -- tests/generated/golden_vectors.hpp tests/fuzz/corpus
+          test -z "$(git status --porcelain -- tests/fuzz/corpus)"
       - name: Simulator unit tests
         run: python3 -m unittest -v tools/test_sim.py
 
@@ -94,9 +96,6 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
           -DLIVOX_MID360_BUILD_FUZZERS=ON -DLIVOX_MID360_ENABLE_ASAN=ON -DLIVOX_MID360_ENABLE_UBSAN=ON
       - name: Build fuzzers
-        run: cmake --build build --target fuzz_command_frame fuzz_data_packet fuzz_key_value_list
+        run: cmake --build build --target fuzzers
       - name: Run each fuzzer briefly
-        run: |
-          for f in fuzz_command_frame fuzz_data_packet fuzz_key_value_list; do
-            ./build/tests/$f -max_total_time=30 -rss_limit_mb=2048
-          done
+        run: scripts/fuzz.sh build 30

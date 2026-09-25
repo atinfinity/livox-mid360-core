@@ -6,6 +6,8 @@
 #include <cstring>
 #include <utility>
 
+#include "session_detail.hpp"
+
 namespace livox::mid360 {
 
 namespace {
@@ -149,22 +151,12 @@ std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
     while (true) {
       const auto d = sock->recv_one(buf);
       if (!d) break;
-      const auto view = parse_command_frame(d->data);
-      if (!view || view->header.cmd_id != 0x0000 || view->header.cmd_type != CmdType::kAck) {
-        continue;
-      }
-      const auto ack = parse_discovery_ack(view->data);
-      if (!ack || ack->ret_code != RetCode::kSuccess) continue;
-      DiscoveredDevice dev;
-      dev.serial_number = std::string(ack->serial_number_view());
-      dev.ip = ack->lidar_ip;
-      dev.cmd_port = ack->cmd_port;
-      dev.dev_type = ack->dev_type;
-      dev.from = d->from;
+      auto dev = detail::parse_discovered_device(d->data, d->from);
+      if (!dev) continue;
       const bool dup = std::any_of(found.begin(), found.end(), [&](const DiscoveredDevice& f) {
-        return f.serial_number == dev.serial_number;
+        return f.serial_number == dev->serial_number;
       });
-      if (!dup) found.push_back(std::move(dev));
+      if (!dup) found.push_back(std::move(*dev));
       if (unicast) {
         for (std::size_t i = 0; i < targets.size(); ++i) {
           if (targets[i] == d->from || targets[i].ip == d->from.ip) answered[i] = true;
@@ -319,15 +311,10 @@ std::expected<RawAck, SessionError> Session::request(std::uint16_t cmd_id,
       while (true) {
         const auto d = socket_.recv_one(buf);
         if (!d) break;
-        const auto view = parse_command_frame(d->data);
+        const auto view = detail::match_ack(d->data, d->from, seq, cmd_id, lidar_.ip);
         if (!view) {
-          ++stats_.bad_frames;
-          continue;
-        }
-        if (view->header.cmd_type != CmdType::kAck) continue;  // pushes are not ours
-        if (view->header.seq_num != seq || view->header.cmd_id != cmd_id ||
-            d->from.ip != lidar_.ip) {
-          ++stats_.late_acks;
+          if (view.error() == detail::AckMismatch::kBadFrame) ++stats_.bad_frames;
+          if (view.error() == detail::AckMismatch::kLate) ++stats_.late_acks;
           continue;
         }
         RawAck ack;
@@ -352,12 +339,7 @@ std::expected<DiscoveryAck, SessionError> Session::discovery_ack(
     std::optional<RequestOptions> opts) {
   auto r = request(static_cast<std::uint16_t>(CmdId::kDiscovery), {}, opts);
   if (!r) return std::unexpected(r.error());
-  const auto ack = parse_discovery_ack(r->data);
-  if (!ack) return std::unexpected(bad_response(ack.error(), r->cmd_id, 0));
-  if (ack->ret_code != RetCode::kSuccess) {
-    return std::unexpected(rejected(ack->ret_code, 0, r->cmd_id, 0));
-  }
-  return *ack;
+  return detail::to_discovery_ack(*r);
 }
 
 std::expected<ParamConfigAck, SessionError> Session::configure(std::span<const KeyValue> kvs,
@@ -365,12 +347,7 @@ std::expected<ParamConfigAck, SessionError> Session::configure(std::span<const K
   const auto payload = encode_param_config_request(kvs);
   auto r = request(static_cast<std::uint16_t>(CmdId::kParamConfig), payload, opts);
   if (!r) return std::unexpected(r.error());
-  const auto ack = parse_param_config_ack(r->data);
-  if (!ack) return std::unexpected(bad_response(ack.error(), r->cmd_id, 0));
-  if (ack->ret_code != RetCode::kSuccess && ack->ret_code != RetCode::kParamRebootEffect) {
-    return std::unexpected(rejected(ack->ret_code, ack->error_key, r->cmd_id, 0));
-  }
-  return *ack;
+  return detail::to_config_ack(*r);
 }
 
 std::expected<InquireResult, SessionError> Session::inquire(std::span<const std::uint16_t> keys,
@@ -378,17 +355,7 @@ std::expected<InquireResult, SessionError> Session::inquire(std::span<const std:
   const auto payload = encode_param_inquire_request(keys);
   auto r = request(static_cast<std::uint16_t>(CmdId::kParamInquire), payload, opts);
   if (!r) return std::unexpected(r.error());
-  InquireResult res;
-  res.raw = std::move(r->data);
-  const auto ack = parse_param_inquire_ack(res.raw);
-  if (!ack) return std::unexpected(bad_response(ack.error(), r->cmd_id, 0));
-  if (ack->ret_code != RetCode::kSuccess) {
-    const std::uint16_t key = ack->values.empty() ? 0 : ack->values.front().key;
-    return std::unexpected(rejected(ack->ret_code, key, r->cmd_id, 0));
-  }
-  res.ret_code = ack->ret_code;
-  res.values = ack->values;  // spans point into res.raw, which we own
-  return res;
+  return detail::to_inquire_result(std::move(*r));
 }
 
 std::expected<InquireResult, SessionError> Session::inquire(std::span<const Key> keys,
@@ -402,12 +369,7 @@ std::expected<InquireResult, SessionError> Session::inquire(std::span<const Key>
 namespace {
 std::expected<SimpleAck, SessionError> simple(const std::expected<RawAck, SessionError>& r) {
   if (!r) return std::unexpected(r.error());
-  const auto ack = parse_simple_ack(r->data);
-  if (!ack) return std::unexpected(bad_response(ack.error(), r->cmd_id, 0));
-  if (ack->ret_code != RetCode::kSuccess) {
-    return std::unexpected(rejected(ack->ret_code, 0, r->cmd_id, 0));
-  }
-  return *ack;
+  return detail::to_simple_ack(*r);
 }
 }  // namespace
 
@@ -434,11 +396,7 @@ std::expected<WorkState, SessionError> Session::work_state(std::optional<Request
   const Key keys[] = {Key::kCurWorkState};
   auto r = inquire(keys, opts);
   if (!r) return std::unexpected(r.error());
-  const auto v = r->get(Key::kCurWorkState);
-  if (!v) return std::unexpected(bad_response(ParseError::kTruncated, 0x0101, 0));
-  const auto ws = decode_work_state(*v);
-  if (!ws) return std::unexpected(bad_response(ParseError::kTruncated, 0x0101, 0));
-  return *ws;
+  return detail::to_work_state(*r);
 }
 
 std::expected<void, SessionError> Session::wait_for_state(WorkState target,
@@ -478,5 +436,93 @@ std::expected<void, SessionError> Session::wait_for_state(WorkState target,
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// detail (see session_detail.hpp)
+// ---------------------------------------------------------------------------
+
+namespace detail {
+
+std::expected<CommandFrameView, AckMismatch> match_ack(std::span<const std::byte> datagram,
+                                                       const Endpoint& from, std::uint32_t seq,
+                                                       std::uint16_t cmd_id,
+                                                       const Ipv4& lidar_ip) noexcept {
+  const auto view = parse_command_frame(datagram);
+  if (!view) return std::unexpected(AckMismatch::kBadFrame);
+  if (view->header.cmd_type != CmdType::kAck) return std::unexpected(AckMismatch::kNotAck);
+  if (view->header.seq_num != seq || view->header.cmd_id != cmd_id || from.ip != lidar_ip) {
+    return std::unexpected(AckMismatch::kLate);
+  }
+  return *view;
+}
+
+std::optional<DiscoveredDevice> parse_discovered_device(std::span<const std::byte> datagram,
+                                                        const Endpoint& from) {
+  const auto view = parse_command_frame(datagram);
+  if (!view || view->header.cmd_id != static_cast<std::uint16_t>(CmdId::kDiscovery) ||
+      view->header.cmd_type != CmdType::kAck) {
+    return std::nullopt;
+  }
+  const auto ack = parse_discovery_ack(view->data);
+  if (!ack || ack->ret_code != RetCode::kSuccess) return std::nullopt;
+  DiscoveredDevice dev;
+  dev.serial_number = std::string(ack->serial_number_view());
+  dev.ip = ack->lidar_ip;
+  dev.cmd_port = ack->cmd_port;
+  dev.dev_type = ack->dev_type;
+  dev.from = from;
+  return dev;
+}
+
+std::expected<DiscoveryAck, SessionError> to_discovery_ack(const RawAck& ack) {
+  const auto a = parse_discovery_ack(ack.data);
+  if (!a) return std::unexpected(bad_response(a.error(), ack.cmd_id, 0));
+  if (a->ret_code != RetCode::kSuccess) {
+    return std::unexpected(rejected(a->ret_code, 0, ack.cmd_id, 0));
+  }
+  return *a;
+}
+
+std::expected<ParamConfigAck, SessionError> to_config_ack(const RawAck& ack) {
+  const auto a = parse_param_config_ack(ack.data);
+  if (!a) return std::unexpected(bad_response(a.error(), ack.cmd_id, 0));
+  if (a->ret_code != RetCode::kSuccess && a->ret_code != RetCode::kParamRebootEffect) {
+    return std::unexpected(rejected(a->ret_code, a->error_key, ack.cmd_id, 0));
+  }
+  return *a;
+}
+
+std::expected<InquireResult, SessionError> to_inquire_result(RawAck ack) {
+  InquireResult res;
+  res.raw = std::move(ack.data);
+  const auto a = parse_param_inquire_ack(res.raw);
+  if (!a) return std::unexpected(bad_response(a.error(), ack.cmd_id, 0));
+  if (a->ret_code != RetCode::kSuccess) {
+    const std::uint16_t key = a->values.empty() ? 0 : a->values.front().key;
+    return std::unexpected(rejected(a->ret_code, key, ack.cmd_id, 0));
+  }
+  res.ret_code = a->ret_code;
+  res.values = a->values;  // spans point into res.raw, which the result owns
+  return res;
+}
+
+std::expected<SimpleAck, SessionError> to_simple_ack(const RawAck& ack) {
+  const auto a = parse_simple_ack(ack.data);
+  if (!a) return std::unexpected(bad_response(a.error(), ack.cmd_id, 0));
+  if (a->ret_code != RetCode::kSuccess) {
+    return std::unexpected(rejected(a->ret_code, 0, ack.cmd_id, 0));
+  }
+  return *a;
+}
+
+std::expected<WorkState, SessionError> to_work_state(const InquireResult& result) {
+  const auto v = result.get(Key::kCurWorkState);
+  if (!v) return std::unexpected(bad_response(ParseError::kTruncated, 0x0101, 0));
+  const auto ws = decode_work_state(*v);
+  if (!ws) return std::unexpected(bad_response(ParseError::kTruncated, 0x0101, 0));
+  return *ws;
+}
+
+}  // namespace detail
 
 }  // namespace livox::mid360

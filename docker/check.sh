@@ -41,14 +41,12 @@ docker run --rm ${platform_args[@]+"${platform_args[@]}"} -e EMULATED="$emulated
     cmake --build build-san && ctest --test-dir build-san --output-on-failure | tail -3
     cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++-19 \
           -DLIVOX_MID360_BUILD_FUZZERS=ON -DLIVOX_MID360_ENABLE_ASAN=ON -DLIVOX_MID360_ENABLE_UBSAN=ON >/dev/null
-    cmake --build build-fuzz --target fuzz_command_frame fuzz_data_packet fuzz_key_value_list
-    for f in fuzz_command_frame fuzz_data_packet fuzz_key_value_list; do
-      ./build-fuzz/tests/$f -max_total_time=10 -rss_limit_mb=2048 2>&1 | tail -1
-    done
+    cmake --build build-fuzz --target fuzzers
+    scripts/fuzz.sh build-fuzz 10
   else
     echo "sanitizer and fuzz steps: skipped (emulated)"
   fi
   python3 -m unittest tools/test_sim.py
-  python3 tools/gen_golden_vectors.py && git init -q . && git add -A && git diff --cached --quiet -- tests/generated || true
+  python3 tools/gen_golden_vectors.py && python3 tools/gen_fuzz_corpus.py && git init -q . && git add -A && git diff --cached --quiet -- tests/generated tests/fuzz/corpus || true
   cmake --install build-g++-14 --prefix /tmp/inst >/dev/null && ls /tmp/inst/lib/cmake/livox_mid360_core
 '

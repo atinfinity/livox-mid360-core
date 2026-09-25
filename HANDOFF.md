@@ -191,7 +191,7 @@ livox-mid360-core/
 ├── tools/                     # Python リファレンス実装、pcap 解析、golden vector 生成、シミュレータ
 ├── tests/
 │   ├── generated/             # golden vectors（tools/gen_golden_vectors.py が生成）
-│   ├── fuzz/                  # libFuzzer ターゲット
+│   ├── fuzz/                  # libFuzzer ターゲット（corpus/ は tools/gen_fuzz_corpus.py が生成）
 │   ├── fixtures/*.pcap        # （予定）実機から採取
 │   └── *.cpp                  # Catch2 v3
 ├── docs/
@@ -200,6 +200,7 @@ livox-mid360-core/
 │   └── simulator.md           # シミュレータの仕様と実機検証待ちの仮定
 ├── docker/                    # Ubuntu 24.04 での CI 再現（docker/check.sh、lint・coverage 含む）
 ├── scripts/lint.sh            # clang-format / clang-tidy / ruff（CI の Lint と同一）
+├── scripts/fuzz.sh            # 全 fuzz ターゲットをコーパス付きで短時間実行（CI と同一）
 ├── README.md                  # 非公式実装であることを冒頭に明記
 └── LICENSE                    # Apache-2.0
 ```
