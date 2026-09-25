@@ -5,11 +5,16 @@ namespace livox::mid360 {
 
 std::string_view to_string(HmsLevel l) noexcept {
   switch (l) {
-    case HmsLevel::kNone: return "none";
-    case HmsLevel::kInfo: return "info";
-    case HmsLevel::kWarning: return "warning";
-    case HmsLevel::kError: return "error";
-    case HmsLevel::kFatal: return "fatal";
+    case HmsLevel::kNone:
+      return "none";
+    case HmsLevel::kInfo:
+      return "info";
+    case HmsLevel::kWarning:
+      return "warning";
+    case HmsLevel::kError:
+      return "error";
+    case HmsLevel::kFatal:
+      return "fatal";
   }
   return "unknown";
 }

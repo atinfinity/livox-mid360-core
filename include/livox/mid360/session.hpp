@@ -67,10 +67,10 @@ struct SessionError {
 
 struct DiscoveredDevice {
   std::string serial_number;
-  Ipv4 ip{};                 ///< lidar_ip from the ACK
+  Ipv4 ip{};                   ///< lidar_ip from the ACK
   std::uint16_t cmd_port = 0;  ///< command port from the ACK
   std::uint8_t dev_type = 0;
-  Endpoint from;             ///< where the ACK actually came from
+  Endpoint from;  ///< where the ACK actually came from
 };
 
 struct DiscoveryOptions {
@@ -106,11 +106,11 @@ struct SessionOptions {
 };
 
 struct SessionStats {
-  std::uint64_t requests = 0;   ///< request() calls
-  std::uint64_t retries = 0;    ///< datagrams sent beyond the first per request
-  std::uint64_t timeouts = 0;   ///< requests that exhausted all attempts
-  std::uint64_t late_acks = 0;  ///< ACKs that matched no pending request
-  std::uint64_t bad_frames = 0; ///< datagrams that failed parse_command_frame
+  std::uint64_t requests = 0;    ///< request() calls
+  std::uint64_t retries = 0;     ///< datagrams sent beyond the first per request
+  std::uint64_t timeouts = 0;    ///< requests that exhausted all attempts
+  std::uint64_t late_acks = 0;   ///< ACKs that matched no pending request
+  std::uint64_t bad_frames = 0;  ///< datagrams that failed parse_command_frame
 };
 
 /// Result of a raw request: the ACK payload, owned.
@@ -192,8 +192,8 @@ class Session {
       std::optional<RequestOptions> opts = std::nullopt);
   /// Poll 0x8006 until `target` is observed. ERROR / UPGRADE end the wait with
   /// kUnexpectedState; other states are treated as transitional.
-  [[nodiscard]] std::expected<void, SessionError> wait_for_state(
-      WorkState target, std::chrono::milliseconds timeout);
+  [[nodiscard]] std::expected<void, SessionError> wait_for_state(WorkState target,
+                                                                 std::chrono::milliseconds timeout);
 
   /// Abort a blocking call from another thread; it returns kCancelled. The flag is
   /// consumed by the aborted call (or by the next call if none is in progress).

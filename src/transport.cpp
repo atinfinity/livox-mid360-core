@@ -85,7 +85,6 @@ std::uint64_t now_realtime_ns() {
          static_cast<std::uint64_t>(ts.tv_nsec);
 }
 
-
 bool set_nonblocking(int fd) {
   const int flags = ::fcntl(fd, F_GETFL, 0);
   return flags >= 0 && ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
@@ -130,8 +129,8 @@ std::optional<Endpoint> parse_endpoint(std::string_view text) {
   std::size_t pos = 0;
   while (true) {
     const auto dot = addr.find('.', pos);
-    const auto part = addr.substr(pos, dot == std::string_view::npos ? std::string_view::npos
-                                                                     : dot - pos);
+    const auto part =
+        addr.substr(pos, dot == std::string_view::npos ? std::string_view::npos : dot - pos);
     if (octet == 4 || part.empty() || part.size() > 3) return std::nullopt;
     unsigned value = 0;
     const auto [ptr, ec] = std::from_chars(part.data(), part.data() + part.size(), value);
@@ -165,7 +164,9 @@ std::string ip_to_string(const std::array<std::uint8_t, 4>& ip) {
   return out;
 }
 
-std::string to_string(const Endpoint& ep) { return ip_to_string(ep.ip) + ':' + std::to_string(ep.port); }
+std::string to_string(const Endpoint& ep) {
+  return ip_to_string(ep.ip) + ':' + std::to_string(ep.port);
+}
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -173,19 +174,32 @@ std::string to_string(const Endpoint& ep) { return ip_to_string(ep.ip) + ':' + s
 
 std::string_view to_string(TransportErrorCode code) {
   switch (code) {
-    case TransportErrorCode::kSocketCreate: return "socket_create";
-    case TransportErrorCode::kBind: return "bind";
-    case TransportErrorCode::kSetOption: return "set_option";
-    case TransportErrorCode::kAddressInUse: return "address_in_use";
-    case TransportErrorCode::kNetworkUnreachable: return "network_unreachable";
-    case TransportErrorCode::kSendFailed: return "send_failed";
-    case TransportErrorCode::kMessageTooLong: return "message_too_long";
-    case TransportErrorCode::kWouldBlock: return "would_block";
-    case TransportErrorCode::kTimeout: return "timeout";
-    case TransportErrorCode::kInterrupted: return "interrupted";
-    case TransportErrorCode::kClosed: return "closed";
-    case TransportErrorCode::kInvalidArgument: return "invalid_argument";
-    case TransportErrorCode::kOther: return "other";
+    case TransportErrorCode::kSocketCreate:
+      return "socket_create";
+    case TransportErrorCode::kBind:
+      return "bind";
+    case TransportErrorCode::kSetOption:
+      return "set_option";
+    case TransportErrorCode::kAddressInUse:
+      return "address_in_use";
+    case TransportErrorCode::kNetworkUnreachable:
+      return "network_unreachable";
+    case TransportErrorCode::kSendFailed:
+      return "send_failed";
+    case TransportErrorCode::kMessageTooLong:
+      return "message_too_long";
+    case TransportErrorCode::kWouldBlock:
+      return "would_block";
+    case TransportErrorCode::kTimeout:
+      return "timeout";
+    case TransportErrorCode::kInterrupted:
+      return "interrupted";
+    case TransportErrorCode::kClosed:
+      return "closed";
+    case TransportErrorCode::kInvalidArgument:
+      return "invalid_argument";
+    case TransportErrorCode::kOther:
+      return "other";
   }
   return "unknown";
 }
@@ -260,7 +274,9 @@ UdpSocket& UdpSocket::operator=(UdpSocket&& other) noexcept {
   return *this;
 }
 
-UdpSocket::~UdpSocket() { close(); }
+UdpSocket::~UdpSocket() {
+  close();
+}
 
 void UdpSocket::close() noexcept {
   if (fd_ >= 0) {
@@ -336,8 +352,8 @@ std::expected<std::size_t, TransportError> UdpSocket::recv_batch(std::span<Datag
   for (Datagram& d : out) {
     sockaddr_in from{};
     socklen_t len = sizeof(from);
-    const ssize_t n = ::recvfrom(fd_, d.data.data(), d.data.size(), 0,
-                                 reinterpret_cast<sockaddr*>(&from), &len);
+    const ssize_t n =
+        ::recvfrom(fd_, d.data.data(), d.data.size(), 0, reinterpret_cast<sockaddr*>(&from), &len);
     if (n < 0) {
       if (received > 0) break;
       return std::unexpected(from_errno(TransportErrorCode::kOther, errno));
@@ -372,7 +388,8 @@ std::expected<Poller, TransportError> Poller::create() {
   p.wake_write_fd_ = efd;
 #else
   int fds[2] = {-1, -1};
-  if (::pipe(fds) != 0) return std::unexpected(from_errno(TransportErrorCode::kSocketCreate, errno));
+  if (::pipe(fds) != 0)
+    return std::unexpected(from_errno(TransportErrorCode::kSocketCreate, errno));
   p.wake_read_fd_ = fds[0];
   p.wake_write_fd_ = fds[1];
   if (!set_nonblocking(fds[0]) || !set_nonblocking(fds[1])) {
@@ -437,10 +454,10 @@ std::expected<std::span<const ReadyEvent>, TransportError> Poller::wait(
   fds.push_back({wake_read_fd_, POLLIN, 0});
   for (const Entry& e : entries_) fds.push_back({e.fd, POLLIN, 0});
 
-  const int timeout_ms =
-      timeout.count() < 0 ? -1
-                          : static_cast<int>(std::min<std::chrono::milliseconds::rep>(
-                                timeout.count(), std::numeric_limits<int>::max()));
+  const int timeout_ms = timeout.count() < 0
+                             ? -1
+                             : static_cast<int>(std::min<std::chrono::milliseconds::rep>(
+                                   timeout.count(), std::numeric_limits<int>::max()));
   // nfds_t is 64-bit on Linux and 32-bit on macOS; go through a fixed-width type so that
   // neither -Wuseless-cast (GCC) nor -Wshorten-64-to-32 (Clang) fires.
   const auto nfds = static_cast<nfds_t>(static_cast<std::uint32_t>(fds.size()));
@@ -461,7 +478,8 @@ std::expected<std::span<const ReadyEvent>, TransportError> Poller::wait(
   for (std::size_t i = 0; i < entries_.size(); ++i) {
     const short rev = fds[i + 1].revents;
     if (rev == 0) continue;
-    ready_.push_back({entries_[i].tag, (rev & POLLIN) != 0, (rev & (POLLERR | POLLHUP | POLLNVAL)) != 0});
+    ready_.push_back(
+        {entries_[i].tag, (rev & POLLIN) != 0, (rev & (POLLERR | POLLHUP | POLLNVAL)) != 0});
   }
   return std::span<const ReadyEvent>(ready_);
 }

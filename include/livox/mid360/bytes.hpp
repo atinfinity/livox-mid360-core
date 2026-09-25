@@ -18,8 +18,7 @@ template <typename T>
 [[nodiscard]] inline T read_le(std::span<const std::byte> in, std::size_t offset) noexcept {
   T v{};
   std::memcpy(&v, in.data() + offset, sizeof(T));
-  if constexpr (std::endian::native == std::endian::big && std::is_integral_v<T> &&
-                sizeof(T) > 1) {
+  if constexpr (std::endian::native == std::endian::big && std::is_integral_v<T> && sizeof(T) > 1) {
     v = std::byteswap(v);
   }
   return v;
@@ -30,8 +29,7 @@ template <typename T>
 template <typename T>
   requires std::is_trivially_copyable_v<T>
 inline void write_le(std::span<std::byte> out, std::size_t offset, T v) noexcept {
-  if constexpr (std::endian::native == std::endian::big && std::is_integral_v<T> &&
-                sizeof(T) > 1) {
+  if constexpr (std::endian::native == std::endian::big && std::is_integral_v<T> && sizeof(T) > 1) {
     v = std::byteswap(v);
   }
   std::memcpy(out.data() + offset, &v, sizeof(T));
