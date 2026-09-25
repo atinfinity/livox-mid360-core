@@ -36,10 +36,11 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
   `Context` owns the three host receive sockets and one receive thread (`recvmmsg`, dispatch
   by source IP); a `Device` wraps a `Session`, applies the host setup and delivers parsed
   packets, assembled `Frame`s (frame counter or time window, udp_cnt drop counting, timestamp
-  policies) and IMU samples through callbacks, plus periodic stats events. `BoundedQueue<T>`
-  hands them to another thread. Tested against the simulator
+  policies) and IMU samples through callbacks, plus stats, work-state and HMS events parsed
+  from the 0x0102 push. `BoundedQueue<T>` hands them to another thread. Tested against the
+  simulator
 
-Not yet implemented (phase 2+): push / work-state / HMS events (#7), reconnection (#8),
+Not yet implemented (phase 2+): reconnection (#8),
 C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
 upgrade (`0x04xx`) commands are intentionally out of scope.
 

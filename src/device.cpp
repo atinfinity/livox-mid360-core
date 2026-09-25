@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "livox/mid360/device.hpp"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -91,8 +93,16 @@ struct Device::Impl : detail::Receiver {
   std::atomic<std::uint64_t> reordered{0};
   std::atomic<std::uint64_t> frame_cnt_fallback{0};
   std::atomic<std::uint64_t> last_packet_time_ns{0};
+  std::atomic<std::uint64_t> pushes{0};
+  std::atomic<std::uint64_t> last_push_time_ns{0};
   std::atomic<std::int64_t> time_offset_ns{0};
   std::atomic<bool> time_offset_valid{false};
+
+  // --- pushed state (written by the receive thread under push_mutex) ------------
+  mutable std::mutex push_mutex;
+  std::optional<WorkState> pushed_state;
+  std::array<HmsCode, 8> pushed_hms{};
+  std::array<std::uint32_t, 8> hms_sorted{};  ///< raw codes, sorted, for change detection
 
   [[nodiscard]] DeviceStats snapshot() const {
     constexpr auto kRelaxed = std::memory_order_relaxed;
@@ -107,6 +117,8 @@ struct Device::Impl : detail::Receiver {
         .queue_drops = 0,
         .frame_cnt_fallback = frame_cnt_fallback.load(kRelaxed),
         .last_packet_time_ns = last_packet_time_ns.load(kRelaxed),
+        .pushes = pushes.load(kRelaxed),
+        .last_push_time_ns = last_push_time_ns.load(kRelaxed),
         .time_offset_ns = time_offset_ns.load(kRelaxed),
         .time_offset_valid = time_offset_valid.load(kRelaxed),
     };
@@ -142,8 +154,71 @@ struct Device::Impl : detail::Receiver {
     if (frame && rx_frame_cb) rx_frame_cb(std::move(*frame));
   }
 
+  // 0x0102: only cur_work_state and hms_code are consumed (issue #7). The first push
+  // records the state without a kStateChanged; the HMS baseline is all-zero, so active
+  // codes in the first push do raise kHms. Slot order is ignored for change detection.
+  void on_push(const Datagram& d) {
+    const auto frame = parse_command_frame(d.data);
+    if (!frame || frame->header.cmd_id != static_cast<std::uint16_t>(CmdId::kInfoPush)) {
+      bad_packets.fetch_add(1, std::memory_order_relaxed);
+      return;
+    }
+    const auto push = parse_info_push(frame->data);
+    if (!push) {
+      bad_packets.fetch_add(1, std::memory_order_relaxed);
+      return;
+    }
+    pushes.fetch_add(1, std::memory_order_relaxed);
+    last_push_time_ns.store(d.recv_time_ns, std::memory_order_relaxed);
+    refresh_callbacks();
+
+    std::optional<Event> state_event;
+    std::optional<Event> hms_event;
+    {
+      const std::lock_guard lock(push_mutex);
+      if (const auto v = find_key(push->values, Key::kCurWorkState)) {
+        if (const auto st = decode_work_state(*v)) {
+          if (pushed_state && *pushed_state != *st) {
+            Event ev;
+            ev.kind = Event::Kind::kStateChanged;
+            ev.time_ns = d.recv_time_ns;
+            ev.old_state = *pushed_state;
+            ev.new_state = *st;
+            state_event = ev;
+          }
+          pushed_state = *st;
+        }
+      }
+      if (const auto v = find_key(push->values, Key::kHmsCode)) {
+        if (const auto raw = decode_hms_codes(*v)) {
+          for (std::size_t i = 0; i < raw->size(); ++i) pushed_hms[i] = decode_hms((*raw)[i]);
+          std::array<std::uint32_t, 8> sorted = *raw;
+          std::ranges::sort(sorted);
+          if (sorted != hms_sorted) {
+            hms_sorted = sorted;
+            Event ev;
+            ev.kind = Event::Kind::kHms;
+            ev.time_ns = d.recv_time_ns;
+            ev.hms = pushed_hms;
+            for (const HmsCode& c : pushed_hms) {
+              if (c.active() && c.level > ev.hms_level) ev.hms_level = c.level;
+            }
+            hms_event = ev;
+          }
+        }
+      }
+    }
+    if (rx_event_cb) {
+      if (state_event) rx_event_cb(*state_event);
+      if (hms_event) rx_event_cb(*hms_event);
+    }
+  }
+
   void on_datagram(detail::DataPort port, const Datagram& d) override {
-    if (port == detail::DataPort::kPush) return;  // parsed in #7
+    if (port == detail::DataPort::kPush) {
+      on_push(d);
+      return;
+    }
     const auto pkt = parse_data_packet(d.data, options.verify_crc);
     if (!pkt) {
       bad_packets.fetch_add(1, std::memory_order_relaxed);
@@ -332,10 +407,14 @@ const DiscoveredDevice& Device::info() const noexcept {
   return impl_->info;
 }
 
-// Always nullopt until cur_work_state push tracking lands (#7).
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 std::optional<WorkState> Device::work_state() const {
-  return std::nullopt;
+  const std::lock_guard lock(impl_->push_mutex);
+  return impl_->pushed_state;
+}
+
+std::array<HmsCode, 8> Device::hms() const {
+  const std::lock_guard lock(impl_->push_mutex);
+  return impl_->pushed_hms;
 }
 
 DeviceStats Device::stats() const {
