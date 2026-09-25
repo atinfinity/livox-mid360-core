@@ -1,5 +1,8 @@
 # clang-tidy configuration shared with livox-mid360-ros2 (issue #17).
 # Style-only and known-false-positive checks are disabled; everything else is blocking in CI.
+# modernize-use-ranges is off because Apple libc++ (macOS dev builds) lacks ranges algorithms;
+# owning-memory needs GSL; pro-type-vararg flags POSIX fcntl(). Omitting trailing members in
+# designated initializers is intentional and accepted by the -Werror builds.
 Checks: >
   bugprone-*,
   performance-*,
@@ -7,15 +10,19 @@ Checks: >
   readability-*,
   cppcoreguidelines-*,
   -bugprone-easily-swappable-parameters,
+  -clang-diagnostic-missing-designated-field-initializers,
   -cppcoreguidelines-avoid-c-arrays,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-owning-memory,
   -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
   -cppcoreguidelines-pro-bounds-constant-array-index,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-vararg,
   -modernize-avoid-c-arrays,
   -modernize-use-designated-initializers,
+  -modernize-use-ranges,
   -modernize-use-trailing-return-type,
   -readability-braces-around-statements,
   -readability-function-cognitive-complexity,

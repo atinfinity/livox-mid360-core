@@ -21,7 +21,7 @@ namespace detail {
 consteval std::array<std::uint16_t, 256> make_crc16_table() {
   std::array<std::uint16_t, 256> t{};
   for (std::uint32_t i = 0; i < 256; ++i) {
-    std::uint16_t c = static_cast<std::uint16_t>(i << 8);
+    auto c = static_cast<std::uint16_t>(i << 8);
     for (int k = 0; k < 8; ++k) {
       const std::uint32_t shifted = static_cast<std::uint32_t>(c) << 1;
       c = static_cast<std::uint16_t>((c & 0x8000u) ? (shifted ^ 0x1021u) : shifted);

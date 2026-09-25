@@ -195,7 +195,7 @@ class Poller {
       std::chrono::milliseconds timeout);
 
   /// Interrupt a pending or future wait(). Thread-safe.
-  void wake() noexcept;
+  void wake() const noexcept;
   /// True if the last wait() returned because of wake().
   [[nodiscard]] bool woken() const noexcept { return woken_; }
 

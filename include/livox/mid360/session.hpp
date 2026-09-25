@@ -131,6 +131,7 @@ struct InquireResult {
   InquireResult& operator=(InquireResult&&) noexcept = default;
   InquireResult(const InquireResult&) = delete;
   InquireResult& operator=(const InquireResult&) = delete;
+  ~InquireResult() = default;
 
   [[nodiscard]] std::optional<std::span<const std::byte>> get(Key key) const noexcept {
     return find_key(values, key);
@@ -147,8 +148,8 @@ class Session {
   [[nodiscard]] static std::expected<Session, SessionError> connect(
       Endpoint cmd_endpoint, const SessionOptions& options = {});
 
-  Session(Session&&) noexcept;
-  Session& operator=(Session&&) noexcept;
+  Session(Session&& other) noexcept;
+  Session& operator=(Session&& other) noexcept;
   Session(const Session&) = delete;
   Session& operator=(const Session&) = delete;
   ~Session();

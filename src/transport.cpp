@@ -468,7 +468,7 @@ std::expected<std::span<const ReadyEvent>, TransportError> Poller::wait(
     woken_ = true;
 #if LIVOX_MID360_HAVE_EVENTFD
     std::uint64_t counter = 0;
-    (void)!::read(wake_read_fd_, &counter, sizeof(counter));
+    (void)(::read(wake_read_fd_, &counter, sizeof(counter)) < 0);
 #else
     char drain[64];
     while (::read(wake_read_fd_, drain, sizeof(drain)) > 0) {
@@ -484,11 +484,11 @@ std::expected<std::span<const ReadyEvent>, TransportError> Poller::wait(
   return std::span<const ReadyEvent>(ready_);
 }
 
-void Poller::wake() noexcept {
+void Poller::wake() const noexcept {
   if (wake_write_fd_ < 0) return;
 #if LIVOX_MID360_HAVE_EVENTFD
   const std::uint64_t one = 1;
-  (void)!::write(wake_write_fd_, &one, sizeof(one));
+  (void)(::write(wake_write_fd_, &one, sizeof(one)) < 0);
 #else
   const char one = 1;
   (void)!::write(wake_write_fd_, &one, 1);

@@ -22,21 +22,21 @@ struct Fixture {
 
   Fixture() { sim = SimProcess::start(err, {"--startup-delay", "1"}); }
 
-  DiscoveryOptions discovery_options() const {
+  [[nodiscard]] DiscoveryOptions discovery_options() const {
     DiscoveryOptions o;
     o.targets = {Endpoint::loopback(sim->ports().discovery)};
     o.timeout = 2s;
     return o;
   }
 
-  SessionOptions session_options() const {
+  [[nodiscard]] static SessionOptions session_options() {
     SessionOptions o;
     o.host_command_port = 0;  // ephemeral: several tests may run in one process
     o.bind_address = {127, 0, 0, 1};
     return o;
   }
 
-  Session connect() const {
+  [[nodiscard]] Session connect() const {
     auto s = Session::connect(Endpoint::loopback(sim->ports().cmd), session_options());
     REQUIRE(s.has_value());
     return std::move(*s);
@@ -64,7 +64,7 @@ TEST_CASE("Session: unicast discovery and connect", "[sim][session]") {
   CHECK(dev.ip == Ipv4{127, 0, 0, 1});
   CHECK(dev.from.port == f.sim->ports().discovery);
 
-  auto session = Session::connect(dev, f.session_options());
+  auto session = Session::connect(dev, Fixture::session_options());
   REQUIRE(session.has_value());
   CHECK(session->serial_number() == f.sim->sn());
   CHECK(session->lidar_endpoint() == Endpoint::loopback(f.sim->ports().cmd));
@@ -74,7 +74,7 @@ TEST_CASE("Session: unicast discovery and connect", "[sim][session]") {
   // Serial mismatch is detected when verify_serial is on.
   DiscoveredDevice wrong = dev;
   wrong.serial_number = "NOPE";
-  const auto bad = Session::connect(wrong, f.session_options());
+  const auto bad = Session::connect(wrong, Fixture::session_options());
   REQUIRE_FALSE(bad.has_value());
   CHECK(bad.error().kind == SessionErrorKind::kBadResponse);
 

@@ -154,38 +154,42 @@ struct DiagStatus {
 // ---------------------------------------------------------------------------
 // Decoders: parse a key's raw value bytes. Length is validated.
 // ---------------------------------------------------------------------------
-[[nodiscard]] std::expected<std::uint8_t, KeyError> decode_u8(std::span<const std::byte>) noexcept;
+[[nodiscard]] std::expected<std::uint8_t, KeyError> decode_u8(
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<std::uint16_t, KeyError> decode_u16(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<std::uint32_t, KeyError> decode_u32(
-    std::span<const std::byte>) noexcept;
-[[nodiscard]] std::expected<std::int32_t, KeyError> decode_i32(std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<std::int32_t, KeyError> decode_i32(
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<std::uint64_t, KeyError> decode_u64(
-    std::span<const std::byte>) noexcept;
-[[nodiscard]] std::expected<std::int64_t, KeyError> decode_i64(std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<std::int64_t, KeyError> decode_i64(
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<HostIpConfig, KeyError> decode_host_ip_config(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<LidarIpConfig, KeyError> decode_lidar_ip_config(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<InstallAttitude, KeyError> decode_install_attitude(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<FovConfig, KeyError> decode_fov_config(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<FuncIoConfig, KeyError> decode_func_io_config(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<ImuSensorConfig, KeyError> decode_imu_sensor_config(
-    std::span<const std::byte>) noexcept;
-[[nodiscard]] std::expected<Version, KeyError> decode_version(std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<Version, KeyError> decode_version(
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<std::array<std::uint8_t, 6>, KeyError> decode_mac(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<WorkState, KeyError> decode_work_state(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<DiagStatus, KeyError> decode_diag_status(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<std::array<std::uint32_t, 8>, KeyError> decode_hms_codes(
-    std::span<const std::byte>) noexcept;
+    std::span<const std::byte> v) noexcept;
 /// NUL-padded string keys (0x8000 sn, 0x8001 product_info). Returns the text before the first NUL.
-[[nodiscard]] std::string_view decode_string(std::span<const std::byte>) noexcept;
+[[nodiscard]] std::string_view decode_string(std::span<const std::byte> v) noexcept;
 
 /// Finds the first entry with `key` in a parsed list.
 [[nodiscard]] std::optional<std::span<const std::byte>> find_key(std::span<const KeyValue> kvs,

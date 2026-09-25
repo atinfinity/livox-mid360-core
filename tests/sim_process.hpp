@@ -76,7 +76,8 @@ class SimProcess {
       error = "python3 not found";
       return std::nullopt;
     }
-    int in_pipe[2], out_pipe[2];
+    int in_pipe[2];
+    int out_pipe[2];
     if (::pipe(in_pipe) != 0 || ::pipe(out_pipe) != 0) {
       error = std::string("pipe: ") + std::strerror(errno);
       return std::nullopt;
@@ -123,7 +124,7 @@ class SimProcess {
         error = "simulator exited before ready";
         return std::nullopt;
       }
-      if (line->find("\"event\":\"ready\"") == std::string::npos) continue;
+      if (line->find(R"("event":"ready")") == std::string::npos) continue;
       sim.ip_ = json_str(*line, "ip").value_or("127.0.0.1");
       sim.sn_ = json_str(*line, "sn").value_or("");
       auto port = [&](const char* k) {
@@ -153,7 +154,7 @@ class SimProcess {
   [[nodiscard]] pid_t pid() const noexcept { return pid_; }
 
   /// Send one JSON control line, e.g. R"({"cmd":"hms","codes":[34603011]})".
-  bool control(std::string_view json) const {
+  [[nodiscard]] bool control(std::string_view json) const {
     if (control_fd_ < 0) return false;
     std::string line(json);
     line.push_back('\n');
@@ -164,7 +165,11 @@ class SimProcess {
   std::optional<std::string> read_event() {
     if (events_ == nullptr) return std::nullopt;
     char buf[4096];
-    if (std::fgets(buf, sizeof buf, events_) == nullptr) return std::nullopt;
+    if (std::fgets(buf, sizeof buf, events_) == nullptr) {  // EOF or error: stop reading
+      std::fclose(events_);
+      events_ = nullptr;
+      return std::nullopt;
+    }
     std::string s(buf);
     while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
     return s;
@@ -185,10 +190,12 @@ class SimProcess {
     if (control_fd_ >= 0) ::close(control_fd_);
     control_fd_ = -1;
     if (events_ != nullptr) {
-      while (read_event()) {
+      while (read_event()) {  // drain; read_event() closes the stream at EOF
       }
-      std::fclose(events_);
-      events_ = nullptr;
+      if (events_ != nullptr) {
+        std::fclose(events_);
+        events_ = nullptr;
+      }
     }
     int status = 0;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);

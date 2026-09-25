@@ -100,6 +100,7 @@ TEST_CASE("trailing bytes after length are ignored", "[cmd]") {
 TEST_CASE("to_string coverage", "[cmd]") {
   CHECK(to_string(RetCode::kSuccess) == "SUCCESS");
   CHECK(to_string(RetCode::kParamReadOnly) == "PARAM_RD_ONLY");
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): unknown value on purpose
   CHECK(to_string(static_cast<RetCode>(0x7F)) == "UNKNOWN");
   CHECK(to_string(WorkState::kSampling) == "SAMPLING");
   CHECK(to_string(CmdId::kInfoPush) == "INFO_PUSH");

@@ -25,6 +25,7 @@
 - インクルードパス: `<livox/mid360/...>`
 - 姉妹リポジトリ: `livox-mid360-ros2`（ROS 2 パッケージ名 `livox_mid360_ros2`、ノード名 `livox_mid360_driver`）、`livox-mid360-cli`
 - GitHub topics: `livox`, `mid-360`, `lidar`, `ros2`, `cpp20`
+- コーディングスタイル: `.clang-format`（Google、100 桁、attached braces）、`.clang-tidy`、`pyproject.toml`（ruff、99 桁、pep257）を `livox-mid360-ros2` と共有する（`ament_clang_format --config` / `ament_flake8 --config` でこのリポジトリのファイルを指す）。cpplint は `#pragma once` と衝突するため採用しない（#17）
 
 ### 決定済み（2026-09-25 のフェーズ 0 で確定）
 - **バリアント範囲**: 無印 Mid-360 のみ。360S/360L 専用 key（`speed_mode` 0x0021、`pc_freq_mod` 0x0029）は enum に列挙するだけで型付きヘルパは持たない。
@@ -197,7 +198,8 @@ livox-mid360-core/
 │   ├── protocol_notes.md      # wiki の曖昧点と実装上の解釈
 │   ├── transport.md           # UDP 層の使い方
 │   └── simulator.md           # シミュレータの仕様と実機検証待ちの仮定
-├── docker/                    # Ubuntu 24.04 での CI 再現（docker/check.sh）
+├── docker/                    # Ubuntu 24.04 での CI 再現（docker/check.sh、lint 含む）
+├── scripts/lint.sh            # clang-format / clang-tidy / ruff（CI の Lint と同一）
 ├── README.md                  # 非公式実装であることを冒頭に明記
 └── LICENSE                    # Apache-2.0
 ```

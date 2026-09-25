@@ -11,16 +11,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 platform_args=()
 if [[ $# -ge 1 ]]; then platform_args=(--platform "$1"); fi
-docker build -q "${platform_args[@]}" -t livox-mid360-core-ci docker >/dev/null
+docker build -q ${platform_args[@]+"${platform_args[@]}"} -t livox-mid360-core-ci docker >/dev/null
 normalize() { case "$1" in arm64|aarch64) echo arm64 ;; x86_64|amd64) echo amd64 ;; *) echo "$1" ;; esac; }
 host_arch=$(normalize "$(uname -m)")
-container_arch=$(normalize "$(docker run --rm "${platform_args[@]}" livox-mid360-core-ci uname -m)")
+container_arch=$(normalize "$(docker run --rm ${platform_args[@]+"${platform_args[@]}"} livox-mid360-core-ci uname -m)")
 emulated=0
 if [[ "$host_arch" != "$container_arch" ]]; then
   emulated=1
   echo "note: host is $host_arch, container is $container_arch (emulated): sanitizers and fuzzers skipped"
 fi
-docker run --rm "${platform_args[@]}" -e EMULATED="$emulated" -v "$PWD:/src:ro" -w /tmp \
+docker run --rm ${platform_args[@]+"${platform_args[@]}"} -e EMULATED="$emulated" -v "$PWD:/src:ro" -w /tmp \
   livox-mid360-core-ci bash -euxo pipefail -c '
   uname -m
   cp -r /src /tmp/work && cd /tmp/work && rm -rf build*

@@ -15,6 +15,7 @@ Behaviour the simulator assumes and that must be reconciled with hardware (#11):
   * settings persist across 0x0200 reboot except work_tgt_mode,
   * dev_type in the discovery ACK is a provisional value.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,8 @@ import socket
 import struct
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import livox_mid360_proto as proto  # noqa: E402
@@ -38,35 +39,92 @@ CMD_REBOOT, CMD_FACTORY_RESET, CMD_SET_GPS_TIME = 0x0200, 0x0201, 0x0202
 REQ, ACK = 0, 1
 SENDER_HOST, SENDER_LIDAR = 0, 1
 
-WS_SAMPLING, WS_IDLE, WS_ERROR, WS_SELFCHECK, WS_MOTORSTARTUP, WS_UPGRADE, WS_READY = 1, 2, 4, 5, 6, 8, 9
+WS_SAMPLING, WS_IDLE, WS_ERROR, WS_SELFCHECK, WS_MOTORSTARTUP, WS_UPGRADE, WS_READY = (
+    1,
+    2,
+    4,
+    5,
+    6,
+    8,
+    9,
+)
 
 RET_OK, RET_FAIL = 0x00, 0x01
 # Parameter errors as listed in the wiki (protocol.hpp RetCode): mirrors kParamNotSupport,
 # kParamReadOnly, kParamInvalidLen, kOutOfRange.
-RET_PARAM_NOT_SUPPORT, RET_PARAM_READ_ONLY, RET_PARAM_INVALID_LEN, RET_OUT_OF_RANGE = 0x20, 0x22, 0x23, 0x03
+RET_PARAM_NOT_SUPPORT, RET_PARAM_READ_ONLY, RET_PARAM_INVALID_LEN, RET_OUT_OF_RANGE = (
+    0x20,
+    0x22,
+    0x23,
+    0x03,
+)
 PROVISIONAL_DEV_TYPE = 9  # [unverified] see docs/protocol_notes.md / #11
 
 KEY_PCL_DATA_TYPE, KEY_PATTERN_MODE, KEY_LIDAR_IPCFG = 0x0000, 0x0001, 0x0004
 KEY_STATE_HOST, KEY_PCL_HOST, KEY_IMU_HOST = 0x0005, 0x0006, 0x0007
 KEY_INSTALL_ATTITUDE, KEY_FOV0, KEY_FOV1, KEY_FOV_EN = 0x0012, 0x0015, 0x0016, 0x0017
 KEY_DETECT_MODE, KEY_FUNC_IO, KEY_WORK_TGT_MODE, KEY_IMU_EN = 0x0018, 0x0019, 0x001A, 0x001C
-KEY_SPEED_MODE, KEY_TIME_FILTER, KEY_PC_FREQ_MOD, KEY_IMU_SENSOR_CFG = 0x0021, 0x0026, 0x0029, 0x002B
-KEY_SN, KEY_PRODUCT_INFO, KEY_VERSION_APP, KEY_VERSION_LOADER, KEY_VERSION_HW = 0x8000, 0x8001, 0x8002, 0x8003, 0x8004
+KEY_SPEED_MODE, KEY_TIME_FILTER, KEY_PC_FREQ_MOD, KEY_IMU_SENSOR_CFG = (
+    0x0021,
+    0x0026,
+    0x0029,
+    0x002B,
+)
+KEY_SN, KEY_PRODUCT_INFO, KEY_VERSION_APP, KEY_VERSION_LOADER, KEY_VERSION_HW = (
+    0x8000,
+    0x8001,
+    0x8002,
+    0x8003,
+    0x8004,
+)
 KEY_MAC, KEY_CUR_WORK_STATE, KEY_CORE_TEMP, KEY_POWERUP_CNT = 0x8005, 0x8006, 0x8007, 0x8008
-KEY_LOCAL_TIME, KEY_LAST_SYNC_TIME, KEY_TIME_OFFSET, KEY_TIME_SYNC_TYPE = 0x8009, 0x800A, 0x800B, 0x800C
+KEY_LOCAL_TIME, KEY_LAST_SYNC_TIME, KEY_TIME_OFFSET, KEY_TIME_SYNC_TYPE = (
+    0x8009,
+    0x800A,
+    0x800B,
+    0x800C,
+)
 KEY_DIAG_STATUS, KEY_FW_TYPE, KEY_HMS = 0x800E, 0x8010, 0x8011
 
 # Writable keys and their value lengths (mirrors keys.cpp key_value_length()).
 WRITABLE_LEN = {
-    KEY_PCL_DATA_TYPE: 1, KEY_PATTERN_MODE: 1, KEY_LIDAR_IPCFG: 12, KEY_STATE_HOST: 8,
-    KEY_PCL_HOST: 8, KEY_IMU_HOST: 8, KEY_INSTALL_ATTITUDE: 24, KEY_FOV0: 20, KEY_FOV1: 20,
-    KEY_FOV_EN: 1, KEY_DETECT_MODE: 1, KEY_FUNC_IO: 4, KEY_WORK_TGT_MODE: 1, KEY_IMU_EN: 1,
-    KEY_SPEED_MODE: 1, KEY_TIME_FILTER: 1, KEY_PC_FREQ_MOD: 1, KEY_IMU_SENSOR_CFG: 3,
+    KEY_PCL_DATA_TYPE: 1,
+    KEY_PATTERN_MODE: 1,
+    KEY_LIDAR_IPCFG: 12,
+    KEY_STATE_HOST: 8,
+    KEY_PCL_HOST: 8,
+    KEY_IMU_HOST: 8,
+    KEY_INSTALL_ATTITUDE: 24,
+    KEY_FOV0: 20,
+    KEY_FOV1: 20,
+    KEY_FOV_EN: 1,
+    KEY_DETECT_MODE: 1,
+    KEY_FUNC_IO: 4,
+    KEY_WORK_TGT_MODE: 1,
+    KEY_IMU_EN: 1,
+    KEY_SPEED_MODE: 1,
+    KEY_TIME_FILTER: 1,
+    KEY_PC_FREQ_MOD: 1,
+    KEY_IMU_SENSOR_CFG: 3,
 }
-READ_ONLY = {KEY_SN, KEY_PRODUCT_INFO, KEY_VERSION_APP, KEY_VERSION_LOADER, KEY_VERSION_HW,
-             KEY_MAC, KEY_CUR_WORK_STATE, KEY_CORE_TEMP, KEY_POWERUP_CNT, KEY_LOCAL_TIME,
-             KEY_LAST_SYNC_TIME, KEY_TIME_OFFSET, KEY_TIME_SYNC_TYPE, KEY_DIAG_STATUS,
-             KEY_FW_TYPE, KEY_HMS}
+READ_ONLY = {
+    KEY_SN,
+    KEY_PRODUCT_INFO,
+    KEY_VERSION_APP,
+    KEY_VERSION_LOADER,
+    KEY_VERSION_HW,
+    KEY_MAC,
+    KEY_CUR_WORK_STATE,
+    KEY_CORE_TEMP,
+    KEY_POWERUP_CNT,
+    KEY_LOCAL_TIME,
+    KEY_LAST_SYNC_TIME,
+    KEY_TIME_OFFSET,
+    KEY_TIME_SYNC_TYPE,
+    KEY_DIAG_STATUS,
+    KEY_FW_TYPE,
+    KEY_HMS,
+}
 
 POINTS_PER_PACKET = 96
 PCL_PACKET_RATE = 2000.0  # packets/s  (≈192k points/s)
@@ -78,13 +136,24 @@ def factory_settings() -> dict[int, bytes]:
     """Writable keys at factory defaults (pcl_data_type=1, imu off, no host configured)."""
     zero = lambda n: b"\0" * n  # noqa: E731
     return {
-        KEY_PCL_DATA_TYPE: b"\x01", KEY_PATTERN_MODE: b"\x00",
+        KEY_PCL_DATA_TYPE: b"\x01",
+        KEY_PATTERN_MODE: b"\x00",
         KEY_LIDAR_IPCFG: bytes([192, 168, 1, 100, 255, 255, 255, 0, 192, 168, 1, 1]),
-        KEY_STATE_HOST: zero(8), KEY_PCL_HOST: zero(8), KEY_IMU_HOST: zero(8),
-        KEY_INSTALL_ATTITUDE: zero(24), KEY_FOV0: zero(20), KEY_FOV1: zero(20), KEY_FOV_EN: b"\x00",
-        KEY_DETECT_MODE: b"\x00", KEY_FUNC_IO: zero(4), KEY_WORK_TGT_MODE: bytes([WS_SAMPLING]),
-        KEY_IMU_EN: b"\x00", KEY_SPEED_MODE: b"\x00", KEY_TIME_FILTER: b"\x00",
-        KEY_PC_FREQ_MOD: b"\x00", KEY_IMU_SENSOR_CFG: b"\x00\x00\x00",
+        KEY_STATE_HOST: zero(8),
+        KEY_PCL_HOST: zero(8),
+        KEY_IMU_HOST: zero(8),
+        KEY_INSTALL_ATTITUDE: zero(24),
+        KEY_FOV0: zero(20),
+        KEY_FOV1: zero(20),
+        KEY_FOV_EN: b"\x00",
+        KEY_DETECT_MODE: b"\x00",
+        KEY_FUNC_IO: zero(4),
+        KEY_WORK_TGT_MODE: bytes([WS_SAMPLING]),
+        KEY_IMU_EN: b"\x00",
+        KEY_SPEED_MODE: b"\x00",
+        KEY_TIME_FILTER: b"\x00",
+        KEY_PC_FREQ_MOD: b"\x00",
+        KEY_IMU_SENSOR_CFG: b"\x00\x00\x00",
     }
 
 
@@ -100,6 +169,7 @@ def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
 @dataclass
 class DeviceModel:
     """Pure state machine + parameter table; no sockets, unit-testable."""
+
     sn: str = "SIM0000000000001"
     startup_delay: float = 0.3
     settings: dict[int, bytes] = field(default_factory=factory_settings)
@@ -182,14 +252,19 @@ class DeviceModel:
         ro = {
             KEY_SN: self.sn.encode().ljust(16, b"\0")[:16],
             KEY_PRODUCT_INFO: b"MID360-SIM".ljust(64, b"\0"),
-            KEY_VERSION_APP: bytes([0, 0, 0, 1]), KEY_VERSION_LOADER: bytes([0, 0, 0, 1]),
-            KEY_VERSION_HW: bytes([0, 0, 0, 1]), KEY_MAC: bytes([2, 0, 0, 0, 0, 1]),
+            KEY_VERSION_APP: bytes([0, 0, 0, 1]),
+            KEY_VERSION_LOADER: bytes([0, 0, 0, 1]),
+            KEY_VERSION_HW: bytes([0, 0, 0, 1]),
+            KEY_MAC: bytes([2, 0, 0, 0, 0, 1]),
             KEY_CUR_WORK_STATE: bytes([self.work_state]),
-            KEY_CORE_TEMP: struct.pack("<i", 3500), KEY_POWERUP_CNT: struct.pack("<I", self.powerup_cnt),
-            KEY_LOCAL_TIME: struct.pack("<Q", now_ns), KEY_LAST_SYNC_TIME: struct.pack("<Q", 0),
+            KEY_CORE_TEMP: struct.pack("<i", 3500),
+            KEY_POWERUP_CNT: struct.pack("<I", self.powerup_cnt),
+            KEY_LOCAL_TIME: struct.pack("<Q", now_ns),
+            KEY_LAST_SYNC_TIME: struct.pack("<Q", 0),
             KEY_TIME_OFFSET: struct.pack("<q", self.time_offset_ns),
             KEY_TIME_SYNC_TYPE: bytes([self.time_sync_type]),
-            KEY_DIAG_STATUS: struct.pack("<H", self.diag_status), KEY_FW_TYPE: b"\x00",
+            KEY_DIAG_STATUS: struct.pack("<H", self.diag_status),
+            KEY_FW_TYPE: b"\x00",
             KEY_HMS: struct.pack("<8I", *self.hms),
         }
         return ro.get(key)
@@ -229,8 +304,15 @@ class PointSource:
             depth_mm = r.randint(500, 40000)
             refl, tag = r.randint(0, 255), r.randint(0, 3)
             if data_type == 1:
-                out.append((r.randint(-depth_mm, depth_mm), r.randint(-depth_mm, depth_mm),
-                            r.randint(-2000, 2000), refl, tag))
+                out.append(
+                    (
+                        r.randint(-depth_mm, depth_mm),
+                        r.randint(-depth_mm, depth_mm),
+                        r.randint(-2000, 2000),
+                        refl,
+                        tag,
+                    )
+                )
             elif data_type == 2:
                 d = depth_mm // 10
                 out.append((r.randint(-d, d), r.randint(-d, d), r.randint(-200, 200), refl, tag))
@@ -240,8 +322,14 @@ class PointSource:
 
     def imu(self) -> tuple:
         r = self._rng
-        return (r.uniform(-0.01, 0.01), r.uniform(-0.01, 0.01), r.uniform(-0.01, 0.01),
-                r.uniform(-0.02, 0.02), r.uniform(-0.02, 0.02), 1.0 + r.uniform(-0.02, 0.02))
+        return (
+            r.uniform(-0.01, 0.01),
+            r.uniform(-0.01, 0.01),
+            r.uniform(-0.01, 0.01),
+            r.uniform(-0.02, 0.02),
+            r.uniform(-0.02, 0.02),
+            1.0 + r.uniform(-0.02, 0.02),
+        )
 
 
 # --------------------------------------------------------------------------- simulator
@@ -324,8 +412,9 @@ class Simulator:
         now = time.monotonic()
         self.model.power_on(now)
         self.next_push = self.next_stats = now + 1.0
-        self.emit(event="ready", ip=self.lidar_ip(), ports=self.ports, sn=self.model.sn,
-                  pid=os.getpid())
+        self.emit(
+            event="ready", ip=self.lidar_ip(), ports=self.ports, sn=self.model.sn, pid=os.getpid()
+        )
         while self.running:
             now = time.monotonic()
             self.model.tick(now)
@@ -388,9 +477,16 @@ class Simulator:
         elif cmd == "drop_rate":
             self.drop_rate = float(req.get("rate", 0.0))
         elif cmd == "status":
-            self.emit(event="status", state=self.model.work_state, sent=self.sent,
-                      hosts={"pcl": self.model.host(KEY_PCL_HOST), "imu": self.model.host(KEY_IMU_HOST),
-                             "push": self.model.host(KEY_STATE_HOST)})
+            self.emit(
+                event="status",
+                state=self.model.work_state,
+                sent=self.sent,
+                hosts={
+                    "pcl": self.model.host(KEY_PCL_HOST),
+                    "imu": self.model.host(KEY_IMU_HOST),
+                    "push": self.model.host(KEY_STATE_HOST),
+                },
+            )
         else:
             self.emit(event="error", error=f"unknown control cmd: {cmd!r}")
             return
@@ -426,8 +522,13 @@ class Simulator:
         if kind == "cmd" and frame.cmd_id == CMD_DISCOVERY:
             return
         ret, payload = self._dispatch(frame, addr, now)
-        self.emit(event="cmd", cmd_id=frame.cmd_id, seq=frame.seq_num, ret=ret,
-                  **{"from": f"{addr[0]}:{addr[1]}"})
+        self.emit(
+            event="cmd",
+            cmd_id=frame.cmd_id,
+            seq=frame.seq_num,
+            ret=ret,
+            **{"from": f"{addr[0]}:{addr[1]}"},
+        )
         if payload is None:
             return
         if self.drop_ack > 0:
@@ -443,7 +544,9 @@ class Simulator:
         if f.cmd_id == CMD_DISCOVERY:
             sn = m.sn.encode().ljust(16, b"\0")[:16]
             ip = bytes(int(x) for x in self.lidar_ip().split("."))
-            return RET_OK, struct.pack("<BB16s4sH", RET_OK, PROVISIONAL_DEV_TYPE, sn, ip, self.ports["cmd"])
+            return RET_OK, struct.pack(
+                "<BB16s4sH", RET_OK, PROVISIONAL_DEV_TYPE, sn, ip, self.ports["cmd"]
+            )
         if f.cmd_id == CMD_PARAM_CONFIG:
             try:
                 n, _ = struct.unpack_from("<HH", f.data, 0)
@@ -521,10 +624,15 @@ class Simulator:
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
         pkt = proto.DataPacket(
-            time_interval=int(interval_s * 1e7), dot_num=POINTS_PER_PACKET, udp_cnt=self.udp_cnt_pcl,
-            frame_cnt=self.frame_cnt, data_type=dt, time_type=self.model.time_sync_type,
+            time_interval=int(interval_s * 1e7),
+            dot_num=POINTS_PER_PACKET,
+            udp_cnt=self.udp_cnt_pcl,
+            frame_cnt=self.frame_cnt,
+            data_type=dt,
+            time_type=self.model.time_sync_type,
             timestamp_ns=self.now_ns(),
-            data=proto.pack_samples(dt, self.points.samples(dt, POINTS_PER_PACKET)))
+            data=proto.pack_samples(dt, self.points.samples(dt, POINTS_PER_PACKET)),
+        )
         self.udp_cnt_pcl = (self.udp_cnt_pcl + 1) & 0xFFFF
         if host is None:
             return
@@ -536,9 +644,15 @@ class Simulator:
 
     def _send_imu(self, host, interval_s: float) -> None:
         pkt = proto.DataPacket(
-            time_interval=int(interval_s * 1e7), dot_num=1, udp_cnt=self.udp_cnt_imu,
-            frame_cnt=self.frame_cnt, data_type=0, time_type=self.model.time_sync_type,
-            timestamp_ns=self.now_ns(), data=proto.pack_samples(0, [self.points.imu()]))
+            time_interval=int(interval_s * 1e7),
+            dot_num=1,
+            udp_cnt=self.udp_cnt_imu,
+            frame_cnt=self.frame_cnt,
+            data_type=0,
+            time_type=self.model.time_sync_type,
+            timestamp_ns=self.now_ns(),
+            data=proto.pack_samples(0, [self.points.imu()]),
+        )
         self.udp_cnt_imu = (self.udp_cnt_imu + 1) & 0xFFFF
         if host is None:
             return
@@ -550,8 +664,9 @@ class Simulator:
         if host is None:
             return
         self.seq = (self.seq + 1) & 0xFFFFFFFF
-        frame = proto.CommandFrame(self.seq, CMD_INFO_PUSH, REQ, SENDER_LIDAR,
-                                   self.model.push_payload(self.now_ns())).encode()
+        frame = proto.CommandFrame(
+            self.seq, CMD_INFO_PUSH, REQ, SENDER_LIDAR, self.model.push_payload(self.now_ns())
+        ).encode()
         self._sendto("push", frame, host)
         self.sent["push"] += 1
 
@@ -566,15 +681,25 @@ class Simulator:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Livox Mid-360 simulator")
     p.add_argument("--bind", default="0.0.0.0", help="address to bind (default 0.0.0.0)")
-    p.add_argument("--base-port", type=int, default=proto.PORT_DISCOVERY,
-                   help="discovery port; cmd/push/pcl/imu follow at +100..+400. 0 = pick free ports")
+    p.add_argument(
+        "--base-port",
+        type=int,
+        default=proto.PORT_DISCOVERY,
+        help="discovery port; cmd/push/pcl/imu follow at +100..+400. 0 = pick free ports",
+    )
     p.add_argument("--sn", default="SIM0000000000001")
     p.add_argument("--seed", type=int, default=1)
-    p.add_argument("--startup-delay", type=float, default=0.3, help="seconds spent in MOTORSTARTUP")
-    p.add_argument("--reboot-silence", type=float, default=0.5, help="seconds of silence after 0x0200")
+    p.add_argument(
+        "--startup-delay", type=float, default=0.3, help="seconds spent in MOTORSTARTUP"
+    )
+    p.add_argument(
+        "--reboot-silence", type=float, default=0.5, help="seconds of silence after 0x0200"
+    )
     p.add_argument("--frame-ms", type=float, default=100.0)
     p.add_argument("--rate-multiplier", type=float, default=1.0)
-    p.add_argument("--drop-rate", type=float, default=0.0, help="fraction of point-cloud packets to drop")
+    p.add_argument(
+        "--drop-rate", type=float, default=0.0, help="fraction of point-cloud packets to drop"
+    )
     p.add_argument("--quit-on-eof", action="store_true", default=True)
     p.add_argument("--no-quit-on-eof", dest="quit_on_eof", action="store_false")
     p.add_argument("--verbose", "-v", action="store_true")

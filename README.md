@@ -1,6 +1,7 @@
 # livox-mid360-core
 
 [![CI](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml)
+[![Lint](https://github.com/atinfinity/livox-mid360-core/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/lint.yml)
 
 > [!IMPORTANT]
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by Livox or DJI.
@@ -74,6 +75,21 @@ To reproduce CI locally on any Docker host: `docker/check.sh [linux/arm64|linux/
 platform defaults to the host's. On Apple Silicon `linux/arm64` runs natively; a non-native
 platform runs under QEMU emulation, where the script only does the Release builds, `ctest` and
 the Python tests and skips the sanitizer and fuzz steps.
+
+## Contributing
+
+Style and static analysis are enforced by the `Lint` workflow (clang-format 19, clang-tidy 19,
+ruff). The configuration files `.clang-format`, `.clang-tidy` and `pyproject.toml` are shared
+with `livox-mid360-ros2` (`ament_clang_format --config`, `ament_flake8 --config`). Run the same
+checks locally with:
+
+```sh
+scripts/lint.sh            # check (clang-tidy needs clang-19 and builds build-tidy/)
+scripts/lint.sh --fix      # apply clang-format and ruff fixes
+scripts/lint.sh --no-tidy  # formatting only
+```
+
+`docker/check.sh` runs the linters before the builds, so it is the one-stop pre-push check.
 
 ## Usage
 

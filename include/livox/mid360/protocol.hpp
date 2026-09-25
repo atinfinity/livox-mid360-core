@@ -151,7 +151,8 @@ struct CommandFrameSpec {
   std::uint16_t cmd_id = 0;
   CmdType cmd_type = CmdType::kReq;
   SenderType sender_type = SenderType::kHost;
-  std::span<const std::byte> data{};
+  // The explicit {} keeps GCC -Wmissing-field-initializers quiet for designated initializers.
+  std::span<const std::byte> data{};  // NOLINT(readability-redundant-member-init)
 };
 
 enum class EncodeError : std::uint8_t {
@@ -316,7 +317,7 @@ struct ParamConfigAck {
 };
 
 struct ParamInquireAck {
-  RetCode ret_code;
+  RetCode ret_code = RetCode::kSuccess;
   std::vector<KeyValue> values;  ///< spans point into the input buffer
 };
 
