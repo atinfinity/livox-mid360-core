@@ -81,11 +81,36 @@ Methods:
 Every command takes an optional `RequestOptions{timeout (per attempt), attempts}` that
 overrides `SessionOptions::request` (default 500 ms × 3).
 
+## Host setup
+
+`include/livox/mid360/config.hpp` bundles the usual first configuration into one call
+(design in [issue #5](https://github.com/atinfinity/livox-mid360-core/issues/5)):
+
+```cpp
+HostSetup setup;                       // ip defaults to the session socket's local address
+setup.point_port = 56301;              // host-side ports; defaults are 56201 / 56301 / 56401
+setup.pcl_data_type = DataType::kCartesian32;
+setup.imu_enable = true;
+setup.work_tgt_mode = WorkState::kSampling;   // optional; then waits up to wait_timeout (10 s)
+auto r = apply_host_setup(*s, setup);  // std::expected<HostSetupResult, SessionError>
+if (r && r->reboot_required) { /* an ACK said 0x21: reboot to apply */ }
+```
+
+`apply_host_setup` sends one `0x0100` with keys `0x0005`, `0x0006`, `0x0007` (host ipcfg with
+the LiDAR-side source ports 56200 / 56300 / 56400), `0x0000` and `0x001C`, then, when
+`work_tgt_mode` is set, a second `0x0100` with `0x001A` followed by `wait_for_state`
+(`wait_timeout` 0 skips the wait, `final_state` is then empty). Only SAMPLING / IDLE / READY
+can be requested. Arguments the LiDAR would never accept (that mode, or an empty `ip` on a
+`0.0.0.0` bind) are reported as `kInvalidArgument` with `error_key` before anything is sent;
+everything else is the plain session error, so a rejected key shows up as `kLidarRejected`
+with `error_key`. `host_setup_key_values()` exposes the first request's key-value list for
+callers that drive `configure()` themselves.
+
 ## Errors
 
 `SessionError::kind` is one of `kTransport` (see `transport`), `kTimeout` (`attempts` sent),
 `kBadResponse` (see `parse`), `kLidarRejected` (`ret_code`, `error_key`), `kUnexpectedState`
-(`work_state`) and `kCancelled`. `to_string(err)` gives a one-line summary such as
+(`work_state`), `kCancelled` and `kInvalidArgument` (`error_key`, nothing was sent). `to_string(err)` gives a one-line summary such as
 `timeout cmd 0x0101 after 3 attempt(s)`.
 
 ## Statistics
@@ -98,9 +123,11 @@ pending request, including datagrams drained while waiting for a state) and `bad
 `tests/test_session.cpp` runs against `tools/livox_mid360_sim.py` with fault injection
 (`drop_ack`, `silence`, `set_state`) and covers unicast discovery, serial verification,
 rejections, retry, timeout, `wait_for_state` and cancellation from another thread. Broadcast
-discovery is a hidden test (`[.broadcast]`) for manual runs on a LAN.
+discovery is a hidden test (`[.broadcast]`) for manual runs on a LAN. `tests/test_config.cpp`
+covers the host setup flow: the key-value list against the golden vector, the round trip to
+IDLE and back to SAMPLING, the default host address, and the rejection / invalid-argument paths.
 
 ## Not covered here (phase 2)
 
 Receive threads, `0x0102` push handling, reconnection after reboot and multi-device
-management are layered on top in #5, #7 and #9.
+management are layered on top in #7 and #9.
