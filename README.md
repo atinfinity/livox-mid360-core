@@ -21,8 +21,10 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
 - Key-value lists for `0x0100` configure / `0x0101` inquire / `0x0102` push, typed encoders/decoders for every documented key
 - HMS diagnostic-code decoding with the official description table
 - A Python reference implementation (`tools/`) and byte-exact golden vectors shared by both
+- UDP transport (`transport.hpp`): non-blocking IPv4 sockets, batched receive (`recvmmsg` on
+  Linux) with kernel receive timestamps, and a `poll`-based `Poller` with cross-thread wake-up
 
-Not yet implemented (phase 2+): UDP transport, discovery/session, state machine, frame assembly,
+Not yet implemented (phase 2+): discovery/session, state machine, frame assembly,
 C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
 upgrade (`0x04xx`) commands are intentionally out of scope.
 
@@ -88,11 +90,11 @@ keep the buffer alive while you use the result.
 ## Layout
 
 ```
-include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, mid360 umbrella)
+include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, mid360 umbrella)
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator
-docs/protocol_notes.md  observations that go beyond the wiki text
+docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide)
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 

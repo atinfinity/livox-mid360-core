@@ -57,7 +57,8 @@ add_library(mid360_core
   src/crc.cpp
   src/protocol.cpp
   src/keys.cpp
-  src/hms.cpp)
+  src/hms.cpp
+  src/transport.cpp)
 add_library(livox::mid360_core ALIAS mid360_core)
 
 target_include_directories(mid360_core
