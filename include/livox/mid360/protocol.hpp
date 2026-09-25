@@ -22,12 +22,12 @@ namespace livox::mid360 {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-inline constexpr std::uint16_t kDiscoveryPort = 56000;  ///< LiDAR listens, broadcast only
-inline constexpr std::uint16_t kCommandPort = 56100;    ///< LiDAR control command port
-inline constexpr std::uint16_t kPushPort = 56200;       ///< LiDAR-side source port for 0x0102 push
-inline constexpr std::uint16_t kPointCloudPort = 56300; ///< LiDAR-side source port for point cloud
-inline constexpr std::uint16_t kImuPort = 56400;        ///< LiDAR-side source port for IMU
-inline constexpr std::uint16_t kLogPort = 56500;        ///< LiDAR log port (out of scope for v1)
+inline constexpr std::uint16_t kDiscoveryPort = 56000;   ///< LiDAR listens, broadcast only
+inline constexpr std::uint16_t kCommandPort = 56100;     ///< LiDAR control command port
+inline constexpr std::uint16_t kPushPort = 56200;        ///< LiDAR-side source port for 0x0102 push
+inline constexpr std::uint16_t kPointCloudPort = 56300;  ///< LiDAR-side source port for point cloud
+inline constexpr std::uint16_t kImuPort = 56400;         ///< LiDAR-side source port for IMU
+inline constexpr std::uint16_t kLogPort = 56500;         ///< LiDAR log port (out of scope for v1)
 
 inline constexpr std::uint16_t kDefaultHostCommandPort = 56101;
 inline constexpr std::uint16_t kDefaultHostPushPort = 56201;
@@ -155,8 +155,8 @@ struct CommandFrameSpec {
 };
 
 enum class EncodeError : std::uint8_t {
-  kDataTooLarge,     ///< data exceeds kCommandDataMaxSize
-  kBufferTooSmall,   ///< output span cannot hold the frame
+  kDataTooLarge,    ///< data exceeds kCommandDataMaxSize
+  kBufferTooSmall,  ///< output span cannot hold the frame
 };
 
 /// Total wire size of a frame carrying `data_size` payload bytes.
@@ -184,9 +184,10 @@ struct DataPacketHeader {
   std::uint8_t frame_cnt = 0;       ///< invalid for non-repetitive scan
   DataType data_type = DataType::kCartesian32;
   TimeType time_type = TimeType::kNoSync;
-  std::array<std::uint8_t, 12> reserved{};  ///< wiki: "reserved"; diagram labels part of it pack_info
-  std::uint32_t crc32 = 0;                  ///< over timestamp + data
-  std::uint64_t timestamp_ns = 0;           ///< time of the first sample
+  std::array<std::uint8_t, 12>
+      reserved{};                  ///< wiki: "reserved"; diagram labels part of it pack_info
+  std::uint32_t crc32 = 0;         ///< over timestamp + data
+  std::uint64_t timestamp_ns = 0;  ///< time of the first sample
 };
 
 struct DataPacketView {
@@ -202,10 +203,14 @@ struct DataPacketView {
 /// Bytes per sample for a data type (0 for unknown).
 [[nodiscard]] constexpr std::size_t sample_size(DataType t) noexcept {
   switch (t) {
-    case DataType::kImu: return 24;
-    case DataType::kCartesian32: return 14;
-    case DataType::kCartesian16: return 8;
-    case DataType::kSpherical: return 10;
+    case DataType::kImu:
+      return 24;
+    case DataType::kCartesian32:
+      return 14;
+    case DataType::kCartesian16:
+      return 8;
+    case DataType::kSpherical:
+      return 10;
   }
   return 0;
 }
@@ -260,7 +265,8 @@ struct TagInfo {
 };
 [[nodiscard]] constexpr TagInfo decode_tag(std::uint8_t tag) noexcept {
   return {static_cast<std::uint8_t>(tag & 0x3u), static_cast<std::uint8_t>((tag >> 2) & 0x3u),
-          static_cast<std::uint8_t>((tag >> 4) & 0x3u), static_cast<std::uint8_t>((tag >> 6) & 0x3u)};
+          static_cast<std::uint8_t>((tag >> 4) & 0x3u),
+          static_cast<std::uint8_t>((tag >> 6) & 0x3u)};
 }
 
 // ---------------------------------------------------------------------------

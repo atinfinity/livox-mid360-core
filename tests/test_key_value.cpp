@@ -60,8 +60,9 @@ TEST_CASE("control command payloads", "[kv]") {
 }
 
 TEST_CASE("ack parsers", "[kv]") {
-  auto d = parse_discovery_ack(bytes_of({0x00, 0x09, 'S', 'N', '1', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                         0, 0, 0, 192, 168, 1, 12, 0x24, 0xDB}));
+  auto d =
+      parse_discovery_ack(bytes_of({0x00, 0x09, 'S', 'N', '1', 0, 0,   0,   0, 0,  0,    0,
+                                    0,    0,    0,   0,   0,   0, 192, 168, 1, 12, 0x24, 0xDB}));
   REQUIRE(d);
   CHECK(d->ret_code == RetCode::kSuccess);
   CHECK(d->dev_type == 9);

@@ -13,40 +13,74 @@ using bytes::write_le;
 
 std::string_view to_string(Key k) noexcept {
   switch (k) {
-    case Key::kPclDataType: return "pcl_data_type";
-    case Key::kPatternMode: return "pattern_mode";
-    case Key::kLidarIpCfg: return "lidar_ipcfg";
-    case Key::kStateInfoHostIpCfg: return "state_info_host_ipcfg";
-    case Key::kPointCloudHostIpCfg: return "pointcloud_host_ipcfg";
-    case Key::kImuHostIpCfg: return "imu_host_ipcfg";
-    case Key::kInstallAttitude: return "install_attitude";
-    case Key::kFovCfg0: return "fov_cfg0";
-    case Key::kFovCfg1: return "fov_cfg1";
-    case Key::kFovCfgEn: return "fov_cfg_en";
-    case Key::kDetectMode: return "detect_mode";
-    case Key::kFuncIoCfg: return "func_io_cfg";
-    case Key::kWorkTgtMode: return "work_tgt_mode";
-    case Key::kImuDataEn: return "imu_data_en";
-    case Key::kSpeedMode: return "speed_mode";
-    case Key::kTimeFilter: return "time_filter";
-    case Key::kPcFreqMod: return "pc_freq_mod";
-    case Key::kImuSensorCfg: return "imu_sensor_cfg";
-    case Key::kSn: return "sn";
-    case Key::kProductInfo: return "product_info";
-    case Key::kVersionApp: return "version_app";
-    case Key::kVersionLoader: return "version_loader";
-    case Key::kVersionHardware: return "version_hardware";
-    case Key::kMac: return "mac";
-    case Key::kCurWorkState: return "cur_work_state";
-    case Key::kCoreTemp: return "core_temp";
-    case Key::kPowerupCnt: return "powerup_cnt";
-    case Key::kLocalTimeNow: return "local_time_now";
-    case Key::kLastSyncTime: return "last_sync_time";
-    case Key::kTimeOffset: return "time_offset";
-    case Key::kTimeSyncType: return "time_sync_type";
-    case Key::kLidarDiagStatus: return "lidar_diag_status";
-    case Key::kFwType: return "FW_TYPE";
-    case Key::kHmsCode: return "hms_code";
+    case Key::kPclDataType:
+      return "pcl_data_type";
+    case Key::kPatternMode:
+      return "pattern_mode";
+    case Key::kLidarIpCfg:
+      return "lidar_ipcfg";
+    case Key::kStateInfoHostIpCfg:
+      return "state_info_host_ipcfg";
+    case Key::kPointCloudHostIpCfg:
+      return "pointcloud_host_ipcfg";
+    case Key::kImuHostIpCfg:
+      return "imu_host_ipcfg";
+    case Key::kInstallAttitude:
+      return "install_attitude";
+    case Key::kFovCfg0:
+      return "fov_cfg0";
+    case Key::kFovCfg1:
+      return "fov_cfg1";
+    case Key::kFovCfgEn:
+      return "fov_cfg_en";
+    case Key::kDetectMode:
+      return "detect_mode";
+    case Key::kFuncIoCfg:
+      return "func_io_cfg";
+    case Key::kWorkTgtMode:
+      return "work_tgt_mode";
+    case Key::kImuDataEn:
+      return "imu_data_en";
+    case Key::kSpeedMode:
+      return "speed_mode";
+    case Key::kTimeFilter:
+      return "time_filter";
+    case Key::kPcFreqMod:
+      return "pc_freq_mod";
+    case Key::kImuSensorCfg:
+      return "imu_sensor_cfg";
+    case Key::kSn:
+      return "sn";
+    case Key::kProductInfo:
+      return "product_info";
+    case Key::kVersionApp:
+      return "version_app";
+    case Key::kVersionLoader:
+      return "version_loader";
+    case Key::kVersionHardware:
+      return "version_hardware";
+    case Key::kMac:
+      return "mac";
+    case Key::kCurWorkState:
+      return "cur_work_state";
+    case Key::kCoreTemp:
+      return "core_temp";
+    case Key::kPowerupCnt:
+      return "powerup_cnt";
+    case Key::kLocalTimeNow:
+      return "local_time_now";
+    case Key::kLastSyncTime:
+      return "last_sync_time";
+    case Key::kTimeOffset:
+      return "time_offset";
+    case Key::kTimeSyncType:
+      return "time_sync_type";
+    case Key::kLidarDiagStatus:
+      return "lidar_diag_status";
+    case Key::kFwType:
+      return "FW_TYPE";
+    case Key::kHmsCode:
+      return "hms_code";
   }
   return "unknown";
 }
@@ -64,35 +98,49 @@ std::optional<std::size_t> key_value_length(Key k) noexcept {
     case Key::kPcFreqMod:
     case Key::kCurWorkState:
     case Key::kTimeSyncType:
-    case Key::kFwType: return 1;
-    case Key::kLidarDiagStatus: return 2;
-    case Key::kImuSensorCfg: return 3;
+    case Key::kFwType:
+      return 1;
+    case Key::kLidarDiagStatus:
+      return 2;
+    case Key::kImuSensorCfg:
+      return 3;
     case Key::kFuncIoCfg:
     case Key::kVersionApp:
     case Key::kVersionLoader:
     case Key::kVersionHardware:
     case Key::kCoreTemp:
-    case Key::kPowerupCnt: return 4;
-    case Key::kMac: return 6;
+    case Key::kPowerupCnt:
+      return 4;
+    case Key::kMac:
+      return 6;
     case Key::kStateInfoHostIpCfg:
     case Key::kPointCloudHostIpCfg:
     case Key::kImuHostIpCfg:
     case Key::kLocalTimeNow:
     case Key::kLastSyncTime:
-    case Key::kTimeOffset: return 8;
-    case Key::kLidarIpCfg: return 12;
-    case Key::kSn: return 16;
+    case Key::kTimeOffset:
+      return 8;
+    case Key::kLidarIpCfg:
+      return 12;
+    case Key::kSn:
+      return 16;
     case Key::kFovCfg0:
-    case Key::kFovCfg1: return 20;
-    case Key::kInstallAttitude: return 24;
-    case Key::kHmsCode: return 32;
-    case Key::kProductInfo: return 64;
+    case Key::kFovCfg1:
+      return 20;
+    case Key::kInstallAttitude:
+      return 24;
+    case Key::kHmsCode:
+      return 32;
+    case Key::kProductInfo:
+      return 64;
   }
   return std::nullopt;
 }
 
 // ---- encoders --------------------------------------------------------------
-std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept { return {std::byte{v}}; }
+std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept {
+  return {std::byte{v}};
+}
 
 std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig& c) noexcept {
   std::array<std::byte, 8> o{};
@@ -191,8 +239,8 @@ std::expected<LidarIpConfig, KeyError> decode_lidar_ip_config(
 std::expected<InstallAttitude, KeyError> decode_install_attitude(
     std::span<const std::byte> v) noexcept {
   if (v.size() != 24) return std::unexpected(KeyError::kWrongLength);
-  return InstallAttitude{read_le<float>(v, 0),        read_le<float>(v, 4),
-                         read_le<float>(v, 8),        read_le<std::int32_t>(v, 12),
+  return InstallAttitude{read_le<float>(v, 0),         read_le<float>(v, 4),
+                         read_le<float>(v, 8),         read_le<std::int32_t>(v, 12),
                          read_le<std::int32_t>(v, 16), read_le<std::int32_t>(v, 20)};
 }
 
@@ -239,9 +287,16 @@ std::expected<WorkState, KeyError> decode_work_state(std::span<const std::byte> 
   auto u = decode_u8(v);
   if (!u) return std::unexpected(u.error());
   switch (*u) {
-    case 0x01: case 0x02: case 0x04: case 0x05: case 0x06: case 0x08: case 0x09:
+    case 0x01:
+    case 0x02:
+    case 0x04:
+    case 0x05:
+    case 0x06:
+    case 0x08:
+    case 0x09:
       return static_cast<WorkState>(*u);
-    default: return std::unexpected(KeyError::kOutOfRange);
+    default:
+      return std::unexpected(KeyError::kOutOfRange);
   }
 }
 

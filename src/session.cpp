@@ -65,12 +65,18 @@ std::chrono::milliseconds remaining(Clock::time_point deadline) {
 
 std::string_view to_string(SessionErrorKind kind) noexcept {
   switch (kind) {
-    case SessionErrorKind::kTransport: return "transport";
-    case SessionErrorKind::kTimeout: return "timeout";
-    case SessionErrorKind::kBadResponse: return "bad_response";
-    case SessionErrorKind::kLidarRejected: return "lidar_rejected";
-    case SessionErrorKind::kUnexpectedState: return "unexpected_state";
-    case SessionErrorKind::kCancelled: return "cancelled";
+    case SessionErrorKind::kTransport:
+      return "transport";
+    case SessionErrorKind::kTimeout:
+      return "timeout";
+    case SessionErrorKind::kBadResponse:
+      return "bad_response";
+    case SessionErrorKind::kLidarRejected:
+      return "lidar_rejected";
+    case SessionErrorKind::kUnexpectedState:
+      return "unexpected_state";
+    case SessionErrorKind::kCancelled:
+      return "cancelled";
   }
   return "unknown";
 }
@@ -94,7 +100,8 @@ std::string to_string(const SessionError& err) {
     case SessionErrorKind::kUnexpectedState:
       if (err.work_state) s += ": " + std::string(to_string(*err.work_state));
       break;
-    default: break;
+    default:
+      break;
   }
   return s;
 }
@@ -406,8 +413,8 @@ std::expected<SimpleAck, SessionError> simple(std::expected<RawAck, SessionError
 
 std::expected<SimpleAck, SessionError> Session::reboot(std::uint16_t timeout_ms,
                                                        std::optional<RequestOptions> opts) {
-  return simple(request(static_cast<std::uint16_t>(CmdId::kReboot),
-                        encode_reboot_request(timeout_ms), opts));
+  return simple(
+      request(static_cast<std::uint16_t>(CmdId::kReboot), encode_reboot_request(timeout_ms), opts));
 }
 
 std::expected<SimpleAck, SessionError> Session::factory_reset(std::optional<RequestOptions> opts) {

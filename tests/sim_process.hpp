@@ -61,7 +61,8 @@ class SimProcess {
     if (const char* env = std::getenv("PYTHON"); env != nullptr && ::access(env, X_OK) == 0) {
       return std::string(env);
     }
-    for (const char* p : {"/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"}) {
+    for (const char* p :
+         {"/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"}) {
       if (::access(p, X_OK) == 0) return std::string(p);
     }
     return std::nullopt;
@@ -87,8 +88,9 @@ class SimProcess {
     for (int fd : {in_pipe[0], in_pipe[1], out_pipe[0], out_pipe[1]}) {
       posix_spawn_file_actions_addclose(&fa, fd);
     }
-    std::vector<std::string> args = {*py, LIVOX_MID360_SIM_SCRIPT, "--bind", "127.0.0.1",
-                                     "--base-port", "0", "--startup-delay", "0.1"};
+    std::vector<std::string> args = {
+        *py, LIVOX_MID360_SIM_SCRIPT, "--bind", "127.0.0.1", "--base-port",
+        "0", "--startup-delay",       "0.1"};
     for (auto& a : extra_args) args.push_back(std::move(a));
     std::vector<char*> argv;
     argv.reserve(args.size() + 1);

@@ -17,81 +17,126 @@ using bytes::write_le;
 // ---------------------------------------------------------------------------
 std::string_view to_string(RetCode c) noexcept {
   switch (c) {
-    case RetCode::kSuccess: return "SUCCESS";
-    case RetCode::kFailure: return "FAILURE";
-    case RetCode::kNotPermitNow: return "NOT_PERMIT_NOW";
-    case RetCode::kOutOfRange: return "OUT_OF_RANGE";
-    case RetCode::kParamNotSupport: return "PARAM_NOTSUPPORT";
-    case RetCode::kParamRebootEffect: return "PARAM_REBOOT_EFFECT";
-    case RetCode::kParamReadOnly: return "PARAM_RD_ONLY";
-    case RetCode::kParamInvalidLen: return "PARAM_INVALID_LEN";
-    case RetCode::kParamKeyNumErr: return "PARAM_KEY_NUM_ERR";
-    case RetCode::kUpgradePubKeyError: return "UPGRADE_PUB_KEY_ERROR";
-    case RetCode::kUpgradeDigestError: return "UPGRADE_DIGEST_ERROR";
-    case RetCode::kUpgradeFwTypeError: return "UPGRADE_FW_TYPE_ERROR";
-    case RetCode::kUpgradeFwOutOfRange: return "UPGRADE_FW_OUT_OF_RANGE";
-    case RetCode::kUpgradeFwErasing: return "UPGRADE_FW_ERASING";
+    case RetCode::kSuccess:
+      return "SUCCESS";
+    case RetCode::kFailure:
+      return "FAILURE";
+    case RetCode::kNotPermitNow:
+      return "NOT_PERMIT_NOW";
+    case RetCode::kOutOfRange:
+      return "OUT_OF_RANGE";
+    case RetCode::kParamNotSupport:
+      return "PARAM_NOTSUPPORT";
+    case RetCode::kParamRebootEffect:
+      return "PARAM_REBOOT_EFFECT";
+    case RetCode::kParamReadOnly:
+      return "PARAM_RD_ONLY";
+    case RetCode::kParamInvalidLen:
+      return "PARAM_INVALID_LEN";
+    case RetCode::kParamKeyNumErr:
+      return "PARAM_KEY_NUM_ERR";
+    case RetCode::kUpgradePubKeyError:
+      return "UPGRADE_PUB_KEY_ERROR";
+    case RetCode::kUpgradeDigestError:
+      return "UPGRADE_DIGEST_ERROR";
+    case RetCode::kUpgradeFwTypeError:
+      return "UPGRADE_FW_TYPE_ERROR";
+    case RetCode::kUpgradeFwOutOfRange:
+      return "UPGRADE_FW_OUT_OF_RANGE";
+    case RetCode::kUpgradeFwErasing:
+      return "UPGRADE_FW_ERASING";
   }
   return "UNKNOWN";
 }
 
 std::string_view to_string(WorkState s) noexcept {
   switch (s) {
-    case WorkState::kSampling: return "SAMPLING";
-    case WorkState::kIdle: return "IDLE";
-    case WorkState::kError: return "ERROR";
-    case WorkState::kSelfCheck: return "SELFCHECK";
-    case WorkState::kMotorStartup: return "MOTORSTARTUP";
-    case WorkState::kUpgrade: return "UPGRADE";
-    case WorkState::kReady: return "READY";
+    case WorkState::kSampling:
+      return "SAMPLING";
+    case WorkState::kIdle:
+      return "IDLE";
+    case WorkState::kError:
+      return "ERROR";
+    case WorkState::kSelfCheck:
+      return "SELFCHECK";
+    case WorkState::kMotorStartup:
+      return "MOTORSTARTUP";
+    case WorkState::kUpgrade:
+      return "UPGRADE";
+    case WorkState::kReady:
+      return "READY";
   }
   return "UNKNOWN";
 }
 
 std::string_view to_string(DataType t) noexcept {
   switch (t) {
-    case DataType::kImu: return "IMU";
-    case DataType::kCartesian32: return "CARTESIAN32";
-    case DataType::kCartesian16: return "CARTESIAN16";
-    case DataType::kSpherical: return "SPHERICAL";
+    case DataType::kImu:
+      return "IMU";
+    case DataType::kCartesian32:
+      return "CARTESIAN32";
+    case DataType::kCartesian16:
+      return "CARTESIAN16";
+    case DataType::kSpherical:
+      return "SPHERICAL";
   }
   return "UNKNOWN";
 }
 
 std::string_view to_string(TimeType t) noexcept {
   switch (t) {
-    case TimeType::kNoSync: return "NO_SYNC";
-    case TimeType::kPtp: return "PTP";
-    case TimeType::kGps: return "GPS";
+    case TimeType::kNoSync:
+      return "NO_SYNC";
+    case TimeType::kPtp:
+      return "PTP";
+    case TimeType::kGps:
+      return "GPS";
   }
   return "UNKNOWN";
 }
 
 std::string_view to_string(ParseError e) noexcept {
   switch (e) {
-    case ParseError::kTooShort: return "too short";
-    case ParseError::kBadSof: return "bad SOF";
-    case ParseError::kBadVersion: return "bad version";
-    case ParseError::kLengthMismatch: return "length mismatch";
-    case ParseError::kBadCrc16: return "bad CRC16";
-    case ParseError::kBadCrc32: return "bad CRC32";
-    case ParseError::kUnknownDataType: return "unknown data_type";
-    case ParseError::kBadDotNum: return "bad dot_num";
-    case ParseError::kTruncated: return "truncated";
-    case ParseError::kKeyNumMismatch: return "key_num mismatch";
+    case ParseError::kTooShort:
+      return "too short";
+    case ParseError::kBadSof:
+      return "bad SOF";
+    case ParseError::kBadVersion:
+      return "bad version";
+    case ParseError::kLengthMismatch:
+      return "length mismatch";
+    case ParseError::kBadCrc16:
+      return "bad CRC16";
+    case ParseError::kBadCrc32:
+      return "bad CRC32";
+    case ParseError::kUnknownDataType:
+      return "unknown data_type";
+    case ParseError::kBadDotNum:
+      return "bad dot_num";
+    case ParseError::kTruncated:
+      return "truncated";
+    case ParseError::kKeyNumMismatch:
+      return "key_num mismatch";
   }
   return "unknown";
 }
 
 std::string_view to_string(CmdId id) noexcept {
   switch (id) {
-    case CmdId::kDiscovery: return "DISCOVERY";
-    case CmdId::kParamConfig: return "PARAM_CONFIG";
-    case CmdId::kParamInquire: return "PARAM_INQUIRE";
-    case CmdId::kInfoPush: return "INFO_PUSH";
-    case CmdId::kReboot: return "REBOOT";
-    case CmdId::kFactoryReset: return "FACTORY_RESET";
-    case CmdId::kSetGpsTimestamp: return "SET_GPS_TIMESTAMP";
+    case CmdId::kDiscovery:
+      return "DISCOVERY";
+    case CmdId::kParamConfig:
+      return "PARAM_CONFIG";
+    case CmdId::kParamInquire:
+      return "PARAM_INQUIRE";
+    case CmdId::kInfoPush:
+      return "INFO_PUSH";
+    case CmdId::kReboot:
+      return "REBOOT";
+    case CmdId::kFactoryReset:
+      return "FACTORY_RESET";
+    case CmdId::kSetGpsTimestamp:
+      return "SET_GPS_TIMESTAMP";
   }
   return "UNKNOWN";
 }
@@ -108,8 +153,7 @@ std::expected<CommandFrameView, ParseError> parse_command_frame(
   }
   CommandHeader h;
   h.length = read_le<std::uint16_t>(frame, 2);
-  if (h.length < kCommandHeaderSize || h.length > kCommandFrameMaxSize ||
-      h.length > frame.size()) {
+  if (h.length < kCommandHeaderSize || h.length > kCommandFrameMaxSize || h.length > frame.size()) {
     return std::unexpected(ParseError::kLengthMismatch);
   }
   h.seq_num = read_le<std::uint32_t>(frame, 4);
@@ -309,7 +353,9 @@ std::vector<std::byte> encode_reboot_request(std::uint16_t timeout_ms) {
   return out;
 }
 
-std::vector<std::byte> encode_factory_reset_request() { return std::vector<std::byte>(16); }
+std::vector<std::byte> encode_factory_reset_request() {
+  return std::vector<std::byte>(16);
+}
 
 std::vector<std::byte> encode_set_gps_timestamp_request(std::uint64_t pps_time_ns) {
   std::vector<std::byte> out(9);

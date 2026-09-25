@@ -139,8 +139,8 @@ class UdpSocket {
   [[nodiscard]] std::expected<std::size_t, TransportError> recv_buffer_bytes() const;
 
   /// Send one datagram. Returns bytes sent (always data.size() for UDP on success).
-  [[nodiscard]] std::expected<std::size_t, TransportError> send_to(
-      std::span<const std::byte> data, const Endpoint& to) const;
+  [[nodiscard]] std::expected<std::size_t, TransportError> send_to(std::span<const std::byte> data,
+                                                                   const Endpoint& to) const;
 
   /// Receive up to `out.size()` datagrams without blocking. Each out[i].data must point
   /// to a caller-owned buffer on entry; on return it is trimmed to the received size and
@@ -150,8 +150,7 @@ class UdpSocket {
       std::span<Datagram> out) const;
 
   /// Convenience: receive a single datagram into `buffer`.
-  [[nodiscard]] std::expected<Datagram, TransportError> recv_one(
-      std::span<std::byte> buffer) const;
+  [[nodiscard]] std::expected<Datagram, TransportError> recv_one(std::span<std::byte> buffer) const;
 
   void close() noexcept;
 
@@ -184,8 +183,7 @@ class Poller {
   ~Poller();
 
   /// Register a socket. `tag` is returned in ReadyEvent; tags must be unique.
-  [[nodiscard]] std::expected<void, TransportError> add(const UdpSocket& socket,
-                                                        std::uint64_t tag);
+  [[nodiscard]] std::expected<void, TransportError> add(const UdpSocket& socket, std::uint64_t tag);
   /// Unregister by tag. Unknown tags are ignored.
   void remove(std::uint64_t tag);
   [[nodiscard]] std::size_t size() const noexcept { return entries_.size(); }

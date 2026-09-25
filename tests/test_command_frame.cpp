@@ -31,8 +31,11 @@ TEST_CASE("discovery request frame layout", "[cmd]") {
 
 TEST_CASE("encode then parse round trip with payload", "[cmd]") {
   const auto payload = bytes_of("hello");
-  CommandFrameSpec spec{.seq_num = 0xA5A5A5A5, .cmd_id = 0x0100, .cmd_type = CmdType::kReq,
-                        .sender_type = SenderType::kHost, .data = payload};
+  CommandFrameSpec spec{.seq_num = 0xA5A5A5A5,
+                        .cmd_id = 0x0100,
+                        .cmd_type = CmdType::kReq,
+                        .sender_type = SenderType::kHost,
+                        .data = payload};
   auto f = build_command_frame(spec);
   REQUIRE(f);
   REQUIRE(f->size() == 29);

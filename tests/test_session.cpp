@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Session layer against tools/livox_mid360_sim.py: discovery, connect, typed commands,
 // retries, timeouts, work-state waits and cancellation.
-#include <catch2/catch_test_macros.hpp>
-
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <string>
 #include <thread>
@@ -218,6 +217,8 @@ TEST_CASE("Session: broadcast discovery", "[sim][session][.broadcast]") {
   DiscoveryOptions o;
   o.timeout = 1s;
   const auto devices = discover(o);
-  if (!devices) WARN("broadcast discovery failed: " << to_string(devices.error()));
-  else if (devices->empty()) WARN("broadcast discovery found no devices");
+  if (!devices)
+    WARN("broadcast discovery failed: " << to_string(devices.error()));
+  else if (devices->empty())
+    WARN("broadcast discovery found no devices");
 }

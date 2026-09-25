@@ -2,7 +2,8 @@
 // CRC algorithms defined by the Livox Mid-360 communication protocol (section "CRC Algorithm").
 //
 //   CRC-16/CCITT-FALSE : poly 0x1021, init 0xFFFF, xorout 0x0000, refin=false, refout=false
-//   CRC-32             : poly 0x04C11DB7, init 0xFFFFFFFF, xorout 0xFFFFFFFF, refin=true, refout=true
+//   CRC-32             : poly 0x04C11DB7, init 0xFFFFFFFF, xorout 0xFFFFFFFF, refin=true,
+//   refout=true
 //                        (identical to the CRC-32 used by zlib / Ethernet / PNG)
 //
 // Both are pure functions, usable at compile time, and have no I/O dependency.
