@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}${{ matrix.sanitize && ' / ASan+UBSan' || '' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { name: gcc-13, cc: gcc-13, cxx: g++-13, apt: g++-13 }
+          - { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
+          - { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
+        build_type: [Release]
+        sanitize: [false]
+        include:
+          - compiler: { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
+            build_type: Debug
+            sanitize: true
+          - compiler: { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
+            build_type: Debug
+            sanitize: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ${{ matrix.compiler.apt }} cmake ninja-build catch2
+      - name: Configure
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DLIVOX_MID360_ENABLE_ASAN=${{ matrix.sanitize && 'ON' || 'OFF' }}
+          -DLIVOX_MID360_ENABLE_UBSAN=${{ matrix.sanitize && 'ON' || 'OFF' }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Install (smoke)
+        run: cmake --install build --prefix "$PWD/_install" && ls -R _install/include/livox
+
+  golden-vectors-in-sync:
+    name: Python reference & golden vectors
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate and diff
+        run: |
+          python3 tools/gen_golden_vectors.py
+          git diff --exit-code -- tests/generated/golden_vectors.hpp
+
+  fuzz-smoke:
+    name: libFuzzer smoke (clang-19)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-19 libclang-rt-19-dev cmake ninja-build
+      - name: Configure
+        env: { CC: clang-19, CXX: clang++-19 }
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DLIVOX_MID360_BUILD_FUZZERS=ON -DLIVOX_MID360_ENABLE_ASAN=ON -DLIVOX_MID360_ENABLE_UBSAN=ON
+      - name: Build fuzzers
+        run: cmake --build build --target fuzz_command_frame fuzz_data_packet fuzz_key_value_list
+      - name: Run each fuzzer briefly
+        run: |
+          for f in fuzz_command_frame fuzz_data_packet fuzz_key_value_list; do
+            ./build/tests/$f -max_total_time=30 -rss_limit_mb=2048
+          done

@@ -1,0 +1,9 @@
+build/
+build-*/
+.cache/
+*.pcap
+!tests/fixtures/*.pcap
+__pycache__/
+*.pyc
+.venv/
+compile_commands.json

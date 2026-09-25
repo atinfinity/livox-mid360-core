@@ -1,0 +1,3 @@
+@PACKAGE_INIT@
+include("${CMAKE_CURRENT_LIST_DIR}/livox_mid360_core-targets.cmake")
+check_required_components(livox_mid360_core)
