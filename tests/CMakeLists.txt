@@ -24,6 +24,7 @@ add_executable(mid360_core_tests
   test_session_detail.cpp
   test_config.cpp
   test_api_skeleton.cpp
+  test_frame_assembler.cpp
   test_golden_vectors.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
 target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
@@ -41,7 +42,8 @@ catch_discover_tests(mid360_core_tests)
 if(LIVOX_MID360_BUILD_FUZZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set(fuzz_targets "")
   foreach(fz IN ITEMS command_frame data_packet key_value_list
-                      transport_text session_ack discovery_ack session_loopback)
+                      transport_text session_ack discovery_ack session_loopback
+                      frame_assembler)
     add_executable(fuzz_${fz} fuzz/fuzz_${fz}.cpp)
     target_link_libraries(fuzz_${fz} PRIVATE livox::mid360_core)
     # session_detail.hpp lives in src/ (internal, not installed)

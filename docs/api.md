@@ -127,6 +127,39 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   data wins) and counts it in `dropped()`; `push` from the receive thread, `pop(timeout)` /
   `try_pop()` / `close()` on the consumer side. Independent of `Device`.
 
+## Receive pipeline
+
+Decisions recorded in [issue #6](https://github.com/atinfinity/livox-mid360-core/issues/6).
+The packet-to-frame step is the internal, thread-free class `detail::FrameAssembler`
+(`src/frame_assembler.hpp`, exported for the tests and `fuzz_frame_assembler`); the receive
+thread feeds it one parsed point-cloud packet at a time and delivers whatever it closes.
+
+- **Frame counter mode** (default): a frame closes when the header `frame_cnt` changes. The
+  Mid-360 is a non-repetitive scanner and the wiki marks `frame_cnt` invalid for that, so if
+  the counter has not changed for `2 × window` since the first packet the assembler falls back
+  to the time window and counts it in `DeviceStats::frame_cnt_fallback` (to be checked on
+  hardware, #11).
+- **Time window mode**: packets are never split; a packet whose first point is at or past
+  `base_time_ns + window` starts a new frame. `base_time_ns` is the first point of the first
+  packet of the frame.
+- A packet whose `offset_ns` would overflow `uint32` (4.29 s) forces a close. Empty frames are
+  never delivered; `Frame::index` counts delivered frames. The receive thread closes a partial
+  frame after `window` without packets (idle close, both modes); `stop_sampling()` and the
+  destructor deliver nothing.
+- **Drop counting** is per source port (point cloud and IMU separately):
+  `expected = previous + 1 mod 65536`, `gap = counter − expected mod 65536`. `udp_cnt == 0`
+  together with a `frame_cnt` change is the documented per-frame reset (no gap). A gap above
+  32768 is a reordered or duplicated packet, counted in `reordered`, not as a drop. The first
+  packet after open only sets the baseline. CRC failures go to `bad_packets`.
+- **Timestamps**: `kHostOffsetOnce` measures `offset = receive time − packet timestamp` once,
+  at the first point-cloud packet, and applies it to every unsynchronised packet (points and
+  IMU); packets whose `time_type` is PTP or GPS pass through unchanged. `kHostReceive` uses
+  the kernel receive time as the packet time with the intra-packet interpolation kept
+  relative to it. `DeviceStats::time_offset_ns` exposes the measured offset.
+- **Conversion**: Cartesian32 × 0.001, Cartesian16 × 0.01, spherical
+  `x = d·sinθ·cosφ, y = d·sinθ·sinφ, z = d·cosθ` (θ zenith, φ azimuth, 0.01°), `line =
+  index % 4` within the packet, `offset_ns = sample time − base_time_ns`.
+
 ## C ABI mapping (phase 3)
 
 The C header is written once the C++ layer is implemented; this table fixes the shape.
