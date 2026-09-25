@@ -1,0 +1,19 @@
+# Codecov configuration (issue #18). Both status checks are informational until a baseline
+# and a target have been agreed; the numbers below are the intended thresholds.
+coverage:
+  status:
+    project:
+      default:
+        threshold: 1%
+        informational: true
+    patch:
+      default:
+        target: 80%
+        informational: true
+comment:
+  layout: "diff, files"
+  require_changes: true
+ignore:
+  - "tests/**"
+  - "tools/**"
+  - "build/**"

@@ -198,7 +198,7 @@ livox-mid360-core/
 │   ├── protocol_notes.md      # wiki の曖昧点と実装上の解釈
 │   ├── transport.md           # UDP 層の使い方
 │   └── simulator.md           # シミュレータの仕様と実機検証待ちの仮定
-├── docker/                    # Ubuntu 24.04 での CI 再現（docker/check.sh、lint 含む）
+├── docker/                    # Ubuntu 24.04 での CI 再現（docker/check.sh、lint・coverage 含む）
 ├── scripts/lint.sh            # clang-format / clang-tidy / ruff（CI の Lint と同一）
 ├── README.md                  # 非公式実装であることを冒頭に明記
 └── LICENSE                    # Apache-2.0

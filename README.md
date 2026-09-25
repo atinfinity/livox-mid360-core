@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml)
 [![Lint](https://github.com/atinfinity/livox-mid360-core/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/lint.yml)
+[![codecov](https://codecov.io/gh/atinfinity/livox-mid360-core/branch/main/graph/badge.svg)](https://codecov.io/gh/atinfinity/livox-mid360-core)
 
 > [!IMPORTANT]
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by Livox or DJI.
@@ -66,6 +67,7 @@ CMake options:
 | `LIVOX_MID360_WARNINGS_AS_ERRORS` | Treat compiler warnings as errors (`-Werror`) | `ON` when built top-level, `OFF` as a subproject |
 | `LIVOX_MID360_ENABLE_ASAN` | Enable AddressSanitizer | `OFF` |
 | `LIVOX_MID360_ENABLE_UBSAN` | Enable UndefinedBehaviorSanitizer | `OFF` |
+| `LIVOX_MID360_ENABLE_COVERAGE` | Instrument the library and tests with `--coverage` (gcov) | `OFF` |
 | `BUILD_SHARED_LIBS` | Build a shared library (standard CMake variable, defaulted by this project) | `ON` |
 
 "Top-level" is decided by `PROJECT_IS_TOP_LEVEL`, so consumers using `add_subdirectory` or
@@ -90,6 +92,26 @@ scripts/lint.sh --no-tidy  # formatting only
 ```
 
 `docker/check.sh` runs the linters before the builds, so it is the one-stop pre-push check.
+
+### Coverage
+
+The `Coverage` workflow builds with GCC 14 and `LIVOX_MID360_ENABLE_COVERAGE=ON`, runs the
+Catch2 suite and uploads a gcovr report to [Codecov](https://codecov.io/gh/atinfinity/livox-mid360-core)
+(badge above, line coverage). The HTML report is attached to each run as the `coverage-html`
+artifact. Locally (`gcovr` from apt or pip):
+
+```sh
+cmake -S . -B build-cov -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLIVOX_MID360_ENABLE_COVERAGE=ON
+cmake --build build-cov && ctest --test-dir build-cov
+gcovr --root . --txt-metric branch --filter 'src/.*' --filter 'include/livox/mid360/.*' \
+      --exclude 'tests/.*' --exclude 'build.*/.*' --html-details coverage.html --print-summary
+```
+
+Counted: `src/` and `include/livox/mid360/`. Excluded: tests, fuzzers, generated golden
+vectors, Catch2, and the non-Linux fallback branches in `src/transport.cpp` (marked with
+`GCOVR_EXCL_START` / `GCOVR_EXCL_STOP`, since CI measures on Linux). Branch coverage is
+reported but the badge and the Codecov status checks use line coverage; both checks are
+informational for now.
 
 ## Usage
 

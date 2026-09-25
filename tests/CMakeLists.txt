@@ -32,6 +32,7 @@ if(Python3_Interpreter_FOUND)
 endif()
 livox_mid360_apply_warnings(mid360_core_tests)
 livox_mid360_apply_sanitizers(mid360_core_tests)
+livox_mid360_apply_coverage(mid360_core_tests)
 catch_discover_tests(mid360_core_tests)
 
 if(LIVOX_MID360_BUILD_FUZZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
