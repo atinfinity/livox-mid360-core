@@ -11,6 +11,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(LivoxMid360Warnings)
 include(LivoxMid360Sanitizers)
+include(LivoxMid360Coverage)
 
 if(PROJECT_IS_TOP_LEVEL)
   set(CMAKE_CXX_STANDARD 23)
@@ -30,6 +31,7 @@ option(LIVOX_MID360_BUILD_FUZZERS "Build libFuzzer targets (Clang only)" OFF)
 option(LIVOX_MID360_WARNINGS_AS_ERRORS "Treat warnings as errors" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(LIVOX_MID360_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(LIVOX_MID360_ENABLE_COVERAGE "Instrument for gcov/gcovr coverage (--coverage)" OFF)
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
 # ---------------------------------------------------------------------------
@@ -76,6 +78,7 @@ set_target_properties(mid360_core PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
 livox_mid360_apply_warnings(mid360_core)
 livox_mid360_apply_sanitizers(mid360_core)
+livox_mid360_apply_coverage(mid360_core)
 
 # ---------------------------------------------------------------------------
 # Tests

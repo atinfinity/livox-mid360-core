@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds and tests the library inside ubuntu:24.04 with GCC 13, GCC 14 and Clang 19,
-# plus a sanitizer run and a libFuzzer smoke run.
+# plus a coverage summary, a sanitizer run and a libFuzzer smoke run.
 #
 # Usage: docker/check.sh [linux/arm64|linux/amd64]
 #   The optional argument selects the Docker platform (default: the host's). When the
@@ -30,6 +30,11 @@ docker run --rm ${platform_args[@]+"${platform_args[@]}"} -e EMULATED="$emulated
     cmake --build build-$cxx
     ctest --test-dir build-$cxx --output-on-failure -j"$(nproc)" | tail -3
   done
+  cmake -S . -B build-cov -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++-14 \
+        -DLIVOX_MID360_ENABLE_COVERAGE=ON >/dev/null
+  cmake --build build-cov && ctest --test-dir build-cov --output-on-failure | tail -3
+  gcovr --root . --gcov-executable gcov-14 --txt-metric branch --filter "src/.*" --filter "include/livox/mid360/.*" \
+        --exclude "tests/.*" --exclude "build.*/.*" --print-summary >/dev/null
   if [ "$EMULATED" = 0 ]; then
     cmake -S . -B build-san -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++-14 \
           -DLIVOX_MID360_ENABLE_ASAN=ON -DLIVOX_MID360_ENABLE_UBSAN=ON >/dev/null
