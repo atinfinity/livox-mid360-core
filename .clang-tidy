@@ -31,7 +31,7 @@ Checks: >
   -readability-math-missing-parentheses,
   -readability-uppercase-literal-suffix
 WarningsAsErrors: '*'
-HeaderFilterRegex: '(include/livox/mid360/|tests/sim_process\.hpp)'
+HeaderFilterRegex: '(include/livox/mid360/|src/session_detail\.hpp|tests/sim_process\.hpp)'
 FormatStyle: file
 CheckOptions:
   readability-implicit-bool-conversion.AllowPointerConditions: true

@@ -21,9 +21,10 @@ add_executable(mid360_core_tests
   test_transport.cpp
   test_sim_smoke.cpp
   test_session.cpp
+  test_session_detail.cpp
   test_golden_vectors.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
-target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 target_compile_definitions(mid360_core_tests PRIVATE
   LIVOX_MID360_SIM_SCRIPT="${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py")
@@ -36,10 +37,16 @@ livox_mid360_apply_coverage(mid360_core_tests)
 catch_discover_tests(mid360_core_tests)
 
 if(LIVOX_MID360_BUILD_FUZZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  foreach(fz IN ITEMS command_frame data_packet key_value_list)
+  set(fuzz_targets "")
+  foreach(fz IN ITEMS command_frame data_packet key_value_list
+                      transport_text session_ack discovery_ack)
     add_executable(fuzz_${fz} fuzz/fuzz_${fz}.cpp)
     target_link_libraries(fuzz_${fz} PRIVATE livox::mid360_core)
+    # session_detail.hpp lives in src/ (internal, not installed)
+    target_include_directories(fuzz_${fz} PRIVATE ${PROJECT_SOURCE_DIR}/src fuzz)
     target_compile_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)
     target_link_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)
+    list(APPEND fuzz_targets fuzz_${fz})
   endforeach()
+  add_custom_target(fuzzers DEPENDS ${fuzz_targets})
 endif()

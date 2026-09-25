@@ -21,7 +21,7 @@ CLANG_TIDY=${CLANG_TIDY:-$(command -v clang-tidy-19 || command -v clang-tidy)}
 RUFF=${RUFF:-ruff}
 TIDY_BUILD_DIR=${TIDY_BUILD_DIR:-build-tidy}
 
-cxx_files=$(git ls-files 'include/*.hpp' 'src/*.cpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/')
+cxx_files=$(git ls-files 'include/*.hpp' 'src/*.cpp' 'src/*.hpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/')
 tidy_files=$(git ls-files 'src/*.cpp' 'tests/test_*.cpp')
 
 echo "== clang-format ($("$CLANG_FORMAT" --version | head -1))"
