@@ -7,6 +7,7 @@
 #pragma once
 
 #include "livox/mid360/bytes.hpp"
+#include "livox/mid360/config.hpp"
 #include "livox/mid360/crc.hpp"
 #include "livox/mid360/export.hpp"
 #include "livox/mid360/hms.hpp"

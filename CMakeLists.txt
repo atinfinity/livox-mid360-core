@@ -61,6 +61,7 @@ add_library(mid360_core
   src/keys.cpp
   src/hms.cpp
   src/session.cpp
+  src/config.cpp
   src/transport.cpp)
 add_library(livox::mid360_core ALIAS mid360_core)
 

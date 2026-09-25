@@ -140,19 +140,21 @@ target_link_libraries(app PRIVATE livox::mid360_core)
 ```
 
 ```cpp
+#include <iostream>
 #include <livox/mid360/mid360.hpp>
 using namespace livox::mid360;
 
-// Build the 0x0100 request that points the LiDAR at this host.
-const auto pcl = encode_host_ip_config({{192, 168, 1, 5}, kDefaultHostPointCloudPort, kPointCloudPort});
-const auto en  = encode_u8(1);
-const KeyValue kvs[] = {{static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg), pcl},
-                        {static_cast<std::uint16_t>(Key::kImuDataEn), en}};
-const auto data  = encode_param_config_request(kvs);
-const auto frame = build_command_frame({.seq_num = 1,
-                                        .cmd_id  = static_cast<std::uint16_t>(CmdId::kParamConfig),
-                                        .data    = data}).value();
-// sendto(sock, frame.data(), frame.size(), ...)
+// Find the LiDAR, point it at this host and start sampling (blocking, no threads).
+auto devices = discover();                          // broadcast 0x0000, 1 s
+if (!devices || devices->empty()) return 1;
+auto session = Session::connect(devices->front(), {.bind_address = {192, 168, 1, 5}});
+if (!session) { std::cerr << to_string(session.error()) << "\n"; return 1; }
+HostSetup setup;                                     // ip = session's local address,
+setup.work_tgt_mode = WorkState::kSampling;          // ports 56201 / 56301 / 56401, IMU on
+if (auto r = apply_host_setup(*session, setup); !r) {
+  std::cerr << to_string(r.error()) << "\n";        // e.g. lidar_rejected ... key 0x0006
+  return 1;
+}
 
 // Parse a point cloud datagram.
 if (auto pkt = parse_data_packet(datagram)) {

@@ -79,6 +79,8 @@ std::string_view to_string(SessionErrorKind kind) noexcept {
       return "unexpected_state";
     case SessionErrorKind::kCancelled:
       return "cancelled";
+    case SessionErrorKind::kInvalidArgument:
+      return "invalid_argument";
   }
   return "unknown";
 }
@@ -101,6 +103,9 @@ std::string to_string(const SessionError& err) {
       break;
     case SessionErrorKind::kUnexpectedState:
       if (err.work_state) s += ": " + std::string(to_string(*err.work_state));
+      break;
+    case SessionErrorKind::kInvalidArgument:
+      if (err.error_key != 0) s += ": key " + hex16(err.error_key);
       break;
     default:
       break;
