@@ -1,5 +1,6 @@
 # livox-mid360-core
 
+> [!IMPORTANT]
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by Livox or DJI.
 > "Livox" and "Mid-360" are trademarks of their respective owners and are used here only to
 > identify the device this library talks to.
