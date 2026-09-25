@@ -24,6 +24,7 @@ docker run --rm "${platform_args[@]}" -e EMULATED="$emulated" -v "$PWD:/src:ro" 
   livox-mid360-core-ci bash -euxo pipefail -c '
   uname -m
   cp -r /src /tmp/work && cd /tmp/work && rm -rf build*
+  scripts/lint.sh
   for cxx in g++-13 g++-14 clang++-19; do
     cmake -S . -B build-$cxx -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=$cxx >/dev/null
     cmake --build build-$cxx

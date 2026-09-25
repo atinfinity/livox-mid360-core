@@ -1,0 +1,39 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  RUFF_VERSION: 0.16.9
+
+jobs:
+  clang-format:
+    name: clang-format (19)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-format-19
+      - run: git ls-files 'include/*.hpp' 'src/*.cpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/' | xargs clang-format-19 --dry-run --Werror
+
+  clang-tidy:
+    name: clang-tidy (19)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-19 clang-tidy-19 cmake ninja-build catch2
+      - name: Configure (compile_commands.json)
+        env: { CC: clang-19, CXX: clang++-19 }
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - run: cmake --build build --target mid360_core
+      - run: run-clang-tidy-19 -p build -quiet $(git ls-files 'src/*.cpp' 'tests/test_*.cpp')
+
+  ruff:
+    name: ruff
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx install "ruff==${RUFF_VERSION}"
+      - run: ruff check tools/
+      - run: ruff format --check tools/

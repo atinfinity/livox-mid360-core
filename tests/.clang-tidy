@@ -1,0 +1,9 @@
+# Relaxations for Catch2-based tests: REQUIRE(a == b) expands to chained comparisons and
+# tests dereference std::optional / std::expected directly after REQUIRE(has_value()).
+InheritParentConfig: true
+Checks: >
+  -bugprone-chained-comparison,
+  -bugprone-unchecked-optional-access,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -readability-function-size
