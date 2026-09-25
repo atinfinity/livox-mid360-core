@@ -26,6 +26,9 @@
 #define LIVOX_MID360_HAVE_EVENTFD 0
 #endif
 
+// The #else branches below are the non-Linux (macOS) fallbacks. CI measures coverage on
+// Linux only, so they are excluded from the report with GCOVR_EXCL markers (issue #18).
+
 namespace livox::mid360 {
 
 namespace {
@@ -348,6 +351,7 @@ std::expected<std::size_t, TransportError> UdpSocket::recv_batch(std::span<Datag
   }
   return received_total;
 #else
+  // GCOVR_EXCL_START
   std::size_t received = 0;
   for (Datagram& d : out) {
     sockaddr_in from{};
@@ -364,6 +368,7 @@ std::expected<std::size_t, TransportError> UdpSocket::recv_batch(std::span<Datag
     ++received;
   }
   return received;
+  // GCOVR_EXCL_STOP
 #endif
 }
 
@@ -387,6 +392,7 @@ std::expected<Poller, TransportError> Poller::create() {
   p.wake_read_fd_ = efd;
   p.wake_write_fd_ = efd;
 #else
+  // GCOVR_EXCL_START
   int fds[2] = {-1, -1};
   if (::pipe(fds) != 0)
     return std::unexpected(from_errno(TransportErrorCode::kSocketCreate, errno));
@@ -395,6 +401,7 @@ std::expected<Poller, TransportError> Poller::create() {
   if (!set_nonblocking(fds[0]) || !set_nonblocking(fds[1])) {
     return std::unexpected(from_errno(TransportErrorCode::kSetOption, errno));
   }
+  // GCOVR_EXCL_STOP
 #endif
   return p;
 }
@@ -470,9 +477,11 @@ std::expected<std::span<const ReadyEvent>, TransportError> Poller::wait(
     std::uint64_t counter = 0;
     (void)(::read(wake_read_fd_, &counter, sizeof(counter)) < 0);
 #else
+    // GCOVR_EXCL_START
     char drain[64];
     while (::read(wake_read_fd_, drain, sizeof(drain)) > 0) {
     }
+    // GCOVR_EXCL_STOP
 #endif
   }
   for (std::size_t i = 0; i < entries_.size(); ++i) {
@@ -490,8 +499,10 @@ void Poller::wake() const noexcept {
   const std::uint64_t one = 1;
   (void)(::write(wake_write_fd_, &one, sizeof(one)) < 0);
 #else
+  // GCOVR_EXCL_START
   const char one = 1;
   (void)!::write(wake_write_fd_, &one, 1);
+  // GCOVR_EXCL_STOP
 #endif
 }
 
