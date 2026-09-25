@@ -2,9 +2,10 @@
 
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions
 are recorded in [issue #9](https://github.com/atinfinity/livox-mid360-core/issues/9); this page
-describes the resulting shape. The headers are **declaration-only skeletons** until the data
-path (#6), push/state/HMS handling (#7) and reconnection (#8) land; they are deliberately not
-included from `mid360.hpp` yet. `BoundedQueue<T>` is header-only and usable today.
+describes the resulting shape. The data path (#6: receive thread, dispatch, frames, IMU,
+drop counting, `kStats`) is implemented and the headers are part of `mid360.hpp`; push /
+state / HMS handling (#7) and reconnection (#8) are still to come, so `work_state()` returns
+`nullopt` and only `kStats` events are emitted for now.
 
 ## Position in the stack
 
@@ -48,11 +49,14 @@ dev.reset();                                                          // before 
 
 - `Context::create(ContextOptions)` binds the sockets and starts the thread; the destructor
   stops and joins it. There is no separate start/stop.
-- `Device::open(Context&, DiscoveredDevice, DeviceOptions)` connects the `Session`, applies
-  `DeviceOptions::host_setup` with the host IP and ports taken from the Context (so a device
-  cannot be pointed at ports nobody listens on), and registers with the Context. It does not
-  change the work mode; `start_sampling()` / `stop_sampling()` do (`work_tgt_mode` plus
-  `wait_for_state`).
+- `Device::open(Context&, DiscoveredDevice, DeviceOptions)` connects the `Session` (its
+  `bind_address` defaults to the Context's), registers with the Context, and applies
+  `DeviceOptions::host_setup` with the ports taken from the Context (so a device cannot be
+  pointed at ports nobody listens on) and the host IP from `host_setup.ip`, or else the
+  command socket's local address. It does not change the work mode; `start_sampling()` /
+  `stop_sampling()` do (`work_tgt_mode` plus `wait_for_state`, bounded by
+  `host_setup.wait_timeout`). `start_sampling()` is idempotent; `stop_sampling()` discards a
+  partial frame.
 - `Device` and `Context` are non-copyable and non-movable; `open`/`create` return
   `std::unique_ptr` so the pointer doubles as the future C handle. Every Device must be
   destroyed before its Context (asserted in debug builds).
@@ -78,9 +82,12 @@ dev.reset();                                                          // before 
 
 ## Callbacks
 
-One setter per kind, settable only before `open()` completes or while the device is not
-receiving (otherwise `DeviceError::Kind::kInvalidState`). Fan-out to several consumers is the
-caller's job; this keeps a one-to-one mapping to C function pointers.
+One setter per kind, settable while sampling has not been requested: before the first
+successful `start_sampling()` and after a successful `stop_sampling()` (otherwise
+`DeviceError::Kind::kInvalidState`). The receive thread picks a change up at the next packet
+or timer tick. Packets that arrive while a callback is unset are parsed and counted but not
+delivered. Fan-out to several consumers is the caller's job; this keeps a one-to-one mapping
+to C function pointers.
 
 | Setter | Signature | Ownership |
 | --- | --- | --- |
@@ -89,8 +96,10 @@ caller's job; this keeps a one-to-one mapping to C function pointers.
 | `on_imu` | `(const ImuData&)` | trivially copyable |
 | `on_event` | `(const Event&)` | trivially copyable |
 
-`on_packet` is the raw tier: every accepted data packet, before frame assembly, with the kernel
-receive time. `on_frame` and `on_imu` are the assembled tier. The ROS 2 tier is the `Point`
+`on_packet` is the raw tier: every accepted point-cloud or IMU packet (parsed, CRC checked when
+`DeviceOptions::verify_crc` is on; never a push), before frame assembly, with the kernel
+receive time. `on_event` receives a `kStats` snapshot every `DeviceOptions::stats_interval`
+(default 1 s, 0 disables). `on_frame` and `on_imu` are the assembled tier. The ROS 2 tier is the `Point`
 layout itself (below); converting to a message is the job of `livox-mid360-ros2`.
 
 ## Data types
@@ -118,7 +127,9 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   `kind` selects the meaningful fields (`kStateChanged`, `kHms`, `kDisconnected`,
   `kReconnected`, `kStats`). Per-level HMS filtering is added by #7.
 - `DeviceStats{packets, points, frames, imu_samples, bad_packets, dropped_packets (udp_cnt
-  gaps), queue_drops, last_packet_time_ns}` and `ContextStats{datagrams, unknown_source}`.
+  gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, time_offset_ns,
+  time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
+  atomics written by the receive thread only.
 - `DeviceError{kind, optional<SessionError> session}` with kinds `kSession`,
   `kInvalidArgument`, `kInvalidState`, `kAlreadyRegistered` (same IP opened twice on one
   Context), `kNotOpen`. Everything returns `std::expected`; `std::error_code` is not used.
@@ -133,6 +144,16 @@ Decisions recorded in [issue #6](https://github.com/atinfinity/livox-mid360-core
 The packet-to-frame step is the internal, thread-free class `detail::FrameAssembler`
 (`src/frame_assembler.hpp`, exported for the tests and `fuzz_frame_assembler`); the receive
 thread feeds it one parsed point-cloud packet at a time and delivers whatever it closes.
+
+- **Receive thread** (`src/context.cpp`): one `Poller` over the push, point-cloud and IMU
+  sockets, `recv_batch` (`ContextOptions::batch_size` datagrams, up to 8 batches per socket
+  per wake-up so one socket cannot starve the others), dispatch by source IP against a
+  snapshot of the registry (`mutex + vector<{ip, Device*}>` plus a generation counter). The
+  push socket is only counted until #7. Unregistering removes the entry, bumps the generation,
+  wakes the poller and waits on a condition variable until the thread has taken a new
+  snapshot, so no callback of the removed Device is in flight afterwards. The poll timeout is
+  the earliest of the Devices' timers (idle frame close, next `kStats`) and 100 ms, on
+  `steady_clock`; packet receive times stay `CLOCK_REALTIME`.
 
 - **Frame counter mode** (default): a frame closes when the header `frame_cnt` changes. The
   Mid-360 is a non-repetitive scanner and the wiki marks `frame_cnt` invalid for that, so if

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API skeleton (issue #9): the shared receive side. The Mid-360 host ports for push
+// Public API (issue #9): the shared receive side. The Mid-360 host ports for push
 // (56201), point cloud (56301) and IMU (56401) are the same for every LiDAR, so one Context
 // owns those three sockets and the single receive thread, and dispatches datagrams to the
-// registered Devices by source IP. Implemented in #6 (data) and #7 (push).
+// registered Devices by source IP. Data path implemented in #6; push parsing is #7.
 #pragma once
 
 #include <cstddef>
@@ -19,12 +19,12 @@ LIVOX_MID360_API_BEGIN
 namespace livox::mid360 {
 
 struct ContextOptions {
-  Ipv4 bind_address{0, 0, 0, 0};  ///< interface for the three receive sockets
-  std::uint16_t push_port = kDefaultHostPushPort;
-  std::uint16_t point_port = kDefaultHostPointCloudPort;
-  std::uint16_t imu_port = kDefaultHostImuPort;
-  std::size_t recv_buffer_bytes = 4u << 20;  ///< SO_RCVBUF request per socket
-  std::size_t batch_size = 32;               ///< datagrams per recvmmsg
+  Ipv4 bind_address{0, 0, 0, 0};                   ///< interface for the three receive sockets
+  std::uint16_t push_port = kDefaultHostPushPort;  ///< 0 = ephemeral (tests)
+  std::uint16_t point_port = kDefaultHostPointCloudPort;  ///< 0 = ephemeral
+  std::uint16_t imu_port = kDefaultHostImuPort;           ///< 0 = ephemeral
+  std::size_t recv_buffer_bytes = 4u << 20;               ///< SO_RCVBUF request per socket
+  std::size_t batch_size = 32;                            ///< datagrams per recvmmsg
 };
 
 class Device;
@@ -43,6 +43,7 @@ class Context {
   Context(Context&&) = delete;
   Context& operator=(Context&&) = delete;
 
+  /// Effective options: ports requested as 0 are replaced by the bound ones.
   [[nodiscard]] const ContextOptions& options() const noexcept;
   [[nodiscard]] ContextStats stats() const;
 

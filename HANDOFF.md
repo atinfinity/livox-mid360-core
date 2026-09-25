@@ -186,7 +186,7 @@ livox-mid360-core/
 │   ├── session.hpp            # discovery、同期コマンド、work-state ポーリング（#4）
 │   ├── export.hpp, version.hpp
 │   ├── config.hpp             # HostSetup / apply_host_setup（#5）
-│   ├── context.hpp, device.hpp, frame.hpp, event.hpp  # 公開 API スケルトン（#9、docs/api.md）。実装は #6/#7/#8
+│   ├── context.hpp, device.hpp, frame.hpp, event.hpp  # デバイス層（#9 設計、#6 受信パス実装、docs/api.md）。push/状態は #7、再接続は #8
 │   └── mid360.hpp             # 公開 API のまとめ
 ├── src/
 ├── tools/                     # Python リファレンス実装、pcap 解析、golden vector 生成、シミュレータ
@@ -227,8 +227,8 @@ livox-mid360-core/
 - [ ] 実機で pcap 採取（discovery〜SAMPLING 遷移、点群、IMU、push）→ tests/fixtures/
 - [x] discovery、セッション確立、パラメータ設定、SAMPLING 遷移（`session.hpp`、#4、docs/session.md。同期 API のみ、受信スレッドは #9）
 - [x] ホスト設定フロー `HostSetup` / `apply_host_setup`（`config.hpp`、#5、docs/session.md「Host setup」）
-- [x] 公開 API 設計（Context/Device、スレッド規則、エラー型、docs/api.md、#9）。ヘッダは宣言のみ
-- [ ] 点群/IMU 受信、ドロップ計数、フレーム分割
+- [x] 公開 API 設計（Context/Device、スレッド規則、エラー型、docs/api.md、#9）
+- [x] 点群/IMU 受信、ドロップ計数、フレーム分割（`Context` / `Device` / `FrameAssembler`、#6、docs/api.md「Receive pipeline」。シミュレータで検証、実機は #11）
 - [ ] 状態機械と push 処理、HMS デコード
 - [ ] 切断・再起動からの自動復帰、複数台
 - [ ] 数時間の長時間受信テスト、Livox Viewer 2 との目視比較

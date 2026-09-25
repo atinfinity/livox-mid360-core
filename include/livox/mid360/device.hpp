@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API skeleton (issue #9): one LiDAR. Wraps a Session (commands, caller's thread) and
+// Public API (issue #9): one LiDAR. Wraps a Session (commands, caller's thread) and
 // receives its data through a Context (receive thread, callbacks). Threading rules:
 //   - callbacks run on the Context's receive thread, must return quickly and never block;
 //   - commands are serialised by an internal mutex and may be called from any user thread,
@@ -7,9 +7,10 @@
 //     your own thread instead;
 //   - an exception escaping a callback terminates the process;
 //   - a Device must not be destroyed from inside its own callbacks.
-// Implemented in #6 (data path), #7 (push / state / HMS) and #8 (reconnection).
+// Data path implemented in #6; push / state / HMS are #7 and reconnection is #8.
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <expected>
 #include <functional>
@@ -37,6 +38,10 @@ struct DeviceOptions {
   TimestampPolicy timestamp_policy = TimestampPolicy::kHostOffsetOnce;
   FramePolicy frame_policy;
   SessionOptions session;  ///< command socket; `bind_address` defaults to the Context's
+  /// Verify the CRC32 of every data packet; failures count in DeviceStats::bad_packets.
+  bool verify_crc = true;
+  /// Period of Event::Kind::kStats; 0 disables it.
+  std::chrono::milliseconds stats_interval{1000};
 };
 
 /// Per-packet metadata handed to on_packet together with the non-owning DataPacketView.
@@ -52,8 +57,9 @@ using EventCallback = std::function<void(const Event&)>;
 
 class Device {
  public:
-  /// Connects the Session, applies `opts.host_setup` pointed at the Context's address and
-  /// ports, and registers with the Context. Does not change the work mode.
+  /// Registers with the Context (kAlreadyRegistered when another Device has the same IP),
+  /// connects the Session and applies `opts.host_setup` pointed at the command socket's
+  /// local address (or `host_setup.ip`) and the Context's ports. Does not change the work mode.
   [[nodiscard]] static std::expected<std::unique_ptr<Device>, DeviceError> open(
       Context& context, const DiscoveredDevice& device, const DeviceOptions& opts = {});
 
@@ -65,16 +71,20 @@ class Device {
   Device(Device&&) = delete;
   Device& operator=(Device&&) = delete;
 
-  // --- callbacks: one per kind, settable only before open() completes or while the device
-  // is not receiving; otherwise kInvalidState. Pass an empty function to clear.
+  // --- callbacks: one per kind, settable while sampling has not been requested (before
+  // start_sampling() or after stop_sampling()); otherwise kInvalidState. Pass an empty
+  // function to clear. Packets arriving while no callback is set are dropped silently.
   std::expected<void, DeviceError> on_packet(PacketCallback cb);
   std::expected<void, DeviceError> on_frame(FrameCallback cb);
   std::expected<void, DeviceError> on_imu(ImuCallback cb);
   std::expected<void, DeviceError> on_event(EventCallback cb);
 
   // --- commands (caller's thread, serialised, blocking; see Session for the semantics)
+  /// work_tgt_mode = SAMPLING, then wait for cur_work_state (host_setup.wait_timeout).
+  /// Idempotent. Callbacks are frozen from the first successful call on.
   std::expected<void, DeviceError> start_sampling(
       std::optional<RequestOptions> opts = std::nullopt);
+  /// work_tgt_mode = IDLE, then wait. A partial frame is discarded, not delivered.
   std::expected<void, DeviceError> stop_sampling(std::optional<RequestOptions> opts = std::nullopt);
   std::expected<ParamConfigAck, DeviceError> configure(
       std::span<const KeyValue> values, std::optional<RequestOptions> opts = std::nullopt);
@@ -86,7 +96,8 @@ class Device {
 
   // --- observation (thread-safe snapshots)
   [[nodiscard]] const DiscoveredDevice& info() const noexcept;
-  [[nodiscard]] std::optional<WorkState> work_state() const;  ///< last pushed 0x8006
+  [[nodiscard]] std::optional<WorkState> work_state()
+      const;  ///< last pushed 0x8006 (#7; nullopt until then)
   [[nodiscard]] DeviceStats stats() const;
   [[nodiscard]] SessionStats session_stats() const;
 
