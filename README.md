@@ -94,7 +94,7 @@ include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transpo
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator
-docs/protocol_notes.md  observations that go beyond the wiki text
+docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide)
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 
