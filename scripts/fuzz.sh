@@ -10,7 +10,7 @@ build=${1:?usage: scripts/fuzz.sh <build-dir> [seconds]}
 secs=${2:-30}
 targets=(fuzz_command_frame fuzz_data_packet fuzz_key_value_list
          fuzz_transport_text fuzz_session_ack fuzz_discovery_ack
-         fuzz_session_loopback)
+         fuzz_session_loopback fuzz_frame_assembler)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 status=0
