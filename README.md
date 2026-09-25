@@ -23,6 +23,9 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
 - A Python reference implementation (`tools/`) and byte-exact golden vectors shared by both
 - UDP transport (`transport.hpp`): non-blocking IPv4 sockets, batched receive (`recvmmsg` on
   Linux) with kernel receive timestamps, and a `poll`-based `Poller` with cross-thread wake-up
+- A LiDAR simulator (`tools/livox_mid360_sim.py`, stdlib-only Python) that answers commands,
+  runs the work-state machine and streams point-cloud/IMU/push packets, with a JSON control
+  channel for fault injection; the C++ tests spawn it for an end-to-end smoke test
 
 Not yet implemented (phase 2+): discovery/session, state machine, frame assembly,
 C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
@@ -93,8 +96,8 @@ keep the buffer alive while you use the result.
 include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, mid360 umbrella)
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
-tools/                  Python reference implementation, pcap decoder, golden-vector generator
-docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide)
+tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
+docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), simulator.md
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and tests the library inside ubuntu:24.04 with GCC 13, GCC 14 and Clang 18,
+# Builds and tests the library inside ubuntu:24.04 with GCC 13, GCC 14 and Clang 19,
 # plus a sanitizer run and a libFuzzer smoke run. Usage: docker/check.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -20,6 +20,7 @@ docker run --rm -v "$PWD:/src:ro" -w /tmp livox-mid360-core-ci bash -euxo pipefa
   for f in fuzz_command_frame fuzz_data_packet fuzz_key_value_list; do
     ./build-fuzz/tests/$f -max_total_time=10 -rss_limit_mb=2048 2>&1 | tail -1
   done
+  python3 -m unittest tools/test_sim.py
   python3 tools/gen_golden_vectors.py && git init -q . && git add -A && git diff --cached --quiet -- tests/generated || true
   cmake --install build-g++-14 --prefix /tmp/inst >/dev/null && ls /tmp/inst/lib/cmake/livox_mid360_core
 '

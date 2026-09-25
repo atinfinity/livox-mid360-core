@@ -56,6 +56,8 @@ jobs:
         run: |
           python3 tools/gen_golden_vectors.py
           git diff --exit-code -- tests/generated/golden_vectors.hpp
+      - name: Simulator unit tests
+        run: python3 -m unittest -v tools/test_sim.py
 
   fuzz-smoke:
     name: libFuzzer smoke (clang-19)
