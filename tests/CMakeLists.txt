@@ -39,7 +39,7 @@ catch_discover_tests(mid360_core_tests)
 if(LIVOX_MID360_BUILD_FUZZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set(fuzz_targets "")
   foreach(fz IN ITEMS command_frame data_packet key_value_list
-                      transport_text session_ack discovery_ack)
+                      transport_text session_ack discovery_ack session_loopback)
     add_executable(fuzz_${fz} fuzz/fuzz_${fz}.cpp)
     target_link_libraries(fuzz_${fz} PRIVATE livox::mid360_core)
     # session_detail.hpp lives in src/ (internal, not installed)
