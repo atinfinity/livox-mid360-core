@@ -22,6 +22,7 @@ add_executable(mid360_core_tests
   test_sim_smoke.cpp
   test_session.cpp
   test_session_detail.cpp
+  test_config.cpp
   test_golden_vectors.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
 target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)

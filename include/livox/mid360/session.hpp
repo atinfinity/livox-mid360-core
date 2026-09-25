@@ -43,6 +43,7 @@ enum class SessionErrorKind : std::uint8_t {
   kLidarRejected,    ///< ACK with ret_code != success; see `ret_code` / `error_key`
   kUnexpectedState,  ///< wait_for_state observed ERROR or UPGRADE; see `work_state`
   kCancelled,        ///< cancel() was called
+  kInvalidArgument,  ///< rejected before sending; see `error_key` for the offending key
 };
 
 [[nodiscard]] std::string_view to_string(SessionErrorKind kind) noexcept;
@@ -54,7 +55,7 @@ struct SessionError {
   std::optional<TransportError> transport;
   std::optional<ParseError> parse;
   RetCode ret_code = RetCode::kSuccess;  ///< kLidarRejected only
-  std::uint16_t error_key = 0;           ///< kLidarRejected on 0x0100 / 0x0101
+  std::uint16_t error_key = 0;           ///< kLidarRejected on 0x0100 / 0x0101, kInvalidArgument
   std::optional<WorkState> work_state;   ///< kUnexpectedState only
 };
 
