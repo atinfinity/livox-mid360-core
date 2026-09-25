@@ -182,8 +182,9 @@ livox-mid360-core/
 │   ├── keys.hpp               # key 定義（0x0000〜0x8011）と型付きエンコード/デコード
 │   ├── hms.hpp                # HMS 診断コード
 │   ├── transport.hpp          # UdpSocket / Poller
+│   ├── session.hpp            # discovery、同期コマンド、work-state ポーリング（#4）
 │   ├── export.hpp, version.hpp
-│   ├── device.hpp             # （予定）状態機械・セッション、#4/#5/#7
+│   ├── device.hpp             # （予定）状態機械・受信スレッド、#5/#7/#9
 │   └── mid360.hpp             # 公開 API のまとめ
 ├── src/
 ├── tools/                     # Python リファレンス実装、pcap 解析、golden vector 生成、シミュレータ
@@ -220,7 +221,7 @@ livox-mid360-core/
 - [x] UDP トランスポート（`transport.hpp`、#2、docs/transport.md）
 - [x] LiDAR シミュレータ（`tools/livox_mid360_sim.py`、#3、docs/simulator.md）。実機で要検証の仮定は docs/simulator.md 末尾と #11
 - [ ] 実機で pcap 採取（discovery〜SAMPLING 遷移、点群、IMU、push）→ tests/fixtures/
-- [ ] discovery、セッション確立、パラメータ設定、SAMPLING 遷移
+- [x] discovery、セッション確立、パラメータ設定、SAMPLING 遷移（`session.hpp`、#4、docs/session.md。同期 API のみ、受信スレッドは #9）
 - [ ] 点群/IMU 受信、ドロップ計数、フレーム分割
 - [ ] 状態機械と push 処理、HMS デコード
 - [ ] 切断・再起動からの自動復帰、複数台
