@@ -125,7 +125,9 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
   REQUIRE(poller->add(*imu_sock, 2).has_value());
   std::array<std::array<std::byte, kMaxDatagramSize>, 32> storage{};
   std::array<Datagram, 32> batch{};
-  std::size_t pcl_packets = 0, imu_packets = 0, points = 0;
+  std::size_t pcl_packets = 0;
+  std::size_t imu_packets = 0;
+  std::size_t points = 0;
   std::optional<std::uint16_t> last_udp_cnt;
   bool udp_cnt_monotonic = true;
   const auto rx_deadline = std::chrono::steady_clock::now() + 5s;

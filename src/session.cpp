@@ -186,7 +186,7 @@ Session::Session(Session&& o) noexcept
     : socket_(std::move(o.socket_)),
       poller_(std::move(o.poller_)),
       lidar_(o.lidar_),
-      options_(std::move(o.options_)),
+      options_(o.options_),
       stats_(o.stats_),
       serial_(std::move(o.serial_)),
       next_seq_(o.next_seq_),
@@ -197,7 +197,7 @@ Session& Session::operator=(Session&& o) noexcept {
     socket_ = std::move(o.socket_);
     poller_ = std::move(o.poller_);
     lidar_ = o.lidar_;
-    options_ = std::move(o.options_);
+    options_ = o.options_;
     stats_ = o.stats_;
     serial_ = std::move(o.serial_);
     next_seq_ = o.next_seq_;
@@ -400,7 +400,7 @@ std::expected<InquireResult, SessionError> Session::inquire(std::span<const Key>
 }
 
 namespace {
-std::expected<SimpleAck, SessionError> simple(std::expected<RawAck, SessionError>&& r) {
+std::expected<SimpleAck, SessionError> simple(const std::expected<RawAck, SessionError>& r) {
   if (!r) return std::unexpected(r.error());
   const auto ack = parse_simple_ack(r->data);
   if (!ack) return std::unexpected(bad_response(ack.error(), r->cmd_id, 0));

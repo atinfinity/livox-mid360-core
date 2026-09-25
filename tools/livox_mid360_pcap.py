@@ -10,6 +10,7 @@ Usage:
 No third-party dependencies. Only classic pcap (magic 0xA1B2C3D4 / 0xA1B23C4D, LINKTYPE_ETHERNET
 or LINKTYPE_RAW / LINUX_SLL). Convert pcapng with `tshark -F pcap` or `editcap -F pcap` first.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,7 +49,9 @@ def iter_pcap(path: pathlib.Path):
         elif magic == 0x4D3CB2A1:
             end, nano = ">", True
         else:
-            raise SystemExit(f"not a classic pcap (magic {magic:#x}); convert pcapng with editcap -F pcap")
+            raise SystemExit(
+                f"not a classic pcap (magic {magic:#x}); convert pcapng with editcap -F pcap"
+            )
         linktype = struct.unpack(end + "I", gh[20:24])[0]
         while True:
             ph = f.read(16)
@@ -113,13 +116,18 @@ def fmt_kv(kvs) -> list[dict]:
         elif k in (0x8002, 0x8003, 0x8004) and len(v) == 4:
             d["value"] = ".".join(map(str, v))
         elif k in (0x0005, 0x0006, 0x0007) and len(v) == 8:
-            d["value"] = {"ip": ".".join(map(str, v[:4])), **dict(zip(("dst_port", "src_port"), struct.unpack("<HH", v[4:])))}
+            d["value"] = {
+                "ip": ".".join(map(str, v[:4])),
+                **dict(zip(("dst_port", "src_port"), struct.unpack("<HH", v[4:]), strict=True)),
+            }
         out.append(d)
     return out
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("pcap", type=pathlib.Path)
     ap.add_argument("--points", action="store_true", help="dump per-point CSV rows")
     ap.add_argument("--json", action="store_true", help="emit one JSON object per Livox packet")
@@ -146,19 +154,41 @@ def main() -> None:
                     stats["drops"] += 1
                 last_udp_cnt[key] = pkt.udp_cnt
                 if a.json:
-                    print(json.dumps({"t": ts, "src": u.src, "kind": kind, "data_type": pkt.data_type,
-                                      "time_type": pkt.time_type, "dot_num": pkt.dot_num,
-                                      "udp_cnt": pkt.udp_cnt, "timestamp_ns": pkt.timestamp_ns,
-                                      "time_interval_0p1us": pkt.time_interval, "reserved": pkt.reserved.hex()}))
+                    print(
+                        json.dumps(
+                            {
+                                "t": ts,
+                                "src": u.src,
+                                "kind": kind,
+                                "data_type": pkt.data_type,
+                                "time_type": pkt.time_type,
+                                "dot_num": pkt.dot_num,
+                                "udp_cnt": pkt.udp_cnt,
+                                "timestamp_ns": pkt.timestamp_ns,
+                                "time_interval_0p1us": pkt.time_interval,
+                                "reserved": pkt.reserved.hex(),
+                            }
+                        )
+                    )
                 if a.points and pkt.data_type in (1, 2):
                     scale = 1 if pkt.data_type == 1 else 10
                     for i, s in enumerate(pkt.samples()):
-                        print(f"{pkt.sample_timestamp_ns(i)},{s[0]*scale},{s[1]*scale},{s[2]*scale},{s[3]},{s[4]}")
+                        print(
+                            f"{pkt.sample_timestamp_ns(i)},{s[0] * scale},{s[1] * scale},"
+                            f"{s[2] * scale},{s[3]},{s[4]}"
+                        )
             else:
                 fr = p.CommandFrame.parse(u.payload)
-                rec = {"t": ts, "src": f"{u.src}:{u.sport}", "dst": f"{u.dst}:{u.dport}",
-                       "cmd_id": f"0x{fr.cmd_id:04X}", "type": "ACK" if fr.cmd_type else "REQ",
-                       "sender": "lidar" if fr.sender_type else "host", "seq": fr.seq_num, "len": len(fr.data)}
+                rec = {
+                    "t": ts,
+                    "src": f"{u.src}:{u.sport}",
+                    "dst": f"{u.dst}:{u.dport}",
+                    "cmd_id": f"0x{fr.cmd_id:04X}",
+                    "type": "ACK" if fr.cmd_type else "REQ",
+                    "sender": "lidar" if fr.sender_type else "host",
+                    "seq": fr.seq_num,
+                    "len": len(fr.data),
+                }
                 if fr.cmd_id == 0x0000 and fr.cmd_type == 1:
                     rec["discovery"] = p.parse_discovery_ack(fr.data)
                 elif fr.cmd_id == 0x0100 and fr.cmd_type == 0:
@@ -178,7 +208,17 @@ def main() -> None:
         except ValueError as e:
             stats["bad"] += 1
             if a.json:
-                print(json.dumps({"t": ts, "src": u.src, "sport": u.sport, "error": str(e), "hex": u.payload[:40].hex()}))
+                print(
+                    json.dumps(
+                        {
+                            "t": ts,
+                            "src": u.src,
+                            "sport": u.sport,
+                            "error": str(e),
+                            "hex": u.payload[:40].hex(),
+                        }
+                    )
+                )
     print(json.dumps({"summary": stats}), file=sys.stderr)
 
 
