@@ -15,7 +15,9 @@ using namespace livox::mid360;
 #define GOLDEN(name) span_of(golden::name, golden::name##_len)
 
 namespace {
-std::vector<std::byte> to_vec(std::span<const std::byte> s) { return {s.begin(), s.end()}; }
+std::vector<std::byte> to_vec(std::span<const std::byte> s) {
+  return {s.begin(), s.end()};
+}
 }  // namespace
 
 TEST_CASE("golden: crc check values agree", "[golden]") {
@@ -27,7 +29,8 @@ TEST_CASE("golden: crc check values agree", "[golden]") {
 }
 
 TEST_CASE("golden: request frames byte-identical", "[golden]") {
-  CHECK(build_command_frame({.seq_num = 1, .cmd_id = 0x0000}).value() == to_vec(GOLDEN(discovery_req)));
+  CHECK(build_command_frame({.seq_num = 1, .cmd_id = 0x0000}).value() ==
+        to_vec(GOLDEN(discovery_req)));
 
   const auto h5 = encode_host_ip_config({{192, 168, 1, 5}, 56201, 56200});
   const auto h6 = encode_host_ip_config({{192, 168, 1, 5}, 56301, 56300});

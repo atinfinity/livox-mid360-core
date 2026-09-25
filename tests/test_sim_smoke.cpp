@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // End-to-end smoke test against tools/livox_mid360_sim.py: discovery -> configure host
 // endpoints -> wait for SAMPLING -> receive point-cloud and IMU packets -> quit.
-#include <catch2/catch_test_macros.hpp>
-
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstring>
 #include <string>
@@ -84,18 +83,17 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
   const auto pcl_cfg = encode_host_ip_config({.ip = {127, 0, 0, 1},
                                               .dst_port = pcl_sock->local_endpoint().port,
                                               .src_port = kPointCloudPort});
-  const auto imu_cfg = encode_host_ip_config({.ip = {127, 0, 0, 1},
-                                              .dst_port = imu_sock->local_endpoint().port,
-                                              .src_port = kImuPort});
+  const auto imu_cfg = encode_host_ip_config(
+      {.ip = {127, 0, 0, 1}, .dst_port = imu_sock->local_endpoint().port, .src_port = kImuPort});
   const auto imu_en = encode_u8(1);
   const KeyValue kvs[] = {
       {static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg), pcl_cfg},
       {static_cast<std::uint16_t>(Key::kImuHostIpCfg), imu_cfg},
       {static_cast<std::uint16_t>(Key::kImuDataEn), imu_en},
   };
-  const auto cfg_ack = request(*cmd_sock, lidar_cmd, seq++,
-                               static_cast<std::uint16_t>(CmdId::kParamConfig),
-                               encode_param_config_request(kvs));
+  const auto cfg_ack =
+      request(*cmd_sock, lidar_cmd, seq++, static_cast<std::uint16_t>(CmdId::kParamConfig),
+              encode_param_config_request(kvs));
   REQUIRE(cfg_ack.has_value());
   const auto cfg = parse_param_config_ack(*cfg_ack);
   REQUIRE(cfg.has_value());
@@ -146,7 +144,8 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
         if (e.tag == 1) {
           CHECK(pkt->header.data_type == DataType::kCartesian32);
           CHECK(pkt->header.dot_num == kPointsPerPacket);
-          if (last_udp_cnt && pkt->header.udp_cnt != static_cast<std::uint16_t>(*last_udp_cnt + 1)) {
+          if (last_udp_cnt &&
+              pkt->header.udp_cnt != static_cast<std::uint16_t>(*last_udp_cnt + 1)) {
             udp_cnt_monotonic = false;
           }
           last_udp_cnt = pkt->header.udp_cnt;

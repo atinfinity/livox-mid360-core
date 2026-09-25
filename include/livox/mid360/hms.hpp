@@ -14,7 +14,7 @@ LIVOX_MID360_API_BEGIN
 namespace livox::mid360 {
 
 enum class HmsLevel : std::uint8_t {
-  kNone = 0,     ///< slot unused
+  kNone = 0,  ///< slot unused
   kInfo = 1,
   kWarning = 2,
   kError = 3,
