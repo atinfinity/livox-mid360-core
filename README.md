@@ -1,5 +1,8 @@
 # livox-mid360-core
 
+[![CI](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml)
+
+> [!IMPORTANT]
 > **Unofficial.** This project is not affiliated with, endorsed by, or supported by Livox or DJI.
 > "Livox" and "Mid-360" are trademarks of their respective owners and are used here only to
 > identify the device this library talks to.
