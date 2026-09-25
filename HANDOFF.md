@@ -207,9 +207,11 @@ livox-mid360-core/
 - [x] key-value list エンコード/デコード + key 定義
 - [x] Python pcap 解析スクリプト（tools/）を書き、C++ 実装の照合先にする
 
-### フェーズ 2（実機必要）
+### フェーズ 2（実機なしで進められる分は GitHub issue #2〜#10 参照）
+- [x] UDP トランスポート（`transport.hpp`、#2、docs/transport.md）
+- [x] LiDAR シミュレータ（`tools/livox_mid360_sim.py`、#3、docs/simulator.md）。実機で要検証の仮定は docs/simulator.md 末尾と #11
 - [ ] 実機で pcap 採取（discovery〜SAMPLING 遷移、点群、IMU、push）→ tests/fixtures/
-- [ ] UDP トランスポート、discovery、セッション確立、パラメータ設定、SAMPLING 遷移
+- [ ] discovery、セッション確立、パラメータ設定、SAMPLING 遷移
 - [ ] 点群/IMU 受信、ドロップ計数、フレーム分割
 - [ ] 状態機械と push 処理、HMS デコード
 - [ ] 切断・再起動からの自動復帰、複数台

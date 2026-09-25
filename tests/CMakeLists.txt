@@ -19,9 +19,16 @@ add_executable(mid360_core_tests
   test_keys.cpp
   test_hms.cpp
   test_transport.cpp
+  test_sim_smoke.cpp
   test_golden_vectors.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
 target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+find_package(Python3 COMPONENTS Interpreter QUIET)
+target_compile_definitions(mid360_core_tests PRIVATE
+  LIVOX_MID360_SIM_SCRIPT="${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py")
+if(Python3_Interpreter_FOUND)
+  target_compile_definitions(mid360_core_tests PRIVATE LIVOX_MID360_PYTHON="${Python3_EXECUTABLE}")
+endif()
 livox_mid360_apply_warnings(mid360_core_tests)
 livox_mid360_apply_sanitizers(mid360_core_tests)
 catch_discover_tests(mid360_core_tests)
