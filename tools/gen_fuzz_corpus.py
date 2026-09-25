@@ -148,6 +148,32 @@ def build() -> dict[str, dict[str, bytes]]:
         ),
         "timeout": loop(4, attempts=2),
     }
+
+    # fuzz_frame_assembler: [policy][records of 8 bytes: udp_cnt u16, frame_cnt u8,
+    # data_type u8 (bits 2-3: time_type), dot_num u8, ts_delta u16 (x100 us), recv_delta u8 (ms)]
+    def rec(udp_cnt, frame_cnt, dtype=1, dots=8, ts_delta=5, recv_delta=0, time_type=0):
+        return struct.pack(
+            "<HBBBHB", udp_cnt, frame_cnt, dtype | (time_type << 2), dots, ts_delta, recv_delta
+        )
+
+    from gen_golden_vectors import FRAME_SEQ  # noqa: E402
+
+    seq = b"".join(rec(u, f) for u, f in FRAME_SEQ)
+    corpus["fuzz_frame_assembler"] = {
+        "counter_seq": bytes([0x08]) + seq,
+        "window_seq": bytes([0x09]) + seq,
+        "host_offset": bytes([0x0A]) + b"".join(rec(i, 0, recv_delta=1) for i in range(6)),
+        "host_receive": bytes([0x0C]) + b"".join(rec(i, 0, recv_delta=1) for i in range(6)),
+        "fallback": bytes([0x00]) + b"".join(rec(i, 0, ts_delta=100) for i in range(8)),
+        "spherical_ptp": bytes([0x08])
+        + b"".join(rec(i, i // 3, dtype=3, time_type=1) for i in range(6)),
+        "cart16_reordered": bytes([0x08]) + rec(5, 0, dtype=2) + rec(3, 0, dtype=2) + rec(6, 0, 2),
+        "overflow": bytes([0x18])
+        + rec(0, 0)
+        + rec(1, 0, ts_delta=0xFFFF)
+        + rec(2, 0, ts_delta=0xFFFF),
+        "imu_ignored": bytes([0x08]) + rec(0, 0, dtype=0) + rec(1, 0),
+    }
     return corpus
 
 
