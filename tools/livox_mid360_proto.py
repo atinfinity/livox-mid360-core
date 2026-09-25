@@ -8,12 +8,14 @@ decode pcap captures (livox_mid360_pcap.py). It has no third-party dependencies.
 
 Reference: "Livox LiDAR Communication Protocol - Mid360", wiki rev v1.4.12.
 """
+
 from __future__ import annotations
 
 import struct
 import zlib
-from dataclasses import dataclass, field
-from typing import Iterator, Sequence
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
+
 
 # --------------------------------------------------------------------------- CRC
 def crc16_ccitt_false(data: bytes, init: int = 0xFFFF) -> int:
@@ -36,24 +38,63 @@ CMD_HEADER_SIZE = 24
 CMD_FRAME_MAX = 1400
 DATA_HEADER_SIZE = 36
 
-PORT_DISCOVERY, PORT_CMD, PORT_PUSH, PORT_PCL, PORT_IMU, PORT_LOG = 56000, 56100, 56200, 56300, 56400, 56500
+PORT_DISCOVERY, PORT_CMD, PORT_PUSH, PORT_PCL, PORT_IMU, PORT_LOG = (
+    56000,
+    56100,
+    56200,
+    56300,
+    56400,
+    56500,
+)
 
 SAMPLE_SIZE = {0: 24, 1: 14, 2: 8, 3: 10}
 SAMPLE_FMT = {0: "<6f", 1: "<iiiBB", 2: "<hhhBB", 3: "<IHHBB"}
 
 KEY_NAMES = {
-    0x0000: "pcl_data_type", 0x0001: "pattern_mode", 0x0004: "lidar_ipcfg",
-    0x0005: "state_info_host_ipcfg", 0x0006: "pointcloud_host_ipcfg", 0x0007: "imu_host_ipcfg",
-    0x0012: "install_attitude", 0x0015: "fov_cfg0", 0x0016: "fov_cfg1", 0x0017: "fov_cfg_en",
-    0x0018: "detect_mode", 0x0019: "func_io_cfg", 0x001A: "work_tgt_mode", 0x001C: "imu_data_en",
-    0x0021: "speed_mode", 0x0026: "time_filter", 0x0029: "pc_freq_mod", 0x002B: "imu_sensor_cfg",
-    0x8000: "sn", 0x8001: "product_info", 0x8002: "version_app", 0x8003: "version_loader",
-    0x8004: "version_hardware", 0x8005: "mac", 0x8006: "cur_work_state", 0x8007: "core_temp",
-    0x8008: "powerup_cnt", 0x8009: "local_time_now", 0x800A: "last_sync_time",
-    0x800B: "time_offset", 0x800C: "time_sync_type", 0x800E: "lidar_diag_status",
-    0x8010: "FW_TYPE", 0x8011: "hms_code",
+    0x0000: "pcl_data_type",
+    0x0001: "pattern_mode",
+    0x0004: "lidar_ipcfg",
+    0x0005: "state_info_host_ipcfg",
+    0x0006: "pointcloud_host_ipcfg",
+    0x0007: "imu_host_ipcfg",
+    0x0012: "install_attitude",
+    0x0015: "fov_cfg0",
+    0x0016: "fov_cfg1",
+    0x0017: "fov_cfg_en",
+    0x0018: "detect_mode",
+    0x0019: "func_io_cfg",
+    0x001A: "work_tgt_mode",
+    0x001C: "imu_data_en",
+    0x0021: "speed_mode",
+    0x0026: "time_filter",
+    0x0029: "pc_freq_mod",
+    0x002B: "imu_sensor_cfg",
+    0x8000: "sn",
+    0x8001: "product_info",
+    0x8002: "version_app",
+    0x8003: "version_loader",
+    0x8004: "version_hardware",
+    0x8005: "mac",
+    0x8006: "cur_work_state",
+    0x8007: "core_temp",
+    0x8008: "powerup_cnt",
+    0x8009: "local_time_now",
+    0x800A: "last_sync_time",
+    0x800B: "time_offset",
+    0x800C: "time_sync_type",
+    0x800E: "lidar_diag_status",
+    0x8010: "FW_TYPE",
+    0x8011: "hms_code",
 }
-WORK_STATE = {1: "SAMPLING", 2: "IDLE", 4: "ERROR", 5: "SELFCHECK", 6: "MOTORSTARTUP", 8: "UPGRADE", 9: "READY"}
+WORK_STATE = {
+    1: "SAMPLING",
+    2: "IDLE",
+    4: "ERROR",
+    5: "SELFCHECK",
+    6: "MOTORSTARTUP",
+    8: "UPGRADE",
+    9: "READY",
+}
 
 
 # --------------------------------------------------------------------------- command frame
@@ -70,18 +111,28 @@ class CommandFrame:
         if len(self.data) > CMD_FRAME_MAX - CMD_HEADER_SIZE:
             raise ValueError("data too large")
         length = CMD_HEADER_SIZE + len(self.data)
-        head18 = struct.pack("<BBHIHBB6s", SOF, 0, length, self.seq_num, self.cmd_id,
-                             self.cmd_type, self.sender_type, self.resv)
+        head18 = struct.pack(
+            "<BBHIHBB6s",
+            SOF,
+            0,
+            length,
+            self.seq_num,
+            self.cmd_id,
+            self.cmd_type,
+            self.sender_type,
+            self.resv,
+        )
         c16 = crc16_ccitt_false(head18)
         c32 = crc32(self.data) if self.data else 0
         return head18 + struct.pack("<HI", c16, c32) + self.data
 
     @classmethod
-    def parse(cls, frame: bytes) -> "CommandFrame":
+    def parse(cls, frame: bytes) -> CommandFrame:
         if len(frame) < CMD_HEADER_SIZE:
             raise ValueError("too short")
         sof, ver, length, seq, cmd_id, ctype, stype, resv, c16, c32 = struct.unpack_from(
-            "<BBHIHBB6sHI", frame, 0)
+            "<BBHIHBB6sHI", frame, 0
+        )
         if sof != SOF:
             raise ValueError("bad SOF")
         if ver != 0:
@@ -110,7 +161,7 @@ def parse_kv_list(buf: bytes, key_num: int) -> list[tuple[int, bytes]]:
         off += 4
         if len(buf) - off < n:
             raise ValueError("truncated")
-        out.append((k, buf[off:off + n]))
+        out.append((k, buf[off : off + n]))
         off += n
     if off != len(buf):
         raise ValueError("key_num mismatch")
@@ -141,8 +192,13 @@ def parse_info_push(d: bytes) -> list[tuple[int, bytes]]:
 
 def parse_discovery_ack(d: bytes) -> dict:
     ret, dev, sn, ip, port = struct.unpack_from("<BB16s4sH", d, 0)
-    return {"ret_code": ret, "dev_type": dev, "sn": sn.split(b"\0")[0].decode(),
-            "lidar_ip": ".".join(map(str, ip)), "cmd_port": port}
+    return {
+        "ret_code": ret,
+        "dev_type": dev,
+        "sn": sn.split(b"\0")[0].decode(),
+        "lidar_ip": ".".join(map(str, ip)),
+        "cmd_port": port,
+    }
 
 
 def encode_host_ipcfg(ip: str, dst_port: int, src_port: int) -> bytes:
@@ -187,15 +243,31 @@ class DataPacket:
         length = DATA_HEADER_SIZE + len(self.data)
         ts = struct.pack("<Q", self.timestamp_ns)
         c32 = crc32(ts + self.data)
-        return struct.pack("<BHHHHBBB12sI", self.version, length, self.time_interval, self.dot_num,
-                           self.udp_cnt, self.frame_cnt, self.data_type, self.time_type,
-                           self.reserved, c32) + ts + self.data
+        return (
+            struct.pack(
+                "<BHHHHBBB12sI",
+                self.version,
+                length,
+                self.time_interval,
+                self.dot_num,
+                self.udp_cnt,
+                self.frame_cnt,
+                self.data_type,
+                self.time_type,
+                self.reserved,
+                c32,
+            )
+            + ts
+            + self.data
+        )
 
     @classmethod
-    def parse(cls, pkt: bytes, verify_crc: bool = True) -> "DataPacket":
+    def parse(cls, pkt: bytes, verify_crc: bool = True) -> DataPacket:
         if len(pkt) < DATA_HEADER_SIZE:
             raise ValueError("too short")
-        (ver, length, ti, dn, uc, fc, dt, tt, rsv, c32, ts) = struct.unpack_from("<BHHHHBBB12sIQ", pkt, 0)
+        (ver, length, ti, dn, uc, fc, dt, tt, rsv, c32, ts) = struct.unpack_from(
+            "<BHHHHBBB12sIQ", pkt, 0
+        )
         if ver != 0:
             raise ValueError("bad version")
         if length < DATA_HEADER_SIZE or length > len(pkt):
@@ -205,7 +277,7 @@ class DataPacket:
         data = pkt[DATA_HEADER_SIZE:length]
         if len(data) != dn * SAMPLE_SIZE[dt]:
             raise ValueError("bad dot_num")
-        if verify_crc and crc32(pkt[28:28 + 8 + len(data)]) != c32:
+        if verify_crc and crc32(pkt[28 : 28 + 8 + len(data)]) != c32:
             raise ValueError("bad CRC32")
         return cls(ti, dn, uc, fc, dt, tt, ts, data, rsv, ver)
 
@@ -226,10 +298,14 @@ def pack_samples(data_type: int, samples: Sequence[tuple]) -> bytes:
 
 
 def decode_tag(tag: int) -> dict:
-    return {"adjacent_glue": tag & 3, "particles": (tag >> 2) & 3, "other": (tag >> 4) & 3,
-            "reserved": (tag >> 6) & 3}
+    return {
+        "adjacent_glue": tag & 3,
+        "particles": (tag >> 2) & 3,
+        "other": (tag >> 4) & 3,
+        "reserved": (tag >> 6) & 3,
+    }
 
 
 def decode_hms(raw: int) -> tuple[int, int]:
-    """Returns (abnormal_id, level)."""
+    """Return (abnormal_id, level)."""
     return raw >> 16, raw & 0xFF

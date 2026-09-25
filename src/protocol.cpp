@@ -272,7 +272,7 @@ ImuSample decode_imu(const DataPacketView& p, std::size_t i) noexcept {
 
 namespace {
 template <typename T, typename F>
-std::vector<T> decode_all(const DataPacketView& p, DataType expect, F&& f) {
+std::vector<T> decode_all(const DataPacketView& p, DataType expect, const F& f) {
   std::vector<T> out;
   if (p.header.data_type != expect) return out;
   out.reserve(p.header.dot_num);
@@ -365,14 +365,14 @@ std::vector<std::byte> encode_set_gps_timestamp_request(std::uint64_t pps_time_n
 }
 
 std::string_view DiscoveryAck::serial_number_view() const noexcept {
-  const auto end = std::find(serial_number.begin(), serial_number.end(), '\0');
+  const auto* const end = std::find(serial_number.begin(), serial_number.end(), '\0');
   return {serial_number.data(), static_cast<std::size_t>(end - serial_number.begin())};
 }
 
 std::expected<DiscoveryAck, ParseError> parse_discovery_ack(
     std::span<const std::byte> data) noexcept {
   if (data.size() < 24) return std::unexpected(ParseError::kTruncated);
-  DiscoveryAck a;
+  DiscoveryAck a{};
   a.ret_code = static_cast<RetCode>(read_le<std::uint8_t>(data, 0));
   a.dev_type = read_le<std::uint8_t>(data, 1);
   std::memcpy(a.serial_number.data(), data.data() + 2, 16);

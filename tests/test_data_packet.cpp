@@ -35,11 +35,12 @@ TEST_CASE("sample sizes", "[data]") {
   STATIC_CHECK(sample_size(DataType::kCartesian32) == 14);
   STATIC_CHECK(sample_size(DataType::kCartesian16) == 8);
   STATIC_CHECK(sample_size(DataType::kSpherical) == 10);
-  STATIC_CHECK(kDataPacketHeaderSize + 96 * 14 == 1380);  // fits in one MTU-sized UDP payload
+  STATIC_CHECK(kDataPacketHeaderSize + std::size_t{96} * 14 ==
+               1380);  // fits in one MTU-sized UDP payload
 }
 
 TEST_CASE("cartesian32 packet parse and decode", "[data]") {
-  std::vector<std::byte> s(14 * 2);
+  std::vector<std::byte> s(std::size_t{14} * 2);
   bytes::write_le<std::int32_t>(s, 0, -1234);
   bytes::write_le<std::int32_t>(s, 4, 5678);
   bytes::write_le<std::int32_t>(s, 8, 91011);

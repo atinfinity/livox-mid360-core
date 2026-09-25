@@ -19,7 +19,7 @@ std::vector<std::byte> bytes_of(const char* text) {
   return out;
 }
 
-UdpSocket open_loopback(SocketOptions opts = {}) {
+UdpSocket open_loopback(const SocketOptions& opts = {}) {
   auto s = UdpSocket::open(Endpoint::loopback(0), opts);
   REQUIRE(s.has_value());
   REQUIRE(s->is_open());
@@ -156,7 +156,7 @@ TEST_CASE("Reserved options are rejected", "[transport][socket]") {
 
 TEST_CASE("Receive buffer size can be requested and queried", "[transport][socket]") {
   SocketOptions opts;
-  opts.recv_buffer_bytes = 512 * 1024;
+  opts.recv_buffer_bytes = std::size_t{512} * 1024;
   const UdpSocket s = open_loopback(opts);
   const auto eff = s.recv_buffer_bytes();
   REQUIRE(eff.has_value());
@@ -177,7 +177,7 @@ TEST_CASE("Move transfers ownership", "[transport][socket]") {
   const int fd = a.native_handle();
   const Endpoint ep = a.local_endpoint();
   UdpSocket b(std::move(a));
-  CHECK_FALSE(a.is_open());  // NOLINT(bugprone-use-after-move)
+  CHECK_FALSE(a.is_open());  // NOLINT(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
   CHECK(b.native_handle() == fd);
   CHECK(b.local_endpoint() == ep);
 }
