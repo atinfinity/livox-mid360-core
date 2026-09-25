@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-format-19
-      - run: git ls-files 'include/*.hpp' 'src/*.cpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/' | xargs clang-format-19 --dry-run --Werror
+      - run: git ls-files 'include/*.hpp' 'src/*.cpp' 'src/*.hpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/' | xargs clang-format-19 --dry-run --Werror
 
   clang-tidy:
     name: clang-tidy (19)

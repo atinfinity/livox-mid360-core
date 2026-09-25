@@ -61,10 +61,8 @@ TEST_CASE("match_ack classifies datagrams", "[session][detail]") {
     CHECK(m->data.size() == ack.size() - kCommandHeaderSize);
   }
   SECTION("other seq / cmd_id / source ip are late") {
-    CHECK(detail::match_ack(ack, kFrom, 2, 0x0000, kLidarIp).error() ==
-          detail::AckMismatch::kLate);
-    CHECK(detail::match_ack(ack, kFrom, 1, 0x0101, kLidarIp).error() ==
-          detail::AckMismatch::kLate);
+    CHECK(detail::match_ack(ack, kFrom, 2, 0x0000, kLidarIp).error() == detail::AckMismatch::kLate);
+    CHECK(detail::match_ack(ack, kFrom, 1, 0x0101, kLidarIp).error() == detail::AckMismatch::kLate);
     CHECK(detail::match_ack(ack, Endpoint{{192, 168, 1, 99}, kCommandPort}, 1, 0x0000, kLidarIp)
               .error() == detail::AckMismatch::kLate);
   }
@@ -119,8 +117,8 @@ TEST_CASE("typed ACK conversions", "[session][detail]") {
   SECTION("discovery") {
     const auto frame = parse_command_frame(GOLDEN(discovery_ack));
     REQUIRE(frame.has_value());
-    const auto r = detail::to_discovery_ack(
-        raw_ack(0x0000, {frame->data.begin(), frame->data.end()}));
+    const auto r =
+        detail::to_discovery_ack(raw_ack(0x0000, {frame->data.begin(), frame->data.end()}));
     REQUIRE(r.has_value());
     CHECK(r->serial_number_view() == "47MDL9K0010001");
     const auto bad = detail::to_discovery_ack(raw_ack(0x0000, bytes({0x00})));
@@ -142,8 +140,7 @@ TEST_CASE("typed ACK conversions", "[session][detail]") {
   SECTION("inquire: views stay inside raw across a move") {
     const auto frame = parse_command_frame(GOLDEN(param_inquire_ack));
     REQUIRE(frame.has_value());
-    auto r = detail::to_inquire_result(
-        raw_ack(0x0101, {frame->data.begin(), frame->data.end()}));
+    auto r = detail::to_inquire_result(raw_ack(0x0101, {frame->data.begin(), frame->data.end()}));
     REQUIRE(r.has_value());
     REQUIRE(r->values.size() == 3);
     const InquireResult moved = std::move(*r);
