@@ -26,7 +26,7 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP after power-on / reboot |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
-| `--frame-ms` | 100 | `frame_cnt` increments at this period |
+| `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, #11) |
 | `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and 200 pkt/s IMU rates |
 | `--drop-rate` | 0 | fraction of point-cloud packets silently dropped (`udp_cnt` still advances) |
 | `--no-quit-on-eof` | | keep running when stdin closes (default: quit) |
@@ -54,6 +54,7 @@ The process is driven over its standard streams so that any test harness can use
 | `reboot` | | same as receiving 0x0200 |
 | `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR) |
 | `drop_rate` | `rate` | change the point-cloud drop fraction at run time |
+| `frame_ms` | `ms` | change the `frame_cnt` period at run time (`0` freezes it); the current frame restarts now |
 | `status` | | emit a `status` event |
 
 | Event | Fields | When |

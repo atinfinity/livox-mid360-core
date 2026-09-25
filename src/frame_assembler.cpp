@@ -115,6 +115,13 @@ Frame FrameAssembler::take_frame() {
   return out;
 }
 
+void FrameAssembler::discard() noexcept {
+  counters_.points -= cur_.points.size();
+  cur_.points.clear();
+  cur_.packets = 0;
+  cur_.dropped_packets = 0;
+}
+
 std::optional<Frame> FrameAssembler::flush() {
   if (cur_.points.empty()) return std::nullopt;
   return take_frame();

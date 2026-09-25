@@ -63,6 +63,9 @@ class FrameAssembler {
   [[nodiscard]] std::optional<Frame> push(const DataPacketView& pkt, std::uint64_t recv_time_ns);
   /// Close and return the partial frame (idle close); nullopt when empty.
   [[nodiscard]] std::optional<Frame> flush();
+  /// Drop the partial frame without delivering it (stop_sampling); its points are taken
+  /// back out of `counters().points`. Drop / timestamp baselines are kept.
+  void discard() noexcept;
 
   [[nodiscard]] bool has_partial() const noexcept { return !cur_.points.empty(); }
   [[nodiscard]] const Counters& counters() const noexcept { return counters_; }

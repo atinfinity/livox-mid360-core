@@ -476,6 +476,9 @@ class Simulator:
             self.model._set_state(int(req["state"]))
         elif cmd == "drop_rate":
             self.drop_rate = float(req.get("rate", 0.0))
+        elif cmd == "frame_ms":
+            self.frame_s = float(req.get("ms", 100.0)) / 1000.0
+            self.frame_started = now
         elif cmd == "status":
             self.emit(
                 event="status",
@@ -598,7 +601,7 @@ class Simulator:
             interval = 1.0 / (PCL_PACKET_RATE * self.rate)
             budget = 256  # bound catch-up bursts
             while now >= self.next_pcl and budget > 0:
-                if now - self.frame_started >= self.frame_s:
+                if self.frame_s > 0 and now - self.frame_started >= self.frame_s:
                     self.frame_cnt = (self.frame_cnt + 1) & 0xFF
                     self.frame_started += self.frame_s
                 self._send_pcl(pcl_host, interval)
@@ -624,7 +627,7 @@ class Simulator:
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
         pkt = proto.DataPacket(
-            time_interval=int(interval_s * 1e7),
+            time_interval=min(int(interval_s * 1e7), 0xFFFF),
             dot_num=POINTS_PER_PACKET,
             udp_cnt=self.udp_cnt_pcl,
             frame_cnt=self.frame_cnt,
@@ -644,7 +647,7 @@ class Simulator:
 
     def _send_imu(self, host, interval_s: float) -> None:
         pkt = proto.DataPacket(
-            time_interval=int(interval_s * 1e7),
+            time_interval=min(int(interval_s * 1e7), 0xFFFF),
             dot_num=1,
             udp_cnt=self.udp_cnt_imu,
             frame_cnt=self.frame_cnt,
@@ -695,7 +698,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--reboot-silence", type=float, default=0.5, help="seconds of silence after 0x0200"
     )
-    p.add_argument("--frame-ms", type=float, default=100.0)
+    p.add_argument(
+        "--frame-ms",
+        type=float,
+        default=100.0,
+        help="frame_cnt period; 0 = frame_cnt never changes (non-repetitive scan)",
+    )
     p.add_argument("--rate-multiplier", type=float, default=1.0)
     p.add_argument(
         "--drop-rate", type=float, default=0.0, help="fraction of point-cloud packets to drop"

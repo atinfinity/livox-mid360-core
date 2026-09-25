@@ -63,6 +63,9 @@ add_library(mid360_core
   src/session.cpp
   src/config.cpp
   src/frame_assembler.cpp
+  src/event.cpp
+  src/context.cpp
+  src/device.cpp
   src/transport.cpp)
 add_library(livox::mid360_core ALIAS mid360_core)
 
