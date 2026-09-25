@@ -52,13 +52,13 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.work_state, sim.WS_IDLE)
 
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
-        self.assertEqual(self.m.configure([(sim.KEY_SN, b"x" * 16)]), (sim.RET_FAIL, sim.KEY_SN))
-        self.assertEqual(self.m.configure([(0x7FFF, b"\x00")]), (sim.RET_UNSUPPORTED, 0x7FFF))
-        self.assertEqual(self.m.configure([(sim.KEY_IMU_EN, b"\x00\x01")]), (sim.RET_FAIL, sim.KEY_IMU_EN))
-        self.assertEqual(self.m.configure([(sim.KEY_PCL_DATA_TYPE, b"\x07")]), (sim.RET_FAIL, sim.KEY_PCL_DATA_TYPE))
+        self.assertEqual(self.m.configure([(sim.KEY_SN, b"x" * 16)]), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN))
+        self.assertEqual(self.m.configure([(0x7FFF, b"\x00")]), (sim.RET_PARAM_NOT_SUPPORT, 0x7FFF))
+        self.assertEqual(self.m.configure([(sim.KEY_IMU_EN, b"\x00\x01")]), (sim.RET_PARAM_INVALID_LEN, sim.KEY_IMU_EN))
+        self.assertEqual(self.m.configure([(sim.KEY_PCL_DATA_TYPE, b"\x07")]), (sim.RET_OUT_OF_RANGE, sim.KEY_PCL_DATA_TYPE))
         # Atomic: a bad key later in the list leaves earlier keys unapplied.
         ret, err = self.m.configure([(sim.KEY_IMU_EN, b"\x01"), (sim.KEY_SN, b"x" * 16)])
-        self.assertEqual((ret, err), (sim.RET_FAIL, sim.KEY_SN))
+        self.assertEqual((ret, err), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN))
         self.assertFalse(self.m.imu_enabled)
 
     def test_configure_and_inquire_round_trip(self) -> None:
@@ -72,7 +72,7 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.host(sim.KEY_PCL_HOST), ("192.168.1.5", 56301, 56300))
         self.assertIsNone(self.m.host(sim.KEY_IMU_HOST))
         ret, _ = self.m.inquire([0x7FFF], 0)
-        self.assertEqual(ret, sim.RET_UNSUPPORTED)
+        self.assertEqual(ret, sim.RET_PARAM_NOT_SUPPORT)
 
     def test_reboot_keeps_settings_but_resets_target_mode(self) -> None:
         self.m.power_on(0.0)

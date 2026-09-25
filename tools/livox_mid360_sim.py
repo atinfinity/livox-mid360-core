@@ -40,7 +40,10 @@ SENDER_HOST, SENDER_LIDAR = 0, 1
 
 WS_SAMPLING, WS_IDLE, WS_ERROR, WS_SELFCHECK, WS_MOTORSTARTUP, WS_UPGRADE, WS_READY = 1, 2, 4, 5, 6, 8, 9
 
-RET_OK, RET_FAIL, RET_UNSUPPORTED = 0x00, 0x01, 0x21
+RET_OK, RET_FAIL = 0x00, 0x01
+# Parameter errors as listed in the wiki (protocol.hpp RetCode): mirrors kParamNotSupport,
+# kParamReadOnly, kParamInvalidLen, kOutOfRange.
+RET_PARAM_NOT_SUPPORT, RET_PARAM_READ_ONLY, RET_PARAM_INVALID_LEN, RET_OUT_OF_RANGE = 0x20, 0x22, 0x23, 0x03
 PROVISIONAL_DEV_TYPE = 9  # [unverified] see docs/protocol_notes.md / #11
 
 KEY_PCL_DATA_TYPE, KEY_PATTERN_MODE, KEY_LIDAR_IPCFG = 0x0000, 0x0001, 0x0004
@@ -151,13 +154,13 @@ class DeviceModel:
         """0x0100 semantics: validate everything first, then apply. Returns (ret, error_key)."""
         for key, value in kvs:
             if key in READ_ONLY:
-                return RET_FAIL, key
+                return RET_PARAM_READ_ONLY, key
             if key not in WRITABLE_LEN:
-                return RET_UNSUPPORTED, key
+                return RET_PARAM_NOT_SUPPORT, key
             if len(value) != WRITABLE_LEN[key]:
-                return RET_FAIL, key
+                return RET_PARAM_INVALID_LEN, key
             if key == KEY_PCL_DATA_TYPE and value[0] not in (1, 2, 3):
-                return RET_FAIL, key
+                return RET_OUT_OF_RANGE, key
         for key, value in kvs:
             self.settings[key] = bytes(value)
             if key == KEY_WORK_TGT_MODE and self.work_state != WS_MOTORSTARTUP:
@@ -169,7 +172,7 @@ class DeviceModel:
         for key in keys:
             v = self.read_key(key, now_ns)
             if v is None:
-                return RET_UNSUPPORTED, [(key, b"")]
+                return RET_PARAM_NOT_SUPPORT, [(key, b"")]
             out.append((key, v))
         return RET_OK, out
 
@@ -477,7 +480,7 @@ class Simulator:
             (ns,) = struct.unpack_from("<Q", f.data, 1)
             m.set_gps_time(ns, now_ns)
             return RET_OK, struct.pack("<B", RET_OK)
-        return RET_UNSUPPORTED, struct.pack("<B", RET_UNSUPPORTED)
+        return RET_FAIL, struct.pack("<B", RET_FAIL)  # unknown cmd_id
 
     # -- periodic senders ------------------------------------------------------
     def now_ns(self) -> int:

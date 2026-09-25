@@ -158,36 +158,45 @@ PTP (IEEE1588v2.0 UDP)、gPTP (L2)、GPS (PPS + GPRMC)。v2.1 非対応、1588v2
 
 - **層を分ける**: ①純粋関数のプロトコル層（CRC・シリアライズ・パース、I/O なし）→ ②トランスポート層（UDP ソケット、受信スレッド）→ ③デバイス層（セッション・状態機械・再送・push 処理）→ ④公開 API。①はソケットなしで完全にテスト可能にする。
 - **状態機械を明示的に持つ**: 0x0102 push の `cur_work_state` / `lidar_diag_status` / `hms_code` で更新し、上位に通知。SDK2 はここが暗黙的で、差別化ポイント。
-- **接続シーケンス**: 56000 へ broadcast 0x0000 → ACK の lidar_ip/cmd_port で unicast セッション → 0x0100 で host_ipcfg 3 種と pcl_data_type/imu_data_en を設定 → work_tgt_mode=SAMPLING → 点群・IMU 受信開始。
+- **接続シーケンス**: 56000 へ 0x0000（broadcast。IP 既知なら unicast も試す、#4）→ ACK の lidar_ip/cmd_port で unicast セッション → 0x0100 で host_ipcfg 3 種と pcl_data_type/imu_data_en を設定 → work_tgt_mode=SAMPLING → 点群・IMU 受信開始。
 - **ACK 管理**: seq_num で突き合わせ、タイムアウト + 再送。1400 バイト上限を守る。
-- **受信**: 受信スレッドとパース/コールバックを分離。`udp_cnt` の飛びでドロップを検出・計数。`recvmmsg` / `SO_REUSEPORT` は 24.04 前提で利用可。
+- **受信**: 受信スレッドとパース/コールバックを分離。`udp_cnt` の飛びでドロップを検出・計数。トランスポート層は `recvmmsg` + `poll` の単一受信スレッド（docs/transport.md）。`SO_REUSEPORT` / `epoll` は長時間テスト（#13）で不足が出た場合に検討。
 - **時刻**: `time_type` を露出。未同期時は「最初のパケットでホスト時刻との差を 1 回だけ取る」をデフォルトに、PTP 時は無変換モードを用意。
 - **依存ゼロに近づける**: SDK2 の rapidjson/spdlog 同梱のようなことはしない。設定ファイルは SDK2 の `MID360_config.json` を読める互換ローダを用意すると移行が楽。
 - **出力の 3 層**: 生パケット / フレーム単位（時間窓で区切り） / ROS 2 互換（livox_ros_driver2 の PointXYZRTLT・CustomMsg 相当: x,y,z,intensity,tag,line,timestamp または offset_time）。
-- **公開 API**: C++20 ライブラリ + 将来の他言語バインディングのための薄い C ABI。
+- **公開 API**: C++ ライブラリ（§1 の言語標準）+ 将来の他言語バインディングのための薄い C ABI。
 - **安全性**: `std::span` / `std::expected` でパーサを書く。ASan/UBSan、fuzz テストを CI に入れる。
 
 ---
 
-## 5. ディレクトリ構成（叩き台）
+## 5. ディレクトリ構成（2026-09-25 時点）
 
 ```
 livox-mid360-core/
 ├── CMakeLists.txt
-├── cmake/                     # config/version ファイル、警告設定
+├── cmake/                     # 警告・サニタイザ設定、config ファイル雛形
 ├── include/livox/mid360/
 │   ├── crc.hpp                # CRC-16/CCITT-FALSE, CRC-32
-│   ├── protocol.hpp           # コマンドフレーム/点群パケットの型とパーサ
-│   ├── keys.hpp               # key 定義（0x0000〜0x8011）
-│   ├── device.hpp             # 状態機械・セッション
+│   ├── bytes.hpp              # リトルエンディアン読み書き
+│   ├── protocol.hpp           # コマンドフレーム/点群パケットの型とパーサ、RetCode
+│   ├── keys.hpp               # key 定義（0x0000〜0x8011）と型付きエンコード/デコード
+│   ├── hms.hpp                # HMS 診断コード
+│   ├── transport.hpp          # UdpSocket / Poller
+│   ├── export.hpp, version.hpp
+│   ├── device.hpp             # （予定）状態機械・セッション、#4/#5/#7
 │   └── mid360.hpp             # 公開 API のまとめ
 ├── src/
-├── tools/                     # pcap 解析用 Python（リファレンス実装）
+├── tools/                     # Python リファレンス実装、pcap 解析、golden vector 生成、シミュレータ
 ├── tests/
-│   ├── fixtures/*.pcap        # 実機から採取
-│   └── *.cpp                  # Catch2 or GoogleTest
+│   ├── generated/             # golden vectors（tools/gen_golden_vectors.py が生成）
+│   ├── fuzz/                  # libFuzzer ターゲット
+│   ├── fixtures/*.pcap        # （予定）実機から採取
+│   └── *.cpp                  # Catch2 v3
 ├── docs/
-│   └── protocol_notes.md      # wiki に無い実機挙動のメモ
+│   ├── protocol_notes.md      # wiki の曖昧点と実装上の解釈
+│   ├── transport.md           # UDP 層の使い方
+│   └── simulator.md           # シミュレータの仕様と実機検証待ちの仮定
+├── docker/                    # Ubuntu 24.04 での CI 再現（docker/check.sh）
 ├── README.md                  # 非公式実装であることを冒頭に明記
 └── LICENSE                    # Apache-2.0
 ```
@@ -227,4 +236,4 @@ livox-mid360-core/
 
 ## 7. 別セッションへの最初の依頼文（例）
 
-> `livox-mid360-core`（HANDOFF.md 参照）のフェーズ 1 を進めてください。C++20、Apache-2.0、Ubuntu 24.04 前提。CMake 骨格、`crc.hpp` と `protocol.hpp` の実装、Catch2（または GoogleTest）によるテスト、GitHub Actions の CI を作成してください。公式 SDK2 のコードは参照・コピーしないこと。プロトコル仕様は https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/livox_eth_protocol_mid360.html を原典としてください。
+> `livox-mid360-core`（HANDOFF.md、docs/ 参照）の GitHub issue #4（discovery とセッション確立）を進めてください。`-std=c++23`、Apache-2.0、Ubuntu 24.04 前提。既存の `transport.hpp` の上に実装し、`tools/livox_mid360_sim.py`（docs/simulator.md）を使ったテストを `tests/` に追加してください。公式 SDK2 のコードは参照・コピーしないこと。プロトコル仕様は https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/livox_eth_protocol_mid360.html を原典としてください。

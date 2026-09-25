@@ -74,10 +74,12 @@ The process is driven over its standard streams so that any test harness can use
 - **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries `dev_type = 9`
   (provisional), the bound address and the real command port), `0x0100` configure, `0x0101`
   inquire, `0x0200` reboot, `0x0201` factory reset, `0x0202` GPS time. Anything else is
-  answered with ret `0x21`.
-- **Configure** validates every key first (read-only → `0x01`, unknown → `0x21`, wrong length
-  or `pcl_data_type` outside 1–3 → `0x01`) and applies all of them only if none failed; the
-  ACK's `error_key` names the offender. Value lengths mirror `key_value_length()` in
+  answered with ret `0x01`.
+- **Configure** validates every key first with the wiki return codes (`RetCode` in
+  `protocol.hpp`): read-only → `0x22`, unknown → `0x20`, wrong length → `0x23`,
+  `pcl_data_type` outside 1–3 → `0x03`. All keys are applied only if none failed; the ACK's
+  `error_key` names the offender. `0x21` (reboot required) is never produced because no
+  simulated key needs a reboot. Value lengths mirror `key_value_length()` in
   `keys.cpp`.
 - **State machine** power-on → MOTORSTARTUP → `work_tgt_mode` (SAMPLING by default) after
   `--startup-delay`. Writing `work_tgt_mode` switches immediately when not starting up.
@@ -117,8 +119,10 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | |
 | Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |
 | Silence after reboot | ~0.5 s, then MOTORSTARTUP → target | real duration unknown |
-| Write of a read-only key | ret `0x01`, `error_key` = that key | vs. `0x21` |
-| Unknown key | ret `0x21` | |
+| Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
+| Unknown key | ret `0x20` | same |
+| `lidar_ipcfg` write | ret `0x00` (no reboot required) | real device likely answers `0x21` |
+| Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
 | Push contents | `cur_work_state`, `diag_status`, `hms`, `sn`, `local_time` | the wiki does not enumerate the pushed keys |
 | `frame_cnt` period | 100 ms | |
