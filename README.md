@@ -26,8 +26,11 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
 - A LiDAR simulator (`tools/livox_mid360_sim.py`, stdlib-only Python) that answers commands,
   runs the work-state machine and streams point-cloud/IMU/push packets, with a JSON control
   channel for fault injection; the C++ tests spawn it for an end-to-end smoke test
+- Session layer (`session.hpp`): broadcast/unicast discovery, synchronous command round-trips
+  with seq-matched retries and timeouts, typed configure/inquire/reboot helpers, work-state
+  polling and cross-thread cancellation. No threads; tested against the simulator
 
-Not yet implemented (phase 2+): discovery/session, state machine, frame assembly,
+Not yet implemented (phase 2+): receive threads / Device abstraction, frame assembly,
 C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
 upgrade (`0x04xx`) commands are intentionally out of scope.
 
@@ -93,11 +96,11 @@ keep the buffer alive while you use the result.
 ## Layout
 
 ```
-include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, mid360 umbrella)
+include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, session, mid360 umbrella)
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
-docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), simulator.md
+docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), simulator.md
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 
