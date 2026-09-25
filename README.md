@@ -32,7 +32,11 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
   with seq-matched retries and timeouts, typed configure/inquire/reboot helpers, work-state
   polling and cross-thread cancellation. No threads; tested against the simulator
 
-Not yet implemented (phase 2+): receive threads / Device abstraction, frame assembly,
+- Device layer API (`context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`, docs/api.md):
+  designed and under implementation. The headers are declaration-only skeletons (not part of
+  `mid360.hpp` yet); `BoundedQueue<T>` is usable
+
+Not yet implemented (phase 2+): receive thread / Device implementation (#6, #7, #8),
 C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
 upgrade (`0x04xx`) commands are intentionally out of scope.
 
@@ -172,11 +176,12 @@ keep the buffer alive while you use the result.
 ## Layout
 
 ```
-include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, session, mid360 umbrella)
+include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, session, config, mid360 umbrella;
+                        context/device/frame/event are the device-layer skeleton)
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
-docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), simulator.md
+docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 
