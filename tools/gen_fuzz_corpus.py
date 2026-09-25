@@ -116,6 +116,38 @@ def build() -> dict[str, dict[str, bytes]]:
         "not_ack": frm + g["discovery_req"],
         "bad_crc": frm + corrupt(g["discovery_ack"]),
     }
+
+    # fuzz_session_loopback: [op][flags][attempts][datagrams: len u8 + body]
+    # op 0 raw (+cmd_id u16), 1 discovery_ack, 2 configure, 3 inquire, 4 work_state, 5 reboot,
+    # 6 factory_reset, 7 set_gps_time. flags bit0 fixup seq, bit1 bad prefix, bit2 cancel.
+    def loop(
+        op: int, *datagrams: bytes, flags: int = 1, attempts: int = 1, raw: bytes = b""
+    ) -> bytes:
+        head = bytes([op, flags, attempts - 1]) + raw
+        return head + b"".join(bytes([len(d)]) + d for d in datagrams)
+
+    simple = {c: p.CommandFrame(1, c, 1, 1, bytes([0])).encode() for c in (0x0200, 0x0201, 0x0202)}
+    corpus["fuzz_session_loopback"] = {
+        "raw_inquire": loop(0, g["param_inquire_ack"], raw=struct.pack("<H", 0x0101)),
+        "discovery": loop(1, g["discovery_ack"]),
+        "configure_ok": loop(2, g["param_config_ack_ok"]),
+        "configure_err": loop(2, g["param_config_ack_err"]),
+        "configure_reboot_effect": loop(
+            2, p.CommandFrame(2, 0x0100, 1, 1, bytes([0x21, 0, 0])).encode()
+        ),
+        "inquire": loop(3, g["param_inquire_ack"]),
+        "work_state": loop(4, g["param_inquire_ack"]),
+        "reboot": loop(5, simple[0x0200]),
+        "factory_reset": loop(6, simple[0x0201]),
+        "gps_time": loop(7, simple[0x0202]),
+        "inquire_late": loop(3, g["param_inquire_ack"], flags=0),
+        "inquire_bad_prefix": loop(3, g["param_inquire_ack"], flags=3),
+        "cancel": loop(4, g["param_inquire_ack"], flags=4),
+        "bad_then_ok": loop(
+            2, corrupt(g["param_config_ack_ok"]), g["param_config_ack_ok"], attempts=2
+        ),
+        "timeout": loop(4, attempts=2),
+    }
     return corpus
 
 
