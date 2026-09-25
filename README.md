@@ -53,8 +53,19 @@ ctest --test-dir build --output-on-failure
 cmake --install build --prefix /usr/local
 ```
 
-Options: `LIVOX_MID360_BUILD_TESTS`, `LIVOX_MID360_ENABLE_ASAN`, `LIVOX_MID360_ENABLE_UBSAN`,
-`LIVOX_MID360_BUILD_FUZZERS` (Clang), `LIVOX_MID360_WARNINGS_AS_ERRORS`, `BUILD_SHARED_LIBS`.
+CMake options:
+
+| Option | Meaning | Default |
+| --- | --- | --- |
+| `LIVOX_MID360_BUILD_TESTS` | Build the Catch2 unit tests (including the simulator-backed tests) | `ON` when built top-level, `OFF` as a subproject |
+| `LIVOX_MID360_BUILD_FUZZERS` | Build the libFuzzer targets (Clang only) | `OFF` |
+| `LIVOX_MID360_WARNINGS_AS_ERRORS` | Treat compiler warnings as errors (`-Werror`) | `ON` when built top-level, `OFF` as a subproject |
+| `LIVOX_MID360_ENABLE_ASAN` | Enable AddressSanitizer | `OFF` |
+| `LIVOX_MID360_ENABLE_UBSAN` | Enable UndefinedBehaviorSanitizer | `OFF` |
+| `BUILD_SHARED_LIBS` | Build a shared library (standard CMake variable, defaulted by this project) | `ON` |
+
+"Top-level" is decided by `PROJECT_IS_TOP_LEVEL`, so consumers using `add_subdirectory` or
+`FetchContent` get no tests and no `-Werror` unless they opt in.
 
 To reproduce CI locally on any Docker host: `docker/check.sh`.
 
