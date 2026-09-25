@@ -7,11 +7,12 @@ on:
 
 jobs:
   build-test:
-    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}${{ matrix.sanitize && ' / ASan+UBSan' || '' }}
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}${{ matrix.sanitize && ' / ASan+UBSan' || '' }}${{ matrix.os == 'ubuntu-24.04-arm' && ' / arm64' || '' }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-24.04]
         compiler:
           - { name: gcc-13, cc: gcc-13, cxx: g++-13, apt: g++-13 }
           - { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
@@ -19,10 +20,29 @@ jobs:
         build_type: [Release]
         sanitize: [false]
         include:
-          - compiler: { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
+          - os: ubuntu-24.04
+            compiler: { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
             build_type: Debug
             sanitize: true
-          - compiler: { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
+          - os: ubuntu-24.04
+            compiler: { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
+            build_type: Debug
+            sanitize: true
+          # arm64 (native GitHub-hosted runners, issue #19)
+          - os: ubuntu-24.04-arm
+            compiler: { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
+            build_type: Release
+            sanitize: false
+          - os: ubuntu-24.04-arm
+            compiler: { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
+            build_type: Release
+            sanitize: false
+          - os: ubuntu-24.04-arm
+            compiler: { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
+            build_type: Debug
+            sanitize: true
+          - os: ubuntu-24.04-arm
+            compiler: { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
             build_type: Debug
             sanitize: true
     steps:

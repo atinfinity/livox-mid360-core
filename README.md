@@ -37,6 +37,9 @@ upgrade (`0x04xx`) commands are intentionally out of scope.
 ## Requirements
 
 - Ubuntu 24.04+ with GCC 13/14 or Clang 19 (macOS with Apple Clang works for development).
+  x86-64 and arm64 are both verified in CI (native `ubuntu-24.04-arm` runners). NVIDIA Jetson
+  with JetPack 6 (Ubuntu 22.04) is outside this support statement until a compatible toolchain
+  is confirmed.
   Clang 18 with libstdc++ does not expose `<expected>` (it reports `__cpp_concepts` 201907);
   use Clang 19+ or `-stdlib=libc++` there.
 - CMake ≥ 3.28, Ninja recommended
@@ -67,7 +70,10 @@ CMake options:
 "Top-level" is decided by `PROJECT_IS_TOP_LEVEL`, so consumers using `add_subdirectory` or
 `FetchContent` get no tests and no `-Werror` unless they opt in.
 
-To reproduce CI locally on any Docker host: `docker/check.sh`.
+To reproduce CI locally on any Docker host: `docker/check.sh [linux/arm64|linux/amd64]`. The
+platform defaults to the host's. On Apple Silicon `linux/arm64` runs natively; a non-native
+platform runs under QEMU emulation, where the script only does the Release builds, `ctest` and
+the Python tests and skips the sanitizer and fuzz steps.
 
 ## Usage
 
