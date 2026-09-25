@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API skeleton (issue #9): notifications and errors of the device layer. Plain structs
+// Public API (issue #9): notifications and errors of the device layer. Plain structs
 // (enum + fields, strings only through to_string) so the phase-3 C ABI can mirror them.
 // State/HMS events are produced by #7, disconnect/reconnect by #8.
 #pragma once
@@ -26,8 +26,12 @@ struct DeviceStats {
   std::uint64_t imu_samples = 0;          ///< ImuSamples delivered
   std::uint64_t bad_packets = 0;          ///< parse_data_packet failures
   std::uint64_t dropped_packets = 0;      ///< udp_cnt gaps (per source port)
-  std::uint64_t queue_drops = 0;          ///< reserved for internal queues (#6)
+  std::uint64_t reordered = 0;            ///< udp_cnt went backwards (duplicate / reordered)
+  std::uint64_t queue_drops = 0;          ///< reserved for internal queues
+  std::uint64_t frame_cnt_fallback = 0;   ///< times frame_cnt mode fell back to the time window
   std::uint64_t last_packet_time_ns = 0;  ///< host receive time of the last packet, 0 = none
+  std::int64_t time_offset_ns = 0;        ///< kHostOffsetOnce: host - LiDAR, once measured
+  bool time_offset_valid = false;
 };
 
 /// Counters of the shared receive side, snapshot via Context::stats().

@@ -32,11 +32,14 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
   with seq-matched retries and timeouts, typed configure/inquire/reboot helpers, work-state
   polling and cross-thread cancellation. No threads; tested against the simulator
 
-- Device layer API (`context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`, docs/api.md):
-  designed and under implementation. The headers are declaration-only skeletons (not part of
-  `mid360.hpp` yet); `BoundedQueue<T>` is usable
+- Device layer (`context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`, docs/api.md): a
+  `Context` owns the three host receive sockets and one receive thread (`recvmmsg`, dispatch
+  by source IP); a `Device` wraps a `Session`, applies the host setup and delivers parsed
+  packets, assembled `Frame`s (frame counter or time window, udp_cnt drop counting, timestamp
+  policies) and IMU samples through callbacks, plus periodic stats events. `BoundedQueue<T>`
+  hands them to another thread. Tested against the simulator
 
-Not yet implemented (phase 2+): receive thread / Device implementation (#6, #7, #8),
+Not yet implemented (phase 2+): push / work-state / HMS events (#7), reconnection (#8),
 C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
 upgrade (`0x04xx`) commands are intentionally out of scope.
 
@@ -149,36 +152,43 @@ target_link_libraries(app PRIVATE livox::mid360_core)
 #include <livox/mid360/mid360.hpp>
 using namespace livox::mid360;
 
-// Find the LiDAR, point it at this host and start sampling (blocking, no threads).
+// One receive thread for all LiDARs (host ports 56201 / 56301 / 56401 on this interface).
+auto ctx = Context::create({.bind_address = {192, 168, 1, 5}});
+if (!ctx) { std::cerr << to_string(ctx.error()) << "\n"; return 1; }
+
+// Find the LiDAR, point it at this host (commands block on the calling thread).
 auto devices = discover();                          // broadcast 0x0000, 1 s
 if (!devices || devices->empty()) return 1;
-auto session = Session::connect(devices->front(), {.bind_address = {192, 168, 1, 5}});
-if (!session) { std::cerr << to_string(session.error()) << "\n"; return 1; }
-HostSetup setup;                                     // ip = session's local address,
-setup.work_tgt_mode = WorkState::kSampling;          // ports 56201 / 56301 / 56401, IMU on
-if (auto r = apply_host_setup(*session, setup); !r) {
-  std::cerr << to_string(r.error()) << "\n";        // e.g. lidar_rejected ... key 0x0006
+auto dev = Device::open(**ctx, devices->front(), {.session = {.bind_address = {192, 168, 1, 5}}});
+if (!dev) { std::cerr << to_string(dev.error()) << "\n"; return 1; }
+
+// Frames and IMU samples arrive on the receive thread; hand them to your own thread.
+BoundedQueue<Frame> frames;                         // drops the oldest when full
+(void)(*dev)->on_frame([&](Frame&& f) { frames.push(std::move(f)); });
+(void)(*dev)->on_imu([](const ImuData& imu) { /* 200 Hz */ });
+(void)(*dev)->on_event([](const Event& e) { std::clog << to_string(e) << "\n"; });
+if (auto r = (*dev)->start_sampling(); !r) {       // work_tgt_mode = SAMPLING + wait
+  std::cerr << to_string(r.error()) << "\n";        // e.g. session: lidar_rejected ...
   return 1;
 }
-
-// Parse a point cloud datagram.
-if (auto pkt = parse_data_packet(datagram)) {
-  for (std::size_t i = 0; i < pkt->header.dot_num; ++i) {
-    const auto p  = decode_cartesian32(*pkt, i);
-    const auto ts = sample_timestamp_ns(pkt->header, i);
-    // ...
-  }
+while (auto f = frames.pop(std::chrono::seconds{1})) {
+  for (const Point& p : f->points) { /* x, y, z in metres, offset_ns from f->base_time_ns */ }
 }
+(void)(*dev)->stop_sampling();
+dev->reset();                                       // Devices before the Context
 ```
 
-Parsers return `std::expected<..., ParseError>` and **non-owning views** into the input buffer;
-keep the buffer alive while you use the result.
+The lower layers stay available on their own: `Session` / `apply_host_setup` for synchronous
+control without a receive thread, and `parse_data_packet` / `decode_cartesian32` for raw
+datagrams (parsers return `std::expected<..., ParseError>` and **non-owning views** into the
+input buffer; keep the buffer alive while you use the result). See docs/api.md for the
+threading rules.
 
 ## Layout
 
 ```
-include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, session, config, mid360 umbrella;
-                        context/device/frame/event are the device-layer skeleton)
+include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transport, session, config,
+                        context, device, frame, event, mid360 umbrella)
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
