@@ -139,7 +139,9 @@ public:
   /// Keys 0x8000-0x8005. Missing keys leave their field empty; see decode_identity().
   std::expected<DeviceIdentity, DeviceError> identity(
     std::optional<RequestOptions> opts = std::nullopt);
-  /// The 16 modelled writable keys as stored by the LiDAR; see decode_settings().
+  /// The 16 modelled writable keys as stored by the LiDAR; see decode_settings(). A key the
+  /// firmware rejects with kParamNotSupport (0x002B on older firmware) is dropped and the
+  /// inquire repeated, so its optional is empty rather than the whole call failing.
   std::expected<LidarSettings, DeviceError> settings(
     std::optional<RequestOptions> opts = std::nullopt);
   /// Keys 0x8006-0x8011 by inquire; see decode_status(). pushed_status() has the same data
@@ -177,6 +179,29 @@ public:
     const FovSettings & fov, std::optional<RequestOptions> opts = std::nullopt);
   /// One 0x0101 for the three keys. A key the ACK lacks leaves its field empty.
   std::expected<FovSettings, DeviceError> fov(std::optional<RequestOptions> opts = std::nullopt);
+
+  // --- stored settings (issues #46 / #47 / #54): keys 0x0018, 0x001C, 0x002B, 0x0026.
+  /// Thin wrappers over set<K>() / get<K>(). The setters return the LiDAR's answer; a value
+  /// outside its enum (DetectMode > 1, an ImuSensorConfig field past its last enumerator) is
+  /// kInvalidArgument with `key` before any I/O. Every accepted write is folded into the
+  /// replayed HostSetup, so a reconnect restores it (see set_point_format()).
+  std::expected<SetResult, DeviceError> set_detect_mode(
+    DetectMode mode, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<DetectMode, DeviceError> detect_mode(
+    std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<SetResult, DeviceError> set_imu_enabled(
+    bool on, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<bool, DeviceError> imu_enabled(std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x002B is absent on older firmware: the LiDAR then answers kLidarRejected with
+  /// ret_code kParamNotSupport and error_key 0x002B (no distinct Kind).
+  std::expected<SetResult, DeviceError> set_imu_sensor_config(
+    const ImuSensorConfig & cfg, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<ImuSensorConfig, DeviceError> imu_sensor_config(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0026: with 1 the LiDAR keeps streaming through a GPS time rollback (wiki).
+  std::expected<SetResult, DeviceError> set_time_filter(
+    bool on, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<bool, DeviceError> time_filter(std::optional<RequestOptions> opts = std::nullopt);
 
   // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
   /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()

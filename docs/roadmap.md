@@ -62,14 +62,15 @@ over them and only add what the raw key does not express (waits, combined keys, 
 - #40 coordinate format, scan pattern and point-cloud frame rate (`set_point_format()`,
   `set_scan_pattern()`, `set_frame_policy()`; no frame-rate key on the Mid-360): **done**
 - #41 read-back of stored settings and live status (`settings()` / `status()` / `pushed_status()`): **done**
-- #46 detection mode (normal / sensitive, key `0x0018`)
-- #47 IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range)
+- #46 detection mode (normal / sensitive, key `0x0018`; `set_detect_mode()`): **done**
+- #47 IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range;
+  `set_imu_enabled()`, `set_imu_sensor_config()`): **done**
 - #50 LiDAR network config (key `0x0004`) with reboot-required handling
 - #51 install attitude / extrinsics (key `0x0012`) and optional host-side transform
 - #52 function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs)
 - #53 time-sync status read-back (`0x8009`–`0x800C`) and `set_gps_time` integration with
   `TimestampPolicy`
-- #54 time filter (key `0x0026`)
+- #54 time filter (key `0x0026`; `set_time_filter()`): **done**
 - #55 diag status (key `0x800E`) read-back and change event
 - #56 typed snapshot of the full `0x0102` push payload and optional `on_push` callback
 - #57 generic typed key access (`set<Key>` / `get<Key>`, batched) over the `keys.hpp` codecs: **done**

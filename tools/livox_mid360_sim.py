@@ -136,7 +136,8 @@ READ_ONLY = {
 POINTS_PER_PACKET = 96
 MAX_FOV_DRAWS = 16  # batches of POINTS_PER_PACKET drawn per packet while FOV cropping
 PCL_PACKET_RATE = 2000.0  # packets/s  (≈192k points/s)
-IMU_RATE = 200.0
+IMU_RATE = 200.0  # at imu_sensor_cfg output_rate 0
+IMU_RATES = {0: 200.0, 1: 500.0, 2: 100.0, 3: 50.0}  # key 0x002B data[0]
 PUSH_RATE = 1.0
 
 
@@ -192,6 +193,7 @@ class DeviceModel:
     version_hardware: tuple[int, int, int, int] = (0, 0, 0, 1)
     startup_delay: float = 0.3
     selfcheck_delay: float = 0.1
+    imu_cfg_unsupported: bool = False  # emulate firmware without key 0x002B
     settings: dict[int, bytes] = field(default_factory=factory_settings)
     work_state: int = WS_SELFCHECK
     hms: list[int] = field(default_factory=lambda: [0] * 8)
@@ -282,6 +284,8 @@ class DeviceModel:
                 return RET_PARAM_READ_ONLY, key
             if key not in WRITABLE_LEN:
                 return RET_PARAM_NOT_SUPPORT, key
+            if key == KEY_IMU_SENSOR_CFG and self.imu_cfg_unsupported:
+                return RET_PARAM_NOT_SUPPORT, key
             if len(value) != WRITABLE_LEN[key]:
                 return RET_PARAM_INVALID_LEN, key
             if key == KEY_PCL_DATA_TYPE and value[0] not in (1, 2, 3):
@@ -293,6 +297,10 @@ class DeviceModel:
                     return RET_PARAM_NOT_SUPPORT, key
                 return RET_OUT_OF_RANGE, key
             if key in (KEY_FOV0, KEY_FOV1) and not fov_in_range(value):
+                return RET_OUT_OF_RANGE, key
+            if key in (KEY_DETECT_MODE, KEY_TIME_FILTER, KEY_IMU_EN) and value[0] > 1:
+                return RET_OUT_OF_RANGE, key
+            if key == KEY_IMU_SENSOR_CFG and (value[0] > 3 or value[1] > 3 or value[2] > 7):
                 return RET_OUT_OF_RANGE, key
             if key == KEY_WORK_TGT_MODE:
                 # [unverified] return codes, see #11. ERROR / UPGRADE are left only by
@@ -324,6 +332,8 @@ class DeviceModel:
         return RET_OK, out
 
     def read_key(self, key: int, now_ns: int) -> bytes | None:
+        if key == KEY_IMU_SENSOR_CFG and self.imu_cfg_unsupported:
+            return None
         if key in self.settings:
             return self.settings[key]
         ro = {
@@ -383,6 +393,13 @@ class DeviceModel:
     @property
     def imu_enabled(self) -> bool:
         return self.settings[KEY_IMU_EN][0] != 0
+
+    @property
+    def imu_rate(self) -> float:
+        """Return the IMU packet rate in Hz selected by key 0x002B (200 Hz when unsupported)."""
+        if self.imu_cfg_unsupported:
+            return IMU_RATE
+        return IMU_RATES[self.settings[KEY_IMU_SENSOR_CFG][0]]
 
     def fov_windows(self) -> list[tuple[int, int, int, int]]:
         """Return the enabled FOV windows as (yaw_start, yaw_stop, pitch_start, pitch_stop)."""
@@ -495,6 +512,7 @@ class Simulator:
             version_hardware=parse_version(args.version_hardware),
             startup_delay=args.startup_delay,
             selfcheck_delay=args.selfcheck_delay,
+            imu_cfg_unsupported=args.imu_cfg_unsupported,
         )
         self.model.on_state = self._on_state
         self.points = PointSource(args.seed)
@@ -724,8 +742,7 @@ class Simulator:
             except struct.error:
                 return RET_FAIL, struct.pack('<BH', RET_FAIL, 0)
             ret, kvs = m.inquire(keys, now_ns)
-            if ret != RET_OK:
-                return ret, struct.pack('<BH', ret, 0)
+            # A rejected inquire names the offending key as a zero-length entry.
             return ret, struct.pack('<BH', ret, len(kvs)) + proto.encode_kv_list(kvs)
         if f.cmd_id == CMD_REBOOT:
             # The ACK is sent by the caller before the silence window is checked again.
@@ -768,7 +785,7 @@ class Simulator:
                 self.next_pcl = now
             if m.imu_enabled:
                 imu_host = m.host(KEY_IMU_HOST)
-                imu_interval = 1.0 / (IMU_RATE * self.rate)
+                imu_interval = 1.0 / (m.imu_rate * self.rate)
                 while now >= self.next_imu:
                     self._send_imu(imu_host, imu_interval)
                     self.next_imu += imu_interval
@@ -906,6 +923,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         '--drop-rate', type=float, default=0.0, help='fraction of point-cloud packets to drop'
+    )
+    p.add_argument(
+        '--imu-cfg-unsupported',
+        action='store_true',
+        help='emulate firmware without key 0x002B (write and read answered with 0x20)',
     )
     p.add_argument('--quit-on-eof', action='store_true', default=True)
     p.add_argument('--no-quit-on-eof', dest='quit_on_eof', action='store_false')

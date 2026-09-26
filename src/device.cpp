@@ -383,6 +383,26 @@ struct Device::Impl : detail::Receiver
             host_setup.fov->enable = *v;
           }
           break;
+        case Key::kImuDataEn:
+          if (const auto v = decode_bool(kv.value)) {
+            host_setup.imu_enable = *v;
+          }
+          break;
+        case Key::kDetectMode:
+          if (const auto v = decode_detect_mode(kv.value)) {
+            host_setup.detect_mode = *v;
+          }
+          break;
+        case Key::kTimeFilter:
+          if (const auto v = decode_bool(kv.value)) {
+            host_setup.time_filter = *v;
+          }
+          break;
+        case Key::kImuSensorCfg:
+          if (const auto v = decode_imu_sensor_config(kv.value)) {
+            host_setup.imu_sensor_config = *v;
+          }
+          break;
         default:
           break;
       }
@@ -818,11 +838,26 @@ std::expected<DeviceIdentity, DeviceError> Device::identity(std::optional<Reques
 
 std::expected<LidarSettings, DeviceError> Device::settings(std::optional<RequestOptions> opts)
 {
-  auto r = inquire(kSettingsKeys, opts);
-  if (!r) {
-    return std::unexpected(r.error());
+  // A key the firmware does not know (0x002B before it was added) fails the whole inquire
+  // with kParamNotSupport naming that key; drop it and ask again so the rest still decodes.
+  std::vector<std::uint16_t> keys(kSettingsKeys.size());
+  std::ranges::transform(
+    kSettingsKeys, keys.begin(), [](Key k) { return static_cast<std::uint16_t>(k); });
+  for (;;) {
+    auto r = inquire(keys, opts);
+    if (r) {
+      return decode_settings(r->values);
+    }
+    const auto & e = r.error();
+    const bool unsupported = e.kind == DeviceError::Kind::kSession && e.session &&
+                             e.session->kind == SessionErrorKind::kLidarRejected &&
+                             e.session->ret_code == RetCode::kParamNotSupport;
+    const auto it = unsupported ? std::ranges::find(keys, e.session->error_key) : keys.end();
+    if (it == keys.end()) {
+      return std::unexpected(e);
+    }
+    keys.erase(it);
   }
-  return decode_settings(r->values);
 }
 
 std::expected<LidarStatus, DeviceError> Device::status(std::optional<RequestOptions> opts)
@@ -879,6 +914,64 @@ FramePolicy Device::frame_policy() const
 {
   const std::lock_guard lock(impl_->policy_mutex);
   return impl_->frame_policy_;
+}
+
+std::expected<SetResult, DeviceError> Device::set_detect_mode(
+  DetectMode mode, std::optional<RequestOptions> opts)
+{
+  if (static_cast<std::uint8_t>(mode) > 1) {
+    DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+    err.key = Key::kDetectMode;
+    return std::unexpected(err);
+  }
+  return set<Key::kDetectMode>(mode, opts);
+}
+
+std::expected<DetectMode, DeviceError> Device::detect_mode(std::optional<RequestOptions> opts)
+{
+  return get<Key::kDetectMode>(opts);
+}
+
+std::expected<SetResult, DeviceError> Device::set_imu_enabled(
+  bool on, std::optional<RequestOptions> opts)
+{
+  return set<Key::kImuDataEn>(on, opts);
+}
+
+std::expected<bool, DeviceError> Device::imu_enabled(std::optional<RequestOptions> opts)
+{
+  return get<Key::kImuDataEn>(opts);
+}
+
+std::expected<SetResult, DeviceError> Device::set_imu_sensor_config(
+  const ImuSensorConfig & cfg, std::optional<RequestOptions> opts)
+{
+  if (
+    static_cast<std::uint8_t>(cfg.output_rate) > 3 ||
+    static_cast<std::uint8_t>(cfg.accel_range) > 3 ||
+    static_cast<std::uint8_t>(cfg.gyro_range) > 7) {
+    DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+    err.key = Key::kImuSensorCfg;
+    return std::unexpected(err);
+  }
+  return set<Key::kImuSensorCfg>(cfg, opts);
+}
+
+std::expected<ImuSensorConfig, DeviceError> Device::imu_sensor_config(
+  std::optional<RequestOptions> opts)
+{
+  return get<Key::kImuSensorCfg>(opts);
+}
+
+std::expected<SetResult, DeviceError> Device::set_time_filter(
+  bool on, std::optional<RequestOptions> opts)
+{
+  return set<Key::kTimeFilter>(on, opts);
+}
+
+std::expected<bool, DeviceError> Device::time_filter(std::optional<RequestOptions> opts)
+{
+  return get<Key::kTimeFilter>(opts);
 }
 
 std::expected<SetResult, DeviceError> Device::set_fov(
