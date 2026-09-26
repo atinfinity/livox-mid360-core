@@ -447,9 +447,9 @@ TEST_CASE("Device: start_sampling from IDLE passes through MOTORSTARTUP", "[sim]
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
-  // The push handler updates work_state() before it runs the event callback, so after the
-  // state is seen wait for one more push: the receive thread handles pushes in order, so by
-  // then the event of the earlier push has been recorded (raced on the arm64 ASan runners).
+  // work_state() is visible before the push's event callback has run. stats().pushes is
+  // counted after the callbacks with release semantics, so once the count moves past the
+  // one read here the event of the push that established the state has been recorded.
   auto settled = [&](WorkState s) {
     if (!wait_until([&] { return dev->work_state() == s; })) {
       return false;

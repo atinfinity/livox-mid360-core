@@ -160,7 +160,7 @@ struct Device::Impl : detail::Receiver
       .queue_drops = 0,
       .frame_cnt_fallback = frame_cnt_fallback.load(kRelaxed),
       .last_packet_time_ns = last_packet_time_ns.load(kRelaxed),
-      .pushes = pushes.load(kRelaxed),
+      .pushes = pushes.load(std::memory_order_acquire),
       .last_push_time_ns = last_push_time_ns.load(kRelaxed),
       .disconnects = disconnects.load(kRelaxed),
       .reconnects = reconnects.load(kRelaxed),
@@ -222,7 +222,6 @@ struct Device::Impl : detail::Receiver
       bad_packets.fetch_add(1, std::memory_order_relaxed);
       return;
     }
-    pushes.fetch_add(1, std::memory_order_relaxed);
     last_push_time_ns.store(d.recv_time_ns, std::memory_order_relaxed);
     last_push_steady_ns.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
     refresh_callbacks();
@@ -282,6 +281,9 @@ struct Device::Impl : detail::Receiver
         rx_event_cb(*hms_event);
       }
     }
+    // Counted last, with release: a reader that sees the new count (acquire, snapshot())
+    // also sees the state this push established and the effects of its callbacks.
+    pushes.fetch_add(1, std::memory_order_release);
   }
 
   void on_datagram(detail::DataPort port, const Datagram & d) override
