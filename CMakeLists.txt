@@ -28,6 +28,7 @@ endif()
 
 option(LIVOX_MID360_BUILD_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOP_LEVEL})
+option(LIVOX_MID360_BUILD_TOOLS "Build the livox-mid360-cli tool (record / replay)" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_BUILD_FUZZERS "Build libFuzzer targets (Clang only)" OFF)
 option(LIVOX_MID360_WARNINGS_AS_ERRORS "Treat warnings as errors" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -67,6 +68,7 @@ add_library(mid360_core
   src/config.cpp
   src/firmware_log.cpp
   src/frame_assembler.cpp
+  src/lvx2.cpp
   src/extrinsic.cpp
   src/event.cpp
   src/log.cpp
@@ -100,6 +102,9 @@ if(LIVOX_MID360_BUILD_TESTS)
 endif()
 if(LIVOX_MID360_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+if(LIVOX_MID360_BUILD_TOOLS)
+  add_subdirectory(tools/cli)
 endif()
 
 # ---------------------------------------------------------------------------

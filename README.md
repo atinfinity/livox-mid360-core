@@ -128,8 +128,9 @@ include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transpo
                         context, device, frame, event, mid360 umbrella)
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
-tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
-docs/                   roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md
+tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator,
+                        tools/cli: livox-mid360-cli (lvx2 record / replay, docs/lvx2.md)
+docs/                   roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md, lvx2.md (record / replay)
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 

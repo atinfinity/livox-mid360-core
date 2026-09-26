@@ -715,6 +715,14 @@ raw log bytes) from its port 56500 to the host address written to key `0x0009`
   sender, the `ret_code` of a repeated enable, the meaning of `timestamp` / `file_num`, whether
   the exception log (type 1) is supported and the frame type of the host ACK.
 
+## lvx2 record / replay
+
+`lvx2.hpp` (#35) has `Lvx2Writer` (raw packets → file, 50 ms frames, spherical converted to
+Cartesian32, IMU ignored), `Lvx2Reader` (file → `Lvx2Packet` with `to_data_packet_view()`,
+truncated tails tolerated) and `Lvx2Player` (file → `on_packet` / `on_frame` through the same
+`FrameAssembler` as a Device, `rate` / `loop` / `lidar_id` options). Format, unverified
+items and the `livox-mid360-cli record` / `replay` commands: [lvx2.md](lvx2.md).
+
 ## Multiple devices
 
 Every Device opened on a Context is registered under its source IP (dispatch) and its serial
@@ -748,6 +756,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
 | `set<K>` / `get<K>` (#57) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper (#38–#56) exists |
 | `on_firmware_log` / `start_firmware_log` / `stop_firmware_log` (#44) | `livox_mid360_device_on_firmware_log(dev, cb, user)` with `livox_mid360_firmware_log_chunk_t` (header fields, `const uint8_t* data, size_t len` valid during the call) / `..._start_firmware_log(dev, type)` / `..._stop_firmware_log(dev, type)` |
+| `Lvx2Writer` / `Lvx2Player` (#35) | `livox_mid360_lvx2_writer_open(path, devices, n, &w)` / `..._writer_write(w, index, packet)` / `..._writer_close(w)`; `livox_mid360_lvx2_player_open(path, opts, &p)` / `..._player_on_frame(p, cb, user)` / `..._player_run(p, stop_flag, &stats)` |
 | `set_log_level` / `set_log_handler` (#42) | `livox_mid360_set_log_level(level)` / `livox_mid360_set_log_handler(cb, user)` with `livox_mid360_log_record_t` (`level`, `time_ns`, NUL-terminated `serial_number` and `message` valid during the call) |
 
 `livox-mid360-ros2` (separate repository) uses the C++ API directly: one `Context`, one
