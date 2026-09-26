@@ -35,12 +35,14 @@ add_executable(mid360_core_tests
   test_reconnect.cpp
   test_log.cpp
   test_golden_vectors.cpp
-  test_firmware_log.cpp)
+  test_firmware_log.cpp
+  test_lvx2.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
 target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 target_compile_definitions(mid360_core_tests PRIVATE
-  LIVOX_MID360_SIM_SCRIPT="${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py")
+  LIVOX_MID360_SIM_SCRIPT="${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py"
+  LIVOX_MID360_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(Python3_Interpreter_FOUND)
   target_compile_definitions(mid360_core_tests PRIVATE LIVOX_MID360_PYTHON="${Python3_EXECUTABLE}")
 endif()

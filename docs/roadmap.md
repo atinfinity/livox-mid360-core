@@ -81,7 +81,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
 - #42 SDK logging: level control, console suppression, file / stderr sinks: **done** (C ABI mirror with phase 3)
 - #44 firmware log collection (`0x03xx`, port 56500) API and sample: **done** (`examples/collect_firmware_log.cpp`)
 - #34 decoded point tag accessors (noise confidence per field): **done**
-- #35 lvx2 record / replay CLI
+- #35 lvx2 record / replay CLI — done: `lvx2.hpp` codec + `livox-mid360-cli` (`tools/cli/`), docs/lvx2.md
 - #43 minimal point-cloud and IMU receive sample: **done** (`examples/minimal_receive.cpp`)
 - #45 simulator: verify the `work_tgt_mode` list and transitions and model them faithfully
 
@@ -104,7 +104,7 @@ listed in [simulator.md](simulator.md) and [protocol_notes.md](protocol_notes.md
 - **C ABI**: the mapping table is in [api.md](api.md#c-abi-mapping-phase-3); all output
   structs are already plain data with `static_assert`s in `tests/test_api_skeleton.cpp`.
 - **CLI** (`livox-mid360-cli`, separate repository): discovery, configuration, lvx2 record /
-  replay (#35 starts this inside `tools/`).
+  replay (#35 started this inside `tools/cli/`: `livox-mid360-cli record` / `replay`).
 - **ROS 2 driver** (`livox-mid360-ros2`, separate repository): rclcpp composable node
   `livox_mid360_driver` in package `livox_mid360_ros2`, publishing output compatible with
   `livox_ros_driver2` (`PointXYZRTLT` point cloud and `CustomMsg`: x, y, z, intensity, tag,
