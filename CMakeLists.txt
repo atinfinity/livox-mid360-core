@@ -27,6 +27,7 @@ if(PROJECT_IS_TOP_LEVEL)
 endif()
 
 option(LIVOX_MID360_BUILD_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
+option(LIVOX_MID360_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_BUILD_FUZZERS "Build libFuzzer targets (Clang only)" OFF)
 option(LIVOX_MID360_WARNINGS_AS_ERRORS "Treat warnings as errors" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -95,6 +96,9 @@ livox_mid360_apply_coverage(mid360_core)
 if(LIVOX_MID360_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
+endif()
+if(LIVOX_MID360_BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif()
 
 # ---------------------------------------------------------------------------

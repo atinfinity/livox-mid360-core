@@ -82,7 +82,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
 - #44 firmware log collection (`0x03xx`, port 56500) API and sample
 - #34 decoded point tag accessors (noise confidence per field)
 - #35 lvx2 record / replay CLI
-- #43 minimal point-cloud and IMU receive sample
+- #43 minimal point-cloud and IMU receive sample: **done** (`examples/minimal_receive.cpp`)
 - #45 simulator: verify the `work_tgt_mode` list and transitions and model them faithfully
 
 ### Hardware verification (`needs-hardware`)
