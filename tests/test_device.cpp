@@ -69,7 +69,7 @@ struct Fixture {
     return o;
   }
 
-  [[nodiscard]] std::unique_ptr<Device> open(DeviceOptions o = options()) const {
+  [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions& o = options()) const {
     auto d = Device::open(*context, discovered(), o);
     if (!d) FAIL(to_string(d.error()));
     return std::move(*d);

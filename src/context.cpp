@@ -33,10 +33,36 @@ DeviceError transport_error(const TransportError& err) {
 
 }  // namespace
 
-bool Context::Impl::add(const Ipv4& ip, detail::Receiver* receiver) {
+Context::Impl::AddResult Context::Impl::add(const Ipv4& ip, std::string serial,
+                                            detail::Receiver* receiver) {
   const std::lock_guard lock(mutex);
+  if (std::ranges::any_of(entries, [&](const Entry& e) { return e.ip == ip; })) {
+    return AddResult::kDuplicateIp;
+  }
+  if (std::ranges::any_of(entries, [&](const Entry& e) { return e.serial == serial; })) {
+    return AddResult::kDuplicateSerial;
+  }
+  entries.push_back({ip, receiver, std::move(serial), nullptr});
+  generation.fetch_add(1, std::memory_order_release);
+  poller.wake();
+  return AddResult::kOk;
+}
+
+void Context::Impl::bind(detail::Receiver* receiver, Device* device) {
+  const std::lock_guard lock(mutex);
+  for (Entry& e : entries) {
+    if (e.receiver == receiver) e.device = device;
+  }
+}
+
+bool Context::Impl::rekey(detail::Receiver* receiver, const Ipv4& ip) {
+  const std::lock_guard lock(mutex);
+  const auto it =
+      std::ranges::find_if(entries, [&](const Entry& e) { return e.receiver == receiver; });
+  if (it == entries.end()) return false;
+  if (it->ip == ip) return true;
   if (std::ranges::any_of(entries, [&](const Entry& e) { return e.ip == ip; })) return false;
-  entries.push_back({ip, receiver});
+  it->ip = ip;
   generation.fetch_add(1, std::memory_order_release);
   poller.wake();
   return true;
@@ -177,6 +203,23 @@ Context::~Context() {
 
 const ContextOptions& Context::options() const noexcept {
   return impl_->options;
+}
+
+Device* Context::find(std::string_view serial_number) const {
+  const std::lock_guard lock(impl_->mutex);
+  for (const Impl::Entry& e : impl_->entries) {
+    if (e.serial == serial_number) return e.device;
+  }
+  return nullptr;
+}
+
+std::vector<Device*> Context::devices() const {
+  const std::lock_guard lock(impl_->mutex);
+  std::vector<Device*> out;
+  for (const Impl::Entry& e : impl_->entries) {
+    if (e.device != nullptr) out.push_back(e.device);
+  }
+  return out;
 }
 
 ContextStats Context::stats() const {
