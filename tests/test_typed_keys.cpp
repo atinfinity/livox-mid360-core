@@ -33,7 +33,7 @@ struct Fixture
     if (sim) {
       ContextOptions o;
       o.bind_address = {127, 0, 0, 1};
-      o.push_port = o.point_port = o.imu_port = 0;
+      o.push_port = o.point_port = o.imu_port = o.log_port = 0;
       auto c = Context::create(o);
       REQUIRE(c.has_value());
       context = std::move(*c);
