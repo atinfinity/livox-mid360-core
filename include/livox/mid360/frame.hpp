@@ -10,10 +10,12 @@
 #include <deque>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
 #include "livox/mid360/export.hpp"
+#include "livox/mid360/keys.hpp"
 #include "livox/mid360/protocol.hpp"
 
 LIVOX_MID360_API_BEGIN
@@ -157,6 +159,22 @@ private:
   std::uint64_t dropped_ = 0;
   bool closed_ = false;
 };
+
+/// Host-side install attitude transform (issue #51). The SDK never applies it by itself:
+/// key 0x0012 is stored on the LiDAR and whether the firmware transforms the emitted points
+/// is unverified (#11). `p' = r * p + t`, the livox_ros_driver2 extrinsic convention.
+struct Extrinsic
+{
+  float r[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  ///< row-major rotation
+  float t[3] = {0, 0, 0};                             ///< metres
+};
+
+/// Rotation = Rz(yaw) * Ry(pitch) * Rx(roll) (intrinsic ZYX, right-handed, degrees);
+/// translation = offsets in mm / 1000, added after the rotation.
+[[nodiscard]] Extrinsic extrinsic_from(const InstallAttitude & a) noexcept;
+/// Transforms every point in place; reflectivity, tag, line and offset are untouched.
+void apply(const Extrinsic & e, std::span<Point> points) noexcept;
+void apply(const Extrinsic & e, Frame & frame) noexcept;
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END

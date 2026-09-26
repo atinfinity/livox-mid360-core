@@ -188,6 +188,15 @@ public:
   /// One 0x0101 for the three keys. A key the ACK lacks leaves its field empty.
   std::expected<FovSettings, DeviceError> fov(std::optional<RequestOptions> opts = std::nullopt);
 
+  // --- install attitude (issue #51): key 0x0012.
+  /// install_attitude_valid() → else kInvalidArgument with `key` before any I/O. Only stores
+  /// the value on the LiDAR; whether the firmware applies it to the emitted points is
+  /// unverified (#11). To transform on the host use extrinsic_from() / apply() in frame.hpp.
+  std::expected<SetResult, DeviceError> set_install_attitude(
+    const InstallAttitude & a, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<InstallAttitude, DeviceError> install_attitude(
+    std::optional<RequestOptions> opts = std::nullopt);
+
   // --- stored settings (issues #46 / #47 / #54): keys 0x0018, 0x001C, 0x002B, 0x0026.
   /// Thin wrappers over set<K>() / get<K>(). The setters return the LiDAR's answer; a value
   /// outside its enum (DetectMode > 1, an ImuSensorConfig field past its last enumerator) is

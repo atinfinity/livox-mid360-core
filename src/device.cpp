@@ -1142,6 +1142,23 @@ std::expected<SetResult, DeviceError> Device::set_fov(
   return SetResult{.reboot_required = ack->ret_code == RetCode::kParamRebootEffect};
 }
 
+std::expected<SetResult, DeviceError> Device::set_install_attitude(
+  const InstallAttitude & a, std::optional<RequestOptions> opts)
+{
+  if (!install_attitude_valid(a)) {
+    DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+    err.key = Key::kInstallAttitude;
+    return std::unexpected(err);
+  }
+  return set<Key::kInstallAttitude>(a, opts);
+}
+
+std::expected<InstallAttitude, DeviceError> Device::install_attitude(
+  std::optional<RequestOptions> opts)
+{
+  return get<Key::kInstallAttitude>(opts);
+}
+
 std::expected<FovSettings, DeviceError> Device::fov(std::optional<RequestOptions> opts)
 {
   static constexpr std::array<Key, 3> kKeys{Key::kFovCfg0, Key::kFovCfg1, Key::kFovCfgEn};

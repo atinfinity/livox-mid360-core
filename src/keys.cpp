@@ -2,6 +2,7 @@
 #include "livox/mid360/keys.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include "livox/mid360/bytes.hpp"
@@ -165,6 +166,12 @@ bool lidar_ip_config_valid(const LidarIpConfig & c) noexcept
     return false;
   }
   return true;
+}
+
+bool install_attitude_valid(const InstallAttitude & a) noexcept
+{
+  const auto ok = [](float deg) { return std::isfinite(deg) && deg >= -180.0F && deg <= 180.0F; };
+  return ok(a.roll_deg) && ok(a.pitch_deg) && ok(a.yaw_deg);
 }
 
 bool fov_in_range(const FovConfig & f) noexcept
