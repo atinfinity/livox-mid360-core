@@ -28,7 +28,7 @@ enum class Key : std::uint16_t
 {
   // ---- writable (0x0100) -------------------------------------------------
   kPclDataType = 0x0000,          ///< u8, DataType 1/2/3
-  kPatternMode = 0x0001,          ///< u8, only 0 (non-repetitive) is effective
+  kPatternMode = 0x0001,          ///< u8 ScanPattern; only 0 (non-repetitive) on the base Mid-360
   kLidarIpCfg = 0x0004,           ///< u8[12] ip, mask, gateway
   kStateInfoHostIpCfg = 0x0005,   ///< u8[8] ip, dst port, src port
   kPointCloudHostIpCfg = 0x0006,  ///< u8[8]
@@ -110,6 +110,15 @@ struct FovConfig
   std::int32_t pitch_start_deg = 0;  ///< (-10, 60)
   std::int32_t pitch_stop_deg = 0;   ///< (-10, 60)
   std::uint32_t rsvd = 0;
+};
+
+/// key 0x0001. The wiki documents all three but says only kNonRepetitive is effective on
+/// the base Mid-360; the others are passed through and the ACK decides (#11).
+enum class ScanPattern : std::uint8_t
+{
+  kNonRepetitive = 0,
+  kRepetitive = 1,
+  kLowRateRepetitive = 2
 };
 
 enum class DetectMode : std::uint8_t
@@ -264,6 +273,8 @@ template <typename E>
 /// key 0x0000: 1, 2 or 3 (0 = IMU is not a point-cloud data type).
 [[nodiscard]] std::expected<DataType, KeyError> decode_data_type(
   std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<ScanPattern, KeyError> decode_scan_pattern(
+  std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<DetectMode, KeyError> decode_detect_mode(
   std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<TimeSyncType, KeyError> decode_time_sync_type(
@@ -336,7 +347,7 @@ struct ReadOnlyTraits
 template <> struct key_traits<Key::kPclDataType>
 : detail::WritableTraits<DataType, encode_enum_u8<DataType>, decode_data_type> {};
 template <> struct key_traits<Key::kPatternMode>
-: detail::WritableTraits<std::uint8_t, encode_u8, decode_u8> {};
+: detail::WritableTraits<ScanPattern, encode_enum_u8<ScanPattern>, decode_scan_pattern> {};
 template <> struct key_traits<Key::kLidarIpCfg>
 : detail::WritableTraits<LidarIpConfig, encode_lidar_ip_config, decode_lidar_ip_config> {};
 template <> struct key_traits<Key::kStateInfoHostIpCfg>

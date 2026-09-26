@@ -286,6 +286,12 @@ class DeviceModel:
                 return RET_PARAM_INVALID_LEN, key
             if key == KEY_PCL_DATA_TYPE and value[0] not in (1, 2, 3):
                 return RET_OUT_OF_RANGE, key
+            if key == KEY_PATTERN_MODE and value[0] != 0:
+                # [unverified] the base Mid-360 has only the non-repetitive pattern (#11):
+                # the defined 1 / 2 are "not supported", anything else is out of range.
+                if value[0] in (1, 2):
+                    return RET_PARAM_NOT_SUPPORT, key
+                return RET_OUT_OF_RANGE, key
             if key in (KEY_FOV0, KEY_FOV1) and not fov_in_range(value):
                 return RET_OUT_OF_RANGE, key
             if key == KEY_WORK_TGT_MODE:
@@ -301,9 +307,6 @@ class DeviceModel:
         for key, value in kvs:
             changed = self.settings.get(key) != bytes(value)
             self.settings[key] = bytes(value)
-            if key == KEY_PATTERN_MODE and changed and self.work_state in (WS_READY, WS_SAMPLING):
-                # "Scan mode changed" edge of the figure: the scan module restarts.
-                self._enter_timed(WS_MOTORSTARTUP, now)
             if key == KEY_LIDAR_IPCFG and changed:
                 # [unverified] the wiki lists 0x21 without naming the keys; the LiDAR's own
                 # address is the obvious candidate (#11, #50).

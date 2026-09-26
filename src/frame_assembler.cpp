@@ -110,6 +110,14 @@ FrameAssembler::FrameAssembler(FramePolicy policy, TimestampPolicy timestamps)
 {
 }
 
+void FrameAssembler::set_policy(FramePolicy policy) noexcept
+{
+  policy_ = policy;
+  fallback_ = false;
+  frame_cnt_changed_ever_ = false;
+  first_time_.reset();
+}
+
 bool FrameAssembler::time_window_active() const noexcept
 {
   return policy_.mode == FramePolicy::Mode::kTimeWindow || fallback_;
@@ -170,6 +178,9 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
   std::optional<Frame> out;
   if (!cur_.points.empty()) {
     bool close = time_window_active() ? t0 >= cur_.base_time_ns + window : frame_changed;
+    if (h.data_type != cur_.source_type) {
+      close = true;  // the point format changed (set_point_format()): one format per Frame
+    }
     const std::uint64_t span_ns = static_cast<std::uint64_t>(h.time_interval) * 100u;
     if (
       t0 >= cur_.base_time_ns &&

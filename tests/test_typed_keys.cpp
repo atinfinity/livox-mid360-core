@@ -105,7 +105,7 @@ TEST_CASE("Device::set<K> / get<K>: every writable key round-trips", "[device][k
   auto dev = f.open();
 
   SECTION("kPclDataType") { roundtrip<Key::kPclDataType>(*dev, DataType::kCartesian16); }
-  SECTION("kPatternMode") { roundtrip<Key::kPatternMode>(*dev, std::uint8_t{0}); }
+  SECTION("kPatternMode") { roundtrip<Key::kPatternMode>(*dev, ScanPattern::kNonRepetitive); }
   SECTION("kLidarIpCfg: a change is acknowledged with 0x21")
   {
     auto cur = dev->get<Key::kLidarIpCfg>();
@@ -308,7 +308,7 @@ TEST_CASE(
     SKIP(f.err);
   }
   auto dev = f.open();
-  // pattern_mode is a plain u8 to the simulator; 0x05 is out of range for DataType (1..3)
+  // 0x05 is out of range for DataType (1..3)
   // and the simulator only range-checks pcl_data_type, so use the raw configure path to
   // plant an undecodable fov_cfg_en (bits above bit 1).
   const auto bad = encode_u8(0x80);

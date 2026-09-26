@@ -57,6 +57,9 @@ HostSetupKeyValues host_setup_key_values(const HostSetup & setup, const Ipv4 & h
   put(Key::kImuHostIpCfg, encode_host_ip_config({host_ip, setup.imu_port, kImuPort}));
   put(Key::kPclDataType, encode_u8(static_cast<std::uint8_t>(setup.pcl_data_type)));
   put(Key::kImuDataEn, encode_u8(setup.imu_enable ? 1 : 0));
+  if (setup.scan_pattern) {
+    put(Key::kPatternMode, encode_enum_u8(*setup.scan_pattern));
+  }
   if (setup.fov) {
     if (setup.fov->fov0) {
       put(Key::kFovCfg0, encode_fov_config(*setup.fov->fov0));

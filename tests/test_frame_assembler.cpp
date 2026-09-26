@@ -295,3 +295,52 @@ TEST_CASE("frame assembler: point conversion of every data type", "[frame]")
     CHECK(fa.counters().packets == 0);
   }
 }
+
+TEST_CASE("frame assembler: a data_type change closes the frame with the old type", "[frame]")
+{
+  FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);
+  auto a = make_packet(0, 0, 0, 4, DataType::kCartesian32);
+  auto b = make_packet(1, 0, 10 * kMs, 4, DataType::kCartesian32);
+  auto c = make_packet(2, 0, 20 * kMs, 4, DataType::kCartesian16);
+  CHECK_FALSE(fa.push(a.view, 0).has_value());
+  CHECK_FALSE(fa.push(b.view, 0).has_value());
+  const auto closed = fa.push(c.view, 0);
+  REQUIRE(closed.has_value());
+  CHECK(closed->source_type == DataType::kCartesian32);
+  CHECK(closed->packets == 2);
+  CHECK(closed->points.size() == 8);
+  CHECK(fa.has_partial());
+  const auto rest = fa.flush();
+  REQUIRE(rest.has_value());
+  CHECK(rest->source_type == DataType::kCartesian16);
+  CHECK(rest->points.size() == 4);
+}
+
+TEST_CASE("frame assembler: set_policy takes effect at the next packet", "[frame]")
+{
+  FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);
+  std::uint16_t cnt = 0;
+  std::size_t closed = 0;
+  // constant frame_cnt: falls back at 200 ms, then windows of 100 ms
+  for (std::uint64_t t = 0; t <= 250 * kMs; t += 10 * kMs) {
+    auto p = make_packet(cnt++, 0, t);
+    if (fa.push(p.view, 0)) {
+      ++closed;
+    }
+  }
+  CHECK(closed == 1);
+  CHECK(fa.time_window_active());
+  fa.set_policy(window_policy(20ms));
+  CHECK(fa.policy().window == 20ms);
+  CHECK(fa.time_window_active());  // by mode now, the fallback flag itself was reset
+  // [200, 260): the partial frame from 200 ms is closed by the 20 ms window as soon as a
+  // point past base + 20 ms arrives, then every 20 ms.
+  for (std::uint64_t t = 260 * kMs; t <= 400 * kMs; t += 10 * kMs) {
+    auto p = make_packet(cnt++, 0, t);
+    if (fa.push(p.view, 0)) {
+      ++closed;
+    }
+  }
+  CHECK(closed >= 7);
+  CHECK(fa.counters().frame_cnt_fallback == 1);
+}
