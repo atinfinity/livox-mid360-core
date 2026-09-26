@@ -18,8 +18,18 @@ namespace livox::mid360
 
 namespace
 {
-std::atomic<LogLevel> g_level{LogLevel::kOff};
-std::atomic<std::shared_ptr<const LogHandler>> g_handler{nullptr};
+// Function-local statics: constant-initialised, no global-constructor ordering issues.
+std::atomic<LogLevel> & level_slot() noexcept
+{
+  static std::atomic<LogLevel> level{LogLevel::kOff};
+  return level;
+}
+
+std::atomic<std::shared_ptr<const LogHandler>> & handler_slot() noexcept
+{
+  static std::atomic<std::shared_ptr<const LogHandler>> handler{nullptr};
+  return handler;
+}
 
 std::int64_t now_ns() noexcept
 {
@@ -52,7 +62,9 @@ struct FileSink
 {
   explicit FileSink(std::FILE * f) : file(f) {}
   FileSink(const FileSink &) = delete;
+  FileSink(FileSink &&) = delete;
   FileSink & operator=(const FileSink &) = delete;
+  FileSink & operator=(FileSink &&) = delete;
   ~FileSink()
   {
     if (file != nullptr) {
@@ -71,9 +83,12 @@ void write_line(std::FILE * f, const LogRecord & record)
 }
 }  // namespace
 
-void set_log_level(LogLevel level) noexcept { g_level.store(level, std::memory_order_relaxed); }
+void set_log_level(LogLevel level) noexcept
+{
+  level_slot().store(level, std::memory_order_relaxed);
+}
 
-LogLevel log_level() noexcept { return g_level.load(std::memory_order_relaxed); }
+LogLevel log_level() noexcept { return level_slot().load(std::memory_order_relaxed); }
 
 void set_log_handler(LogHandler handler)
 {
@@ -81,14 +96,14 @@ void set_log_handler(LogHandler handler)
   if (handler) {
     next = std::make_shared<const LogHandler>(std::move(handler));
   }
-  g_handler.store(std::move(next), std::memory_order_release);
+  handler_slot().store(std::move(next), std::memory_order_release);
 }
 
 namespace detail
 {
 void log_emit(LogLevel level, std::string_view serial_number, std::string_view message) noexcept
 {
-  const auto handler = g_handler.load(std::memory_order_acquire);
+  const auto handler = handler_slot().load(std::memory_order_acquire);
   if (!handler) {
     return;
   }
@@ -107,8 +122,7 @@ std::string format_log_record(const LogRecord & record)
   return std::format(
     "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z {} [{}] {}", tm.tm_year + 1900, tm.tm_mon + 1,
     tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, millis, level_letter(record.level),
-    record.serial_number.empty() ? std::string_view("-") : record.serial_number,
-    record.message);
+    record.serial_number.empty() ? std::string_view("-") : record.serial_number, record.message);
 }
 
 LogHandler stderr_log_handler()
