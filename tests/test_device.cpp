@@ -918,8 +918,9 @@ TEST_CASE("Device: firmware log without on_firmware_log still counts and ACKs", 
   }
   auto dev = f.open();
   REQUIRE(dev->start_firmware_log().has_value());
-  REQUIRE(wait_until([&] { return dev->stats().log_chunks >= 5; }));
-  CHECK(dev->stats().log_acks_sent >= 5);
+  // log_chunks is counted before the ACK goes out, so wait on the ACK counter.
+  REQUIRE(wait_until([&] { return dev->stats().log_acks_sent >= 5; }));
+  CHECK(dev->stats().log_chunks >= 5);
   REQUIRE(dev->stop_firmware_log().has_value());
   // Subscribing afterwards is allowed and works for the next start.
   std::atomic<std::uint64_t> n{0};
