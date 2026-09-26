@@ -51,13 +51,16 @@ DiscoveredDevice discovered(const SimProcess& sim, Ipv4 ip = {127, 0, 0, 1}) {
 }
 
 /// Pushes at 10 Hz; disconnect after 500 ms of silence; fast backoff so tests stay short.
+/// The data rate is kept very low: a Debug + ASan build on a 2-vCPU runner needs ~2.5 ms per
+/// datagram, and once the receive thread saturates, the pushes it drains only between
+/// batches look late and trip the push timeout.
 struct Fixture {
   std::optional<SimProcess> sim;
   std::string err;
   std::unique_ptr<Context> context;
 
   explicit Fixture(std::vector<std::string> args = {}) {
-    args.insert(args.end(), {"--rate-multiplier", "0.25", "--push-rate", "10"});
+    args.insert(args.end(), {"--rate-multiplier", "0.05", "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(args));
     if (sim) context = loopback_context();
   }
@@ -306,7 +309,7 @@ TEST_CASE("Multi-device: two LiDARs on one Context, looked up by serial", "[sim]
   if (!a.sim) SKIP("simulator unavailable: " << a.err);
   std::string err;
   auto sim_b = SimProcess::start(err, {"--bind", "127.0.0.2", "--sn", "SIM0000000000002",
-                                       "--rate-multiplier", "0.25", "--push-rate", "10"});
+                                       "--rate-multiplier", "0.05", "--push-rate", "10"});
   if (!sim_b) SKIP("second simulator unavailable: " << err);
   REQUIRE(sim_b->ip() == "127.0.0.2");
 
