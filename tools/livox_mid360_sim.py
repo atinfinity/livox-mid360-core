@@ -412,7 +412,8 @@ class Simulator:
     def run(self) -> None:
         now = time.monotonic()
         self.model.power_on(now)
-        self.next_push = self.next_stats = now + 1.0
+        self.next_push = now  # pushes run from boot; unsent while no host is configured
+        self.next_stats = now + 1.0
         self.emit(
             event="ready", ip=self.lidar_ip(), ports=self.ports, sn=self.model.sn, pid=os.getpid()
         )

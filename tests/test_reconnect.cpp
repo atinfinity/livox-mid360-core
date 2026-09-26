@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <thread>
 #include <vector>
@@ -72,7 +73,7 @@ struct Fixture {
     return o;
   }
 
-  [[nodiscard]] std::unique_ptr<Device> open(DeviceOptions o = options()) const {
+  [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions& o = options()) const {
     auto d = Device::open(*context, discovered(*sim), o);
     if (!d) FAIL(to_string(d.error()));
     return std::move(*d);
@@ -87,7 +88,7 @@ struct Recorder {
   std::vector<Event> events;  ///< everything except kStats, in order
 
   void attach(Device& d) {
-    REQUIRE(d.on_frame([this](Frame&&) { ++frames; }).has_value());
+    REQUIRE(d.on_frame([this](const Frame&) { ++frames; }).has_value());
     REQUIRE(d.on_event([this](const Event& e) {
                if (e.kind == Event::Kind::kStats) return;
                const std::lock_guard lock(mutex);
@@ -99,8 +100,8 @@ struct Recorder {
 
   [[nodiscard]] std::optional<Event> last(Event::Kind kind) {
     const std::lock_guard lock(mutex);
-    for (auto it = events.rbegin(); it != events.rend(); ++it) {
-      if (it->kind == kind) return *it;
+    for (const Event& e : std::views::reverse(events)) {
+      if (e.kind == kind) return e;
     }
     return std::nullopt;
   }

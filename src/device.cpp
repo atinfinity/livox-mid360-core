@@ -48,14 +48,14 @@ struct Device::Impl : detail::Receiver {
        SessionOptions sopts, std::stop_source stop_source, Session s)
       : context(ctx),
         options(o),
-        host_setup(std::move(setup)),
+        host_setup(setup),
         session_options(std::move(sopts)),
         stop(std::move(stop_source)),
         session(std::move(s)),
+        info_(std::move(dev)),
         assembler(o.frame_policy, o.timestamp_policy),
         idle_window(std::chrono::duration_cast<Clock::duration>(o.frame_policy.window)),
         next_stats(Clock::now() + o.stats_interval) {
-    info_ = std::move(dev);
     last_push_steady_ns.store(Clock::now().time_since_epoch().count());
   }
 
@@ -503,7 +503,9 @@ struct Device::Impl : detail::Receiver {
     const std::lock_guard lock(cmd_mutex);
     if (auto c = check_connected(); !c) return c;
     auto r = set_mode_locked(target, opts);
-    if (!r && r.error().session) note_command_error(*r.error().session);
+    if (!r) {
+      if (const auto& s = r.error().session) note_command_error(*s);
+    }
     return r;
   }
 };
