@@ -172,7 +172,8 @@ struct Extrinsic
 /// Rotation = Rz(yaw) * Ry(pitch) * Rx(roll) (intrinsic ZYX, right-handed, degrees);
 /// translation = offsets in mm / 1000, added after the rotation.
 [[nodiscard]] Extrinsic extrinsic_from(const InstallAttitude & a) noexcept;
-/// Transforms every point in place; reflectivity, tag, line and offset are untouched.
+/// Transforms every point in place; reflectivity, tag, line and offset are untouched. Call
+/// the span overload qualified (`livox::mid360::apply`): ADL on std::span also finds std::apply.
 void apply(const Extrinsic & e, std::span<Point> points) noexcept;
 void apply(const Extrinsic & e, Frame & frame) noexcept;
 
