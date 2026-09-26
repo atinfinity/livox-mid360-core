@@ -112,6 +112,7 @@ struct Recorder
   {
     const std::lock_guard lock(mutex);
     std::vector<DataType> out;
+    out.reserve(kept.size());
     for (const Frame & f : kept) {
       out.push_back(f.source_type);
     }
@@ -163,8 +164,8 @@ TEST_CASE(
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
+  Recorder rec;  // outlives the Device: callbacks may run until the destructor returns
   auto dev = f.open();
-  Recorder rec;
   rec.attach(*dev);
 
   const auto imu = dev->set_point_format(DataType::kImu);
@@ -188,13 +189,18 @@ TEST_CASE(
   REQUIRE(types.size() >= 8);
   // Monotone: 32 ... 32, 16 ... 16, spherical ... spherical, each present.
   std::size_t i = 0;
-  while (i < types.size() && types[i] == DataType::kCartesian32) ++i;
+  const auto skip = [&](DataType t) {
+    while (i < types.size() && types[i] == t) {
+      ++i;
+    }
+  };
+  skip(DataType::kCartesian32);
   CHECK(i > 0);
   const auto first16 = i;
-  while (i < types.size() && types[i] == DataType::kCartesian16) ++i;
+  skip(DataType::kCartesian16);
   CHECK(i > first16);
   const auto first_sph = i;
-  while (i < types.size() && types[i] == DataType::kSpherical) ++i;
+  skip(DataType::kSpherical);
   CHECK(i > first_sph);
   CHECK(i == types.size());
   CHECK(dev->stats().bad_packets == 0);
@@ -232,8 +238,8 @@ TEST_CASE("Device::set_frame_policy changes the frame period mid-stream", "[poin
   }
   DeviceOptions o = Fixture::options();
   o.frame_policy = {.mode = FramePolicy::Mode::kTimeWindow, .window = 200ms};
+  Recorder rec;  // outlives the Device
   auto dev = f.open(o);
-  Recorder rec;
   rec.attach(*dev);
   CHECK(dev->frame_policy().window == 200ms);
 
@@ -281,8 +287,8 @@ TEST_CASE(
   o.reconnect.discovery_timeout = 200ms;
   o.host_setup.pcl_data_type = DataType::kCartesian32;
   o.host_setup.scan_pattern = ScanPattern::kNonRepetitive;
+  Recorder rec;  // outlives the Device
   auto dev = f.open(o);
-  Recorder rec;
   rec.attach(*dev);
 
   constexpr FovConfig kWin{
