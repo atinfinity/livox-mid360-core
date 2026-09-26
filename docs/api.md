@@ -3,9 +3,9 @@
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions
 are recorded in [issue #9](https://github.com/atinfinity/livox-mid360-core/issues/9); this page
 describes the resulting shape. The data path (#6: receive thread, dispatch, frames, IMU,
-drop counting, `kStats`) is implemented and the headers are part of `mid360.hpp`; push /
-state / HMS handling (#7) and reconnection (#8) are still to come, so `work_state()` returns
-`nullopt` and only `kStats` events are emitted for now.
+drop counting, `kStats`) and push handling (#7: `work_state()`, `hms()`, `kStateChanged`,
+`kHms`) are implemented and the headers are part of `mid360.hpp`; reconnection (#8) is
+still to come.
 
 ## Position in the stack
 
@@ -123,12 +123,14 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   the HANDOFF policy: LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
   (kernel receive time). Whether a PTP/GPS `time_type` switches automatically to `kLidar` is
   decided in #6.
-- `Event{kind, time_ns, old_state, new_state, hms[8], stats}`: a union-like struct where
-  `kind` selects the meaningful fields (`kStateChanged`, `kHms`, `kDisconnected`,
-  `kReconnected`, `kStats`). Per-level HMS filtering is added by #7.
+- `Event{kind, time_ns, old_state, new_state, hms[8], hms_level, stats}`: a union-like struct
+  where `kind` selects the meaningful fields (`kStateChanged`, `kHms`, `kDisconnected`,
+  `kReconnected`, `kStats`). `kHms` fires once per change of the *set* of active codes
+  (slot order ignored) and carries `hms_level`, the highest active `HmsLevel`, for
+  per-level filtering.
 - `DeviceStats{packets, points, frames, imu_samples, bad_packets, dropped_packets (udp_cnt
-  gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, time_offset_ns,
-  time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
+  gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, pushes,
+  last_push_time_ns, time_offset_ns, time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
   atomics written by the receive thread only.
 - `DeviceError{kind, optional<SessionError> session}` with kinds `kSession`,
   `kInvalidArgument`, `kInvalidState`, `kAlreadyRegistered` (same IP opened twice on one
@@ -180,6 +182,23 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
 - **Conversion**: Cartesian32 × 0.001, Cartesian16 × 0.01, spherical
   `x = d·sinθ·cosφ, y = d·sinθ·sinφ, z = d·cosθ` (θ zenith, φ azimuth, 0.01°), `line =
   index % 4` within the packet, `offset_ns = sample time − base_time_ns`.
+
+## Push handling
+
+The LiDAR sends a 0x0102 info push about once per second to the host push port. The receive
+thread parses it and consumes two keys (issue #7 decisions):
+
+- `cur_work_state` (0x8006) becomes `Device::work_state()`. A change relative to the
+  previous push raises `Event::kStateChanged{old_state, new_state}`; the first push after
+  `open()` only records the state. Pushed state is observational: `start_sampling()` /
+  `stop_sampling()` still poll 0x8006 until the target state is reached.
+- `hms_code` (0x8011) becomes `Device::hms()`. When the set of active codes changes (slot
+  order ignored; the baseline after `open()` is all-zero), `Event::kHms{hms, hms_level}` is
+  raised with the slots in wire order and `hms_level` = highest active level.
+
+Other pushed keys are ignored for now. `DeviceStats::pushes` / `last_push_time_ns` count
+accepted pushes (frames that fail to parse count in `bad_packets`) and are what #8 will use
+for disconnect detection.
 
 ## C ABI mapping (phase 3)
 
