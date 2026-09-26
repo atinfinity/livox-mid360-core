@@ -103,7 +103,9 @@ TEST_CASE("format_log_record renders UTC time, level letter and serial", "[log]"
   r.time_ns = 1'700'000'000'123'456'789;  // 2023-11-14T22:13:20.123Z
   r.serial_number = "47MDL9Q0020001";
   r.message = "disconnected: push_timeout";
-  CHECK(format_log_record(r) == "2023-11-14T22:13:20.123Z W [47MDL9Q0020001] disconnected: push_timeout");
+  CHECK(
+    format_log_record(r) ==
+    "2023-11-14T22:13:20.123Z W [47MDL9Q0020001] disconnected: push_timeout");
 
   r.level = LogLevel::kError;
   r.time_ns = 0;
@@ -123,7 +125,8 @@ TEST_CASE("stderr_log_handler is a callable sink", "[log]")
 {
   const LogHandler h = stderr_log_handler();
   REQUIRE(h);
-  const LogRecord r{.level = LogLevel::kInfo, .time_ns = 0, .serial_number = "SN", .message = "stderr sink smoke"};
+  const LogRecord r{
+    .level = LogLevel::kInfo, .time_ns = 0, .serial_number = "SN", .message = "stderr sink smoke"};
   h(r);  // visible in the test output; must not throw
 }
 
@@ -150,7 +153,8 @@ TEST_CASE("file_log_handler creates, appends and reports open errors", "[log]")
   {
     auto h = file_log_handler(path);  // append (default)
     REQUIRE(h.has_value());
-    (*h)(LogRecord{.level = LogLevel::kError, .time_ns = 0, .serial_number = {}, .message = "third"});
+    (*h)(
+      LogRecord{.level = LogLevel::kError, .time_ns = 0, .serial_number = {}, .message = "third"});
   }
   lines = lines_of(path);
   REQUIRE(lines.size() == 3);
@@ -163,7 +167,8 @@ TEST_CASE("file_log_handler creates, appends and reports open errors", "[log]")
   CHECK(lines_of(path).empty());
   std::filesystem::remove(path);
 
-  const auto bad = file_log_handler(std::filesystem::temp_directory_path() / "livox_mid360_no_such_dir" / "x.log");
+  const auto bad =
+    file_log_handler(std::filesystem::temp_directory_path() / "livox_mid360_no_such_dir" / "x.log");
   REQUIRE_FALSE(bad.has_value());
   CHECK(bad.error().kind == DeviceError::Kind::kIo);
   CHECK(bad.error().errno_value == ENOENT);
