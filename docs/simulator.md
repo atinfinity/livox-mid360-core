@@ -56,6 +56,7 @@ The process is driven over its standard streams so that any test harness can use
 | `silence` | `seconds` | ignore commands and stop streaming for `seconds` (simulates a link drop) |
 | `hms` | `codes` (≤ 8 ints) | set the HMS code slots reported by 0x800E/0x8011 and the push |
 | `drop_ack` | `count` | do not answer the next `count` requests (the request is still processed) |
+| `reboot` | | reboot silence, counters reset; if the stored key 0x0004 address differs from the bound one, every socket is rebound to it keeping the ports and a `rebound` event is emitted (a failed bind emits `error` and keeps the old sockets) |
 | `set_status` | any of `diag` (u16 bitfield), `core_temp` (0.01 °C), `time_sync_type`, `time_offset_ns`, `last_sync_time`, `powerup_cnt`, `omit_keys` (list of key ids left out of the push) | overwrite the read-only status keys the push and 0x0101 report (#56 / #55) |
 | `reboot` | | same as receiving 0x0200 |
 | `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR); `work_tgt_mode` is untouched, so forcing a work substate makes the machine chase the target again |
