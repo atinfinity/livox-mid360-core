@@ -67,7 +67,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
   `set_imu_enabled()`, `set_imu_sensor_config()`): **done**
 - #50 LiDAR network config (key `0x0004`) with reboot-required handling — **done**
 - #51 install attitude / extrinsics (key `0x0012`) and optional host-side transform — **done**
-- #52 function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs)
+- #52 function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs) — **done**
 - #53 time-sync status read-back (`0x8009`–`0x800C`) and `set_gps_time` integration with
   `TimestampPolicy`
 - #54 time filter (key `0x0026`; `set_time_filter()`): **done**

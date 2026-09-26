@@ -214,7 +214,9 @@ TEST_CASE("to_string of the typed key values", "[lidar_info]")
       .yaw_start_deg = 0, .yaw_stop_deg = 360, .pitch_start_deg = -7, .pitch_stop_deg = 52}) ==
     "yaw0-360/pitch-7-52");
   CHECK(to_string(FovEnable{.fov0 = true, .fov1 = false}) == "fov0:1,fov1:0");
-  CHECK(to_string(FuncIoConfig{.in0 = 0, .in1 = 0, .out0 = 1, .out1 = 2}) == "0/0/1/2");
+  CHECK(
+    to_string(FuncIoConfig{.out0 = FuncOut::kFollowInput, .out1 = FuncOut::kSafetyZone}) ==
+    "pps/gps/follow_input/safety_zone");
   CHECK(to_string(ImuSensorConfig{}) == "200Hz/4g/2000dps");
   CHECK(
     to_string(ImuSensorConfig{

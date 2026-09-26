@@ -301,6 +301,11 @@ class DeviceModel:
                 return RET_OUT_OF_RANGE, key
             if key in (KEY_FOV0, KEY_FOV1) and not fov_in_range(value):
                 return RET_OUT_OF_RANGE, key
+            if key == KEY_FUNC_IO and (
+                value[0] != 0 or value[1] != 0 or value[2] > 2 or value[3] > 2
+            ):
+                # [unverified] IN0 / IN1 have a single defined function each (#11, #52).
+                return RET_OUT_OF_RANGE, key
             if key in (KEY_DETECT_MODE, KEY_TIME_FILTER, KEY_IMU_EN) and value[0] > 1:
                 return RET_OUT_OF_RANGE, key
             if key == KEY_IMU_SENSOR_CFG and (value[0] > 3 or value[1] > 3 or value[2] > 7):

@@ -128,12 +128,29 @@ enum class DetectMode : std::uint8_t
   kSensitive = 1
 };
 
+/// Pin functions of key 0x0019 (issue #52). The wiki defines a single input function per
+/// pin; the enums exist so a value outside the table is caught before any I/O.
+enum class FuncIn0 : std::uint8_t
+{
+  kPps = 0  ///< PPS input (M12 pin 8)
+};
+enum class FuncIn1 : std::uint8_t
+{
+  kGps = 0  ///< GPS input (M12 pin 10)
+};
+enum class FuncOut : std::uint8_t
+{
+  kNone = 0,
+  kFollowInput = 1,  ///< OUT0 follows IN0, OUT1 follows IN1
+  kSafetyZone = 2    ///< safety zone output 0 / 1
+};
+
 struct FuncIoConfig
-{                         ///< key 0x0019; M12 pins 8, 10, 12, 11
-  std::uint8_t in0 = 0;   ///< 0 = PPS input
-  std::uint8_t in1 = 0;   ///< 0 = GPS input
-  std::uint8_t out0 = 0;  ///< 0 none / 1 follow IN0 / 2 safety zone out 0
-  std::uint8_t out1 = 0;  ///< 0 none / 1 follow IN1 / 2 safety zone out 1
+{  ///< key 0x0019; M12 pins 8, 10, 12, 11. Same layout as the 4 raw bytes.
+  FuncIn0 in0 = FuncIn0::kPps;
+  FuncIn1 in1 = FuncIn1::kGps;
+  FuncOut out0 = FuncOut::kNone;
+  FuncOut out1 = FuncOut::kNone;
 };
 
 enum class ImuOutputRate : std::uint8_t
@@ -244,6 +261,10 @@ struct FovSettings
 /// The offsets are int32 mm and always encodable. The codec does not check this;
 /// Device::set_install_attitude() does.
 [[nodiscard]] bool install_attitude_valid(const InstallAttitude & a) noexcept;
+/// Key 0x0019 sanity (issue #52): every field within its enum. decode_func_io_config()
+/// rejects the same values with KeyError::kOutOfRange; Device::set_func_io_config() checks
+/// this before any I/O.
+[[nodiscard]] bool func_io_config_valid(const FuncIoConfig & c) noexcept;
 
 // ---------------------------------------------------------------------------
 // Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).

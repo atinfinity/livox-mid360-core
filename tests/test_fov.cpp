@@ -339,6 +339,43 @@ TEST_CASE("Device::set_install_attitude / install_attitude round trip and reject
   CHECK(dev->install_attitude()->yaw_deg == a.yaw_deg);  // nothing was sent
 }
 
+TEST_CASE("Device::set_func_io_config / func_io_config round trip and rejections", "[sim]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+  const FuncIoConfig cfg{.out0 = FuncOut::kSafetyZone, .out1 = FuncOut::kFollowInput};
+  const auto r = dev->set_func_io_config(cfg);
+  REQUIRE(r.has_value());
+  CHECK_FALSE(r->reboot_required);
+  const auto back = dev->func_io_config();
+  REQUIRE(back.has_value());
+  CHECK(back->in0 == FuncIn0::kPps);
+  CHECK(back->in1 == FuncIn1::kGps);
+  CHECK(back->out0 == FuncOut::kSafetyZone);
+  CHECK(back->out1 == FuncOut::kFollowInput);
+
+  // Host-side: rejected before any I/O.
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
+  const auto bad = dev->set_func_io_config({.out0 = static_cast<FuncOut>(3)});
+  REQUIRE_FALSE(bad.has_value());
+  CHECK(bad.error().kind == DeviceError::Kind::kInvalidArgument);
+  CHECK(bad.error().key == Key::kFuncIoCfg);
+
+  // LiDAR-side: the raw set<K>() skips the validator, the simulator answers out of range.
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
+  const auto raw = dev->set<Key::kFuncIoCfg>({.in0 = static_cast<FuncIn0>(1)});
+  REQUIRE_FALSE(raw.has_value());
+  CHECK(raw.error().kind == DeviceError::Kind::kSession);
+  REQUIRE(raw.error().session.has_value());
+  CHECK(raw.error().session->kind == SessionErrorKind::kLidarRejected);
+  CHECK(raw.error().session->ret_code == RetCode::kOutOfRange);
+  CHECK(raw.error().session->error_key == static_cast<std::uint16_t>(Key::kFuncIoCfg));
+  CHECK(dev->func_io_config()->out0 == FuncOut::kSafetyZone);  // unchanged
+}
+
 TEST_CASE("Simulator crops the point cloud to the enabled windows", "[fov][sim]")
 {
   Fixture f;
