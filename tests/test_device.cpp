@@ -103,6 +103,7 @@ struct Recorder
   std::atomic<std::uint64_t> stats_events{0};
   std::atomic<std::uint64_t> state_events{0};
   std::atomic<std::uint64_t> hms_events{0};
+  std::atomic<std::uint64_t> diag_events{0};
   std::atomic<bool> ok{true};
   std::mutex mutex;
   std::vector<Frame> kept;    ///< headers only (points cleared) of every frame
@@ -147,8 +148,16 @@ struct Recorder
                events.push_back(e);
                if (e.kind == Event::Kind::kStateChanged) ++state_events;
                if (e.kind == Event::Kind::kHms) ++hms_events;
+               if (e.kind == Event::Kind::kDiagChanged) ++diag_events;
              })
               .has_value());
+  }
+
+  [[nodiscard]] Event last_event()
+  {
+    const std::lock_guard lock(mutex);
+    REQUIRE(!events.empty());
+    return events.back();
   }
 
   [[nodiscard]] Event event(std::size_t i)
@@ -206,6 +215,9 @@ TEST_CASE("Event / DeviceError to_string", "[device]")
   e.hms[0].raw = 1;
   e.hms_level = HmsLevel::kWarning;
   CHECK(to_string(e) == "hms active=1 level=warning");
+  e.kind = Event::Kind::kDiagChanged;
+  e.diag_new.scan = DiagLevel::kError;
+  CHECK(to_string(e) == "diag_changed sys0/scan0/rng0/comm0 -> sys0/scan2/rng0/comm0");
   CHECK(to_string(Event::Kind::kDisconnected) == "disconnected");
   DeviceError err;
   err.kind = DeviceError::Kind::kSession;
@@ -433,6 +445,112 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
   CHECK(dev->work_state() == WorkState::kError);
   CHECK(rec.ok);
   CHECK(dev->stats().bad_packets == 0);
+  dev.reset();
+}
+
+TEST_CASE("Device: push snapshot, on_push and diag events", "[sim][device]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  std::mutex push_mutex;
+  std::optional<LidarStatus> last_push;
+  std::uint64_t push_calls = 0;
+  bool on_receive_thread = true;
+  const auto main_thread = std::this_thread::get_id();
+  REQUIRE(dev
+            ->on_push([&](const LidarStatus & s) {
+              const std::lock_guard lock(push_mutex);
+              if (std::this_thread::get_id() == main_thread) on_receive_thread = false;
+              last_push = s;
+              ++push_calls;
+            })
+            .has_value());
+  const auto pushed = [&] {
+    const std::lock_guard lock(push_mutex);
+    return last_push;
+  };
+
+  // Every status key the simulator pushes lands in the snapshot, stamped with the
+  // receive time; on_push sees the same snapshot after the events of that push.
+  REQUIRE(wait_until([&] { return pushed().has_value(); }));
+  {
+    const auto s = dev->pushed_status();
+    REQUIRE(s);
+    CHECK(s->time_ns != 0);
+    CHECK(s->time_ns == dev->stats().last_push_time_ns);
+    CHECK(s->core_temp == 3500);
+    CHECK(s->powerup_cnt == 1);
+    CHECK(s->time_sync_type == TimeSyncType::kNone);
+    CHECK(s->fw_type == FwType::kLoader);
+    CHECK(s->local_time_now.has_value());
+    REQUIRE(s->lidar_diag_status);
+    CHECK(s->lidar_diag_status->normal());
+    const auto p = pushed();
+    CHECK(p->time_ns != 0);
+    CHECK(p->core_temp == 3500);
+  }
+  CHECK(rec.diag_events == 0);  // all normal == baseline
+
+  // Diag changes once -> one kDiagChanged even though the value keeps being pushed.
+  REQUIRE(f.sim->control(R"({"cmd":"set_status","diag":33,"core_temp":4321})"));  // 0x0021
+  REQUIRE(wait_until([&] { return rec.diag_events >= 1; }));
+  {
+    const Event e = rec.last_event();
+    CHECK(e.kind == Event::Kind::kDiagChanged);
+    CHECK(e.diag_old == DiagStatus{});
+    CHECK(e.diag_new.system == DiagLevel::kWarning);
+    CHECK(e.diag_new.scan == DiagLevel::kError);
+    CHECK(e.diag_new.worst() == DiagLevel::kError);
+  }
+  REQUIRE(wait_until([&] { return pushed()->core_temp == 4321; }));
+  const auto pushes_before = dev->stats().pushes;
+  REQUIRE(wait_until([&] { return dev->stats().pushes >= pushes_before + 3; }));
+  CHECK(rec.diag_events == 1);
+  CHECK(dev->pushed_status()->lidar_diag_status->scan == DiagLevel::kError);
+
+  // The inquire wrapper reads the same key.
+  const auto inquired = dev->diag_status();
+  REQUIRE(inquired);
+  CHECK(*inquired == *dev->pushed_status()->lidar_diag_status);
+
+  // A push that omits keys keeps the earlier values (carry-over) and still delivers.
+  REQUIRE(f.sim->control(R"({"cmd":"set_status","omit_keys":[32775,32782]})"));  // 0x8007 0x800E
+  const auto calls_before = [&] {
+    const std::lock_guard lock(push_mutex);
+    return push_calls;
+  }();
+  REQUIRE(wait_until([&] {
+    const std::lock_guard lock(push_mutex);
+    return push_calls >= calls_before + 3;
+  }));
+  {
+    const auto s = dev->pushed_status();
+    REQUIRE(s);
+    CHECK(s->core_temp == 4321);
+    CHECK(s->lidar_diag_status->scan == DiagLevel::kError);
+    CHECK(rec.diag_events == 1);
+  }
+
+  // Back to normal -> a second event whose new value is all normal.
+  REQUIRE(f.sim->control(R"({"cmd":"set_status","omit_keys":[],"diag":0})"));
+  REQUIRE(wait_until([&] { return rec.diag_events >= 2; }));
+  {
+    const Event e = rec.last_event();
+    CHECK(e.diag_old.scan == DiagLevel::kError);
+    CHECK(e.diag_new == DiagStatus{});
+  }
+  CHECK(on_receive_thread);
+  CHECK(rec.ok);
+  CHECK(dev->stats().bad_packets == 0);
+
+  // Callback slots freeze once sampling is requested, on_push included.
+  REQUIRE(dev->start_sampling());
+  CHECK(dev->on_push(nullptr).error().kind == DeviceError::Kind::kInvalidState);
   dev.reset();
 }
 

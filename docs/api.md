@@ -100,6 +100,7 @@ to C function pointers.
 | `on_frame` | `(Frame &&)` | ownership transferred |
 | `on_imu` | `(const ImuData &)` | trivially copyable |
 | `on_event` | `(const Event &)` | trivially copyable |
+| `on_push` | `(const LidarStatus &)` | the merged snapshot of every 0x0102 push (#56) |
 
 `on_packet` is the raw tier: every accepted point-cloud or IMU packet (parsed, CRC checked when
 `DeviceOptions::verify_crc` is on; never a push), before frame assembly, with the kernel
@@ -128,9 +129,9 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
   (kernel receive time). Whether a PTP/GPS `time_type` switches automatically to `kLidar` is
   decided in #6.
-- `Event{kind, time_ns, old_state, new_state, hms[8], hms_level, stats}`: a union-like struct
-  where `kind` selects the meaningful fields (`kStateChanged`, `kHms`, `kDisconnected`,
-  `kReconnected`, `kStats`). `kHms` fires once per change of the *set* of active codes
+- `Event{kind, time_ns, old_state, new_state, hms[8], hms_level, diag_old, diag_new, stats}`:
+  a union-like struct where `kind` selects the meaningful fields (`kStateChanged`, `kHms`,
+  `kDiagChanged`, `kDisconnected`, `kReconnected`, `kStats`). `kHms` fires once per change of the *set* of active codes
   (slot order ignored) and carries `hms_level`, the highest active `HmsLevel`, for
   per-level filtering.
 - `DeviceStats{packets, points, frames, imu_samples, bad_packets, dropped_packets (udp_cnt
@@ -268,14 +269,20 @@ if (id) {
   rejects, stays empty and is not an error. `to_string()` prints the present keys in wire
   order (`pcl_data_type=CARTESIAN32 lidar_ipcfg=192.168.1.12/255.255.255.0/192.168.1.1 ...`).
 - `LidarStatus` (`status()`, keys 0x8006–0x8011 `kStatusKeys`): same rules; `hms_code` holds
-  the decoded slots. `to_string()` prints `core_temp` in °C and only the active HMS codes
-  (`hms=[0x0103800a:warning]`).
-- `pushed_status()` is `decode_status()` of the last 0x0102 push, kept under the push lock and
-  returned without a round trip; `nullopt` before the first push. `work_state()` and `hms()`
-  are views of it. Keys missing from a push keep the value of an earlier push for
-  `cur_work_state` / `hms_code` (so the change events stay meaningful); the other fields
-  reflect the last push only. Which keys the real push carries is unverified (#11); the
-  simulator pushes all read-only keys.
+  the decoded slots and `time_ns` the host time (CLOCK_REALTIME) at which the ACK arrived.
+  `to_string()` prints `core_temp` in °C and only the active HMS codes
+  (`hms=[0x0103800a:warning]`); `time_ns` is not printed.
+- `pushed_status()` is the same struct fed by the 0x0102 push (#56): the receive thread
+  decodes every status key of each push and merges it into the snapshot, so a key a push
+  omits keeps the value an earlier push carried and a field is empty only until the first
+  push that carries it. `time_ns` is the receive time of the last push. Kept under the push
+  lock, returned without a round trip, `nullopt` before the first push; not cleared by a
+  reconnect. `work_state()` and `hms()` are views of it. Which keys the real push carries is
+  unverified (#11); the simulator pushes all read-only keys.
+- `DiagStatus` (key 0x800E, #55) is four `DiagLevel` nibbles (`system`, `scan`, `ranging`,
+  `communication`; `kNormal` .. `kSafetyError`, meanings unverified on hardware) with
+  `worst()` / `normal()` and `operator==`. `diag_status()` inquires it; the pushed value is
+  `pushed_status()->lidar_diag_status`.
 
 ```cpp
 auto st = dev->status();                          // 0x0101; or dev->pushed_status()
@@ -288,6 +295,8 @@ if (cfg && cfg->fov_cfg_en && cfg->fov_cfg_en->fov0) { /* FOV 0 in use */ }
 | --- | --- |
 | `identity()` | `livox_mid360_device_identity(dev, livox_mid360_identity_t*)` |
 | `settings()` / `status()` / `pushed_status()` | `livox_mid360_device_settings(dev, livox_mid360_settings_t*)` etc.; optionals become a `present` bit mask |
+| `diag_status()` | `livox_mid360_device_diag_status(dev, livox_mid360_diag_status_t*)` |
+| `on_push()` | `livox_mid360_device_on_push(dev, void (*)(const livox_mid360_status_t*, void*), void*)` |
 
 ## FOV
 
@@ -423,7 +432,8 @@ dev->set_time_filter(true);
 ## Push handling
 
 The LiDAR sends a 0x0102 info push about once per second to the host push port. The receive
-thread parses it and consumes two keys (issue #7 decisions):
+thread parses it, merges every status key into `pushed_status()` (#56, see above) and then,
+in this order, raises the change events and calls `on_push` with the merged snapshot:
 
 - `cur_work_state` (0x8006) becomes `Device::work_state()`. A change relative to the
   previous push raises `Event::kStateChanged{old_state, new_state}`; the first push after
@@ -433,9 +443,16 @@ thread parses it and consumes two keys (issue #7 decisions):
   order ignored; the baseline after `open()` is all-zero), `Event::kHms{hms, hms_level}` is
   raised with the slots in wire order and `hms_level` = highest active level.
 
-Other pushed keys are ignored for now. `DeviceStats::pushes` / `last_push_time_ns` count
-accepted pushes (frames that fail to parse count in `bad_packets`); the push is also the
-heartbeat for disconnect detection below.
+- `lidar_diag_status` (0x800E) raises `Event::kDiagChanged{diag_old, diag_new}` when the
+  value differs from the last one seen; the baseline after `open()` is all normal, so a
+  first push with any abnormal subsystem raises (#55).
+- `on_push(const LidarStatus &)` receives the snapshot every push produced, after that
+  push's events. Pushes that fail to parse are neither merged nor delivered.
+
+Temperature and the time-sync keys have no event and are not part of `DeviceStats`: read
+them from the snapshot. `DeviceStats::pushes` / `last_push_time_ns` count accepted pushes
+(frames that fail to parse count in `bad_packets`); the push is also the heartbeat for
+disconnect detection below.
 
 ## Reconnection
 
@@ -572,4 +589,5 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | --- | --- |
 | #6 | Context sockets and receive thread, dispatch by IP, `on_packet`, frame assembly, `on_frame` / `on_imu`, drop counting, timestamp policy, `kStats` events |
 | #7 | 0x0102 push parsing, work-state machine, `kStateChanged` / `kHms` events, `work_state()` |
+| #56 / #55 | full push snapshot in `pushed_status()` (`time_ns`, carry-over), `on_push`, `DiagStatus` typing, `diag_status()`, `kDiagChanged` |
 | #8 | disconnect detection, reconnection, `kDisconnected` / `kReconnected`, multiple devices by serial |

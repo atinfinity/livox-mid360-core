@@ -111,7 +111,7 @@ TEST_CASE("golden: LiDAR-originated frames parse", "[golden]")
   REQUIRE(push->values.size() == 4);
   CHECK(decode_i32(*find_key(push->values, Key::kCoreTemp)).value() == 4321);
   auto diag = decode_diag_status(*find_key(push->values, Key::kLidarDiagStatus)).value();
-  CHECK(diag.scan == 2);
+  CHECK(diag.scan == DiagLevel::kError);
   auto hms = decode_hms_codes(*find_key(push->values, Key::kHmsCode)).value();
   CHECK(decode_hms(hms[0]).abnormal_id == 0x0102);
   CHECK(decode_hms(hms[1]).level == HmsLevel::kFatal);

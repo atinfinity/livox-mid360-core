@@ -222,8 +222,12 @@ TEST_CASE("to_string of the typed key values", "[lidar_info]")
       .accel_range = ImuAccelRange::k32g,
       .gyro_range = ImuGyroRange::k15_625dps}) == "50Hz/32g/15.625dps");
   CHECK(
-    to_string(DiagStatus{.system = 0, .scan = 1, .ranging = 2, .communication = 3}) ==
-    "sys0/scan1/rng2/comm3");
+    to_string(DiagStatus{
+      .system = DiagLevel::kNormal,
+      .scan = DiagLevel::kWarning,
+      .ranging = DiagLevel::kError,
+      .communication = DiagLevel::kSafetyError}) == "sys0/scan1/rng2/comm3");
+  CHECK(to_string(DiagLevel::kSafetyError) == "safety_error");
   CHECK(to_string(DetectMode::kSensitive) == "sensitive");
   CHECK(to_string(TimeSyncType::kPtp) == "ptp");
   CHECK(to_string(FwType::kApp) == "app");
@@ -303,7 +307,8 @@ TEST_CASE("decode_status fills every key and formats the line", "[lidar_info]")
   CHECK(s.time_offset == -5);
   CHECK(s.time_sync_type == TimeSyncType::kGps);
   REQUIRE(s.lidar_diag_status.has_value());
-  CHECK(s.lidar_diag_status->scan == 2);
+  CHECK(s.lidar_diag_status->scan == DiagLevel::kError);
+  CHECK(s.time_ns == 0);
   CHECK(s.fw_type == FwType::kApp);
   REQUIRE(s.hms_code.has_value());
   CHECK((*s.hms_code)[0].raw == 0x01030002);

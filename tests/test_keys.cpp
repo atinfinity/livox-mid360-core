@@ -134,10 +134,21 @@ TEST_CASE("read-only decoders", "[keys]")
   CHECK(decode_work_state(bytes_of({0x06})).value() == WorkState::kMotorStartup);
   auto ds = decode_diag_status(bytes_of({0x21, 0x30}));
   REQUIRE(ds);
-  CHECK(ds->system == 1);
-  CHECK(ds->scan == 2);
-  CHECK(ds->ranging == 0);
-  CHECK(ds->communication == 3);
+  CHECK(ds->system == DiagLevel::kWarning);
+  CHECK(ds->scan == DiagLevel::kError);
+  CHECK(ds->ranging == DiagLevel::kNormal);
+  CHECK(ds->communication == DiagLevel::kSafetyError);
+  CHECK(ds->worst() == DiagLevel::kSafetyError);
+  CHECK_FALSE(ds->normal());
+  CHECK(
+    *ds == DiagStatus{
+             .system = DiagLevel::kWarning,
+             .scan = DiagLevel::kError,
+             .ranging = DiagLevel::kNormal,
+             .communication = DiagLevel::kSafetyError});
+  CHECK(DiagStatus{}.normal());
+  CHECK(decode_diag_status(bytes_of({0x04, 0x00})).error() == KeyError::kOutOfRange);
+  CHECK(decode_diag_status(bytes_of({0x00, 0x40})).error() == KeyError::kOutOfRange);
   CHECK(decode_i32(bytes_of({0xE1, 0x10, 0, 0})).value() == 4321);
   CHECK(decode_i64(bytes_of({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})).value() == -1);
   CHECK(decode_u64(bytes_of({1, 0, 0, 0, 0, 0, 0, 0})).value() == 1);

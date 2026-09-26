@@ -6,6 +6,7 @@
 // (0x0021 speed_mode, 0x0029 pc_freq_mod) are listed for completeness but not modelled.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -180,12 +181,32 @@ enum class TimeSyncType : std::uint8_t
 };
 
 /// key 0x800E: per-module abnormality level 0 normal / 1 warning / 2 error / 3 safety_err.
+/// One nibble of key 0x800E [unverified on hardware, #11]: 0 normal .. 3 safety error.
+enum class DiagLevel : std::uint8_t
+{
+  kNormal = 0,
+  kWarning = 1,
+  kError = 2,
+  kSafetyError = 3
+};
+
+/// Key 0x800E, u16 bitfield split into four subsystem levels (issue #55). Values above 3 in a
+/// nibble are rejected by decode_diag_status() with kOutOfRange.
 struct DiagStatus
 {
-  std::uint8_t system;         ///< bit 0-3
-  std::uint8_t scan;           ///< bit 4-7
-  std::uint8_t ranging;        ///< bit 8-11
-  std::uint8_t communication;  ///< bit 12-15
+  DiagLevel system = DiagLevel::kNormal;         ///< bit 0-3
+  DiagLevel scan = DiagLevel::kNormal;           ///< bit 4-7
+  DiagLevel ranging = DiagLevel::kNormal;        ///< bit 8-11
+  DiagLevel communication = DiagLevel::kNormal;  ///< bit 12-15
+
+  [[nodiscard]] constexpr bool operator==(const DiagStatus &) const noexcept = default;
+  /// Highest level among the four subsystems.
+  [[nodiscard]] constexpr DiagLevel worst() const noexcept
+  {
+    return std::max({system, scan, ranging, communication});
+  }
+  /// worst() == kNormal.
+  [[nodiscard]] constexpr bool normal() const noexcept { return worst() == DiagLevel::kNormal; }
 };
 
 enum class FwType : std::uint8_t

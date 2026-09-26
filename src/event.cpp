@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#include "livox/mid360/lidar_info.hpp"
+
 namespace livox::mid360
 {
 
@@ -15,6 +17,8 @@ std::string_view to_string(Event::Kind kind) noexcept
       return "state_changed";
     case Event::Kind::kHms:
       return "hms";
+    case Event::Kind::kDiagChanged:
+      return "diag_changed";
     case Event::Kind::kDisconnected:
       return "disconnected";
     case Event::Kind::kReconnected:
@@ -62,6 +66,9 @@ std::string to_string(const Event & event)
       out += to_string(event.hms_level);
       break;
     }
+    case Event::Kind::kDiagChanged:
+      out += " " + to_string(event.diag_old) + " -> " + to_string(event.diag_new);
+      break;
     case Event::Kind::kStats: {
       const DeviceStats & s = event.stats;
       out += " packets=" + std::to_string(s.packets) + " points=" + std::to_string(s.points) +
