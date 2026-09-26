@@ -1,5 +1,7 @@
 # Public API design (device layer)
 
+> The overview of all layers, threads and data flows is in [architecture.md](architecture.md).
+
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions
 are recorded in [issue #9](https://github.com/atinfinity/livox-mid360-core/issues/9); this page
 describes the resulting shape. The data path (#6: receive thread, dispatch, frames, IMU,
@@ -121,7 +123,7 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   header's `frame_cnt` changes, a jump caused by lost packets still closes one frame;
   `kTimeWindow` closes every `window` of point time (livox_ros_driver2 publish period).
 - `TimestampPolicy`: `kLidar` (packet time as is, for PTP/GPS), `kHostOffsetOnce` (default,
-  the HANDOFF policy: LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
+  LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
   (kernel receive time). Whether a PTP/GPS `time_type` switches automatically to `kLidar` is
   decided in #6.
 - `Event{kind, time_ns, old_state, new_state, hms[8], hms_level, stats}`: a union-like struct
