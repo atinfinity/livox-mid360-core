@@ -238,7 +238,8 @@ private:
       }
     }
     if (!failed) {
-      failed = DeviceError{.kind = DeviceError::Kind::kDecodeFailed, .key = K};
+      failed =
+        DeviceError{.kind = DeviceError::Kind::kDecodeFailed, .session = std::nullopt, .key = K};
     }
     return {};
   }
