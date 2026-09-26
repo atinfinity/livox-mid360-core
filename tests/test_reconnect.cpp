@@ -291,7 +291,7 @@ TEST_CASE("Reconnect: invalid options", "[reconnect]") {
   DeviceOptions o;
   o.reconnect.max_backoff = 100ms;
   o.reconnect.initial_backoff = 200ms;
-  const auto d = Device::open(*ctx, DiscoveredDevice{.serial_number = "X"}, o);
+  const auto d = Device::open(*ctx, DiscoveredDevice{.serial_number = "X", .from = {}}, o);
   REQUIRE_FALSE(d.has_value());
   CHECK(d.error().kind == DeviceError::Kind::kInvalidArgument);
 }

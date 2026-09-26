@@ -198,8 +198,7 @@ struct Device::Impl : detail::Receiver {
     }
     pushes.fetch_add(1, std::memory_order_relaxed);
     last_push_time_ns.store(d.recv_time_ns, std::memory_order_relaxed);
-    last_push_steady_ns.store(Clock::now().time_since_epoch().count(),
-                              std::memory_order_relaxed);
+    last_push_steady_ns.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
     refresh_callbacks();
 
     std::optional<Event> state_event;
@@ -400,9 +399,8 @@ struct Device::Impl : detail::Receiver {
         const auto r = attempt();
         lock.lock();
         if (r) break;
-        conn_cv.wait_for(lock, backoff, [&] {
-          return stopping() || connected.load(std::memory_order_acquire);
-        });
+        conn_cv.wait_for(lock, backoff,
+                         [&] { return stopping() || connected.load(std::memory_order_acquire); });
         backoff = std::min(backoff * 2, options.reconnect.max_backoff);
       }
     }

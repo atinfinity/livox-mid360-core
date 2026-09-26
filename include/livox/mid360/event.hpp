@@ -63,7 +63,7 @@ struct Event {
     kStats,         ///< periodic `stats` snapshot (#6)
   };
   Kind kind = Kind::kStats;
-  std::uint64_t time_ns = 0;               ///< host time of the observation
+  std::uint64_t time_ns = 0;                          ///< host time of the observation
   DisconnectReason reason = DisconnectReason::kNone;  ///< kDisconnected / kReconnected
   std::uint32_t attempts = 0;              ///< kReconnected: attempts including the successful one
   WorkState old_state = WorkState::kIdle;  ///< kStateChanged
