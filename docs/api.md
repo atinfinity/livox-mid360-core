@@ -81,7 +81,8 @@ dev.reset();  // before ctx
    thread instead.
 4. **An exception escaping a callback terminates the process.** Catching it would leave the
    device state undefined and has no meaning across the C ABI.
-5. Observation methods (`stats()`, `work_state()`, `info()`) are thread-safe snapshots.
+5. Observation methods (`stats()`, `work_state()`, `info()`) are thread-safe snapshots;
+   `identity()` is a synchronous inquire and follows the command rules above.
 
 ## Callbacks
 
@@ -239,6 +240,32 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 | `kLidarDiagStatus` 0x800E | `DiagStatus` | |
 | `kFwType` 0x8010 | `FwType` | |
 | `kHmsCode` 0x8011 | `std::array<std::uint32_t, 8>` | raw codes; `Device::hms()` decodes them |
+
+## Identity, settings and status
+
+`lidar_info.hpp` (issues #38 / #41) aggregates the read-only keys into plain structs. Each has
+a key list, a decoder over any parsed key-value list (an `InquireResult` or a 0x0102 push) and a
+one-line `to_string()` with the wire key names (`name=value`, greppable in logs).
+
+```cpp
+auto id = dev->identity();                      // one 0x0101 of kIdentityKeys, not cached
+if (id) {
+  LOG(to_string(*id));
+  // sn=47MDL9K0010001 product_info=... version_app=13.18.0.244 ... mac=..
+  if (id->version_app.v[0] < 13) { /* firmware too old */ }
+}
+```
+
+- `DeviceIdentity` (`identity()`, keys 0x8000–0x8005): `serial_number`, `product_info`,
+  `version_app` / `version_loader` / `version_hardware` (`Version`, `to_string()` gives
+  `aa.bb.cc.dd`) and `mac`. A rejected or unanswered inquire is a `DeviceError`; a key missing
+  from the ACK leaves its field empty / zero (`decode_identity()` never fails).
+- `identity()` is not cached: `info()` keeps the discovery data (serial, IP, `dev_type`) and is
+  answered without a round trip.
+
+| C++ | C |
+| --- | --- |
+| `identity()` | `livox_mid360_device_identity(dev, livox_mid360_identity_t*)` |
 
 ## Push handling
 

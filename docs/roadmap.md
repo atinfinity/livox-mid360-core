@@ -57,7 +57,7 @@ The generic `Device::set<K>()` / `get<K>()` / `set_many` / `get_many` over `key_
 (#57, done) are the primary API; the dedicated methods below are implemented as thin wrappers
 over them and only add what the raw key does not express (waits, combined keys, events).
 
-- #38 firmware type and version query
+- #38 firmware type and version query (`Device::identity()`, `lidar_info.hpp`): **done**
 - #39 FOV configuration and enable (keys `0x0015` / `0x0016` / `0x0017`)
 - #40 coordinate format, scan pattern and point-cloud frame rate
 - #41 read-back of stored settings and live status

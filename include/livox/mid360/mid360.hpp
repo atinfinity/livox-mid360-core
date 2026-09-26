@@ -15,6 +15,7 @@
 #include "livox/mid360/frame.hpp"
 #include "livox/mid360/hms.hpp"
 #include "livox/mid360/keys.hpp"
+#include "livox/mid360/lidar_info.hpp"
 #include "livox/mid360/protocol.hpp"
 #include "livox/mid360/session.hpp"
 #include "livox/mid360/transport.hpp"

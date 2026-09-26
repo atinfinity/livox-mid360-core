@@ -734,6 +734,15 @@ std::expected<InquireResult, DeviceError> Device::inquire(
   return inquire(raw, opts);
 }
 
+std::expected<DeviceIdentity, DeviceError> Device::identity(std::optional<RequestOptions> opts)
+{
+  auto r = inquire(kIdentityKeys, opts);
+  if (!r) {
+    return std::unexpected(r.error());
+  }
+  return decode_identity(r->values);
+}
+
 std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts)
 {
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");

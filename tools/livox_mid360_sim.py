@@ -184,6 +184,10 @@ class DeviceModel:
     """
 
     sn: str = 'SIM0000000000001'
+    product_info: str = 'MID360-SIM'
+    version_app: tuple[int, int, int, int] = (0, 0, 0, 1)
+    version_loader: tuple[int, int, int, int] = (0, 0, 0, 1)
+    version_hardware: tuple[int, int, int, int] = (0, 0, 0, 1)
     startup_delay: float = 0.3
     selfcheck_delay: float = 0.1
     settings: dict[int, bytes] = field(default_factory=factory_settings)
@@ -317,10 +321,10 @@ class DeviceModel:
             return self.settings[key]
         ro = {
             KEY_SN: self.sn.encode().ljust(16, b'\0')[:16],
-            KEY_PRODUCT_INFO: b'MID360-SIM'.ljust(64, b'\0'),
-            KEY_VERSION_APP: bytes([0, 0, 0, 1]),
-            KEY_VERSION_LOADER: bytes([0, 0, 0, 1]),
-            KEY_VERSION_HW: bytes([0, 0, 0, 1]),
+            KEY_PRODUCT_INFO: self.product_info.encode().ljust(64, b'\0')[:64],
+            KEY_VERSION_APP: bytes(self.version_app),
+            KEY_VERSION_LOADER: bytes(self.version_loader),
+            KEY_VERSION_HW: bytes(self.version_hardware),
             KEY_MAC: bytes([2, 0, 0, 0, 0, 1]),
             KEY_CUR_WORK_STATE: bytes([self.work_state]),
             KEY_CORE_TEMP: struct.pack('<i', 3500),
@@ -408,7 +412,13 @@ class Simulator:
         self.control = control
         self.verbose = args.verbose
         self.model = DeviceModel(
-            sn=args.sn, startup_delay=args.startup_delay, selfcheck_delay=args.selfcheck_delay
+            sn=args.sn,
+            product_info=args.product_info,
+            version_app=parse_version(args.version_app),
+            version_loader=parse_version(args.version_loader),
+            version_hardware=parse_version(args.version_hardware),
+            startup_delay=args.startup_delay,
+            selfcheck_delay=args.selfcheck_delay,
         )
         self.model.on_state = self._on_state
         self.points = PointSource(args.seed)
@@ -752,6 +762,14 @@ class Simulator:
 
 
 # --------------------------------------------------------------------------- CLI
+def parse_version(text: str) -> tuple[int, int, int, int]:
+    """'a.b.c.d' -> 4 bytes (keys 0x8002-0x8004)."""
+    parts = [int(x) for x in text.split('.')]
+    if len(parts) != 4 or not all(0 <= x <= 255 for x in parts):
+        raise argparse.ArgumentTypeError(f'version must be a.b.c.d with 0-255 each: {text!r}')
+    return parts[0], parts[1], parts[2], parts[3]
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Livox Mid-360 simulator')
     p.add_argument('--bind', default='0.0.0.0', help='address to bind (default 0.0.0.0)')
@@ -762,6 +780,10 @@ def build_parser() -> argparse.ArgumentParser:
         help='discovery port; cmd/push/pcl/imu follow at +100..+400. 0 = pick free ports',
     )
     p.add_argument('--sn', default='SIM0000000000001')
+    p.add_argument('--product-info', default='MID360-SIM', help='key 0x8001 (<= 64 chars)')
+    p.add_argument('--version-app', default='0.0.0.1', help='key 0x8002 as a.b.c.d')
+    p.add_argument('--version-loader', default='0.0.0.1', help='key 0x8003 as a.b.c.d')
+    p.add_argument('--version-hardware', default='0.0.0.1', help='key 0x8004 as a.b.c.d')
     p.add_argument('--seed', type=int, default=1)
     p.add_argument(
         '--startup-delay', type=float, default=0.3, help='seconds spent in MOTORSTARTUP'
