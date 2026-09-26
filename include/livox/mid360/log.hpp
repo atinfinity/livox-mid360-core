@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Opt-in diagnostic logging (issue #42). Silent by default: the SDK never writes to the
 // console unless the application installs a handler. Unrelated to the LiDAR firmware log
-// stream (port 56500, 0x03xx commands), which is tracked in #44.
+// stream (port 56500, 0x03xx commands), see firmware_log.hpp / Device::on_firmware_log (#44).
 #pragma once
 
 #include <cstdint>

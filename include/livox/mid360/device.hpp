@@ -34,6 +34,7 @@
 #include "livox/mid360/context.hpp"
 #include "livox/mid360/event.hpp"
 #include "livox/mid360/export.hpp"
+#include "livox/mid360/firmware_log.hpp"
 #include "livox/mid360/frame.hpp"
 #include "livox/mid360/keys.hpp"
 #include "livox/mid360/lidar_info.hpp"
@@ -77,6 +78,8 @@ struct DeviceOptions
   /// Period of Event::Kind::kStats; 0 disables it.
   std::chrono::milliseconds stats_interval{1000};
   ReconnectOptions reconnect;
+  /// LiDAR-side port that 0x0301 is sent to (#44). Tests point it at the simulator.
+  std::uint16_t lidar_log_port = kLogPort;
 };
 
 /// Per-packet metadata handed to on_packet together with the non-owning DataPacketView.
@@ -92,6 +95,8 @@ using ImuCallback = std::function<void(const ImuData &)>;
 using EventCallback = std::function<void(const Event &)>;
 /// Every successfully parsed 0x0102 push, as the snapshot pushed_status() now returns (#56).
 using PushCallback = std::function<void(const LidarStatus &)>;
+/// One 0x0300 firmware log push (#44); `data` is valid only during the call.
+using FirmwareLogCallback = std::function<void(const FirmwareLogChunk &)>;
 
 /// Result of Device::set<K>() / set_many<>(): the LiDAR accepted the values.
 struct SetResult
@@ -127,6 +132,8 @@ public:
   /// Receive thread, once per parsed push, after the push's kStateChanged / kHms /
   /// kDiagChanged events; the argument is the merged snapshot (missing keys carried over).
   std::expected<void, DeviceError> on_push(PushCallback cb);
+  /// Receive thread, once per 0x0300 push including begin / end packets (#44).
+  std::expected<void, DeviceError> on_firmware_log(FirmwareLogCallback cb);
 
   // --- commands (caller's thread, serialised, blocking; see Session for the semantics)
   /// work_tgt_mode = SAMPLING, then wait for cur_work_state (host_setup.wait_timeout).
@@ -225,6 +232,20 @@ public:
   /// read time_sync_status() back to see whether the LiDAR took it (type becomes kGps).
   std::expected<void, DeviceError> set_gps_time(
     std::uint64_t pps_time_ns, std::optional<RequestOptions> opts = std::nullopt);
+
+  // --- firmware log collection (issue #44): 0x0301 on the LiDAR's log port, pushes on
+  // the Context's log socket. Layouts follow SDK2 and are unverified on hardware (#11).
+  /// Writes key 0x0009 (this host, the Context's log port) through the session, then sends
+  /// 0x0301 enable from the log socket and waits for its ACK (`opts`: timeout / attempts,
+  /// the session defaults otherwise). Idempotent; replayed after a reconnect until a
+  /// successful stop_firmware_log(). ret_code != 0 → kSession / kLidarRejected.
+  std::expected<void, DeviceError> start_firmware_log(
+    FirmwareLogType type = FirmwareLogType::kRealTime,
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0301 disable. The destructor does not send it: the LiDAR keeps pushing.
+  std::expected<void, DeviceError> stop_firmware_log(
+    FirmwareLogType type = FirmwareLogType::kRealTime,
+    std::optional<RequestOptions> opts = std::nullopt);
 
   /// Key 0x800E by inquire (#55); the pushed value is pushed_status()->lidar_diag_status
   /// and changes raise Event::kDiagChanged.

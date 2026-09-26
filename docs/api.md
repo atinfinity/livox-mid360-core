@@ -673,7 +673,47 @@ set_log_handler([](const LogRecord & r) { my_logger(r.level, r.serial_number, r.
   writes and flushes it per record, and fails with `DeviceError::Kind::kIo` plus
   `errno_value` when the file cannot be opened.
 - This is the SDK's own diagnostic trail. The LiDAR **firmware** log stream (port 56500,
-  0x03xx commands) is a separate feature, tracked in #44.
+  0x03xx commands) is the separate feature below.
+
+## Firmware log
+
+The LiDAR can stream its own firmware log to the host (#44): `0x0301` "collection log" turns a
+log type on or off, after which the LiDAR pushes `0x0300` packets (a 16-byte header:
+`log_type`, `file_index`, `file_num`, `flag`, `timestamp`, `trans_index`, `data_length`, then
+raw log bytes) from its port 56500 to the host address written to key `0x0009`
+(`log_host_ipcfg`). The codec lives in `firmware_log.hpp` (`FirmwareLogPushHeader`,
+`parse_firmware_log_push`, `encode_firmware_log_push_ack`, ...).
+
+- **Socket**: the Context opens a fourth receive socket, `ContextOptions::log_port` (default
+  56501, `0` = ephemeral), and counts its datagrams in `ContextStats::log_datagrams`. Log
+  packets are dispatched to the Device by source IP like data packets.
+- **Start / stop**: `start_firmware_log(type = kRealTime, opts)` writes key `0x0009` (this
+  host's address, i.e. `SessionOptions::bind_address` or the command socket's address, and the
+  Context's log port) through the session, then sends `0x0301 {type, enable=1}` from the log
+  socket to `DeviceOptions::lidar_log_port` (56500) and waits for the ACK with the usual
+  `RequestOptions` (timeout, attempts, same `seq` on retry, `cancel()` aborts it). Errors are
+  `DeviceError` with the `SessionError` inside (`kTimeout`, `kLidarRejected` with the
+  `ret_code`, `kCancelled`, ...). `stop_firmware_log(type)` sends `enable=0`. A start that
+  succeeded is replayed after a reconnect until a stop succeeds; the destructor does not stop
+  the stream (the LiDAR keeps pushing to a host that no longer listens, as with sampling).
+- **Delivery**: `on_firmware_log(cb)` receives every push as a `FirmwareLogChunk` (parsed
+  header, host receive time, data span valid during the call) on the receive thread,
+  including the packets flagged "file begin" and "file end" (data may be empty). The callback
+  is optional: without it the Device still counts and acknowledges. Pushes whose flag asks for
+  it are acknowledged automatically (`0x0300` REQ with `{ret_code, log_type, file_index,
+  trans_index}` back to the sender; `DeviceStats::log_acks_sent`).
+- **Gaps**: within a file `trans_index` must advance by one; anything else raises
+  `Event::Kind::kFirmwareLogGap` (`log_file_index`, `log_expected`, `log_actual`) and
+  increments `log_gaps`. A "file begin" or a new `file_index` resets the check.
+- **Stats**: `log_chunks`, `log_bytes`, `log_gaps`, `log_acks_sent`, `bad_log_packets`
+  (unparseable log-port datagrams), `last_log_time_ns`.
+- **Sample**: `examples/collect_firmware_log.cpp` writes one file per firmware log file
+  (`<SN>_<UTC start>_<type>_<file_index>.log`) and prints a progress line per second; see
+  `examples/README.md`. The simulator streams synthetic chunks (`--log-chunk-interval`,
+  `--log-ack-every`, `log_drop` / `log_new_file` controls, [simulator.md](simulator.md)).
+- **Unverified on hardware** (#11): whether the LiDAR sends to key `0x0009` or to the `0x0301`
+  sender, the `ret_code` of a repeated enable, the meaning of `timestamp` / `file_num`, whether
+  the exception log (type 1) is supported and the frame type of the host ACK.
 
 ## Multiple devices
 
@@ -707,6 +747,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `ReconnectOptions`, `DisconnectReason` | same layout, `typedef struct` / `enum` |
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
 | `set<K>` / `get<K>` (#57) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper (#38–#56) exists |
+| `on_firmware_log` / `start_firmware_log` / `stop_firmware_log` (#44) | `livox_mid360_device_on_firmware_log(dev, cb, user)` with `livox_mid360_firmware_log_chunk_t` (header fields, `const uint8_t* data, size_t len` valid during the call) / `..._start_firmware_log(dev, type)` / `..._stop_firmware_log(dev, type)` |
 | `set_log_level` / `set_log_handler` (#42) | `livox_mid360_set_log_level(level)` / `livox_mid360_set_log_handler(cb, user)` with `livox_mid360_log_record_t` (`level`, `time_ns`, NUL-terminated `serial_number` and `message` valid during the call) |
 
 `livox-mid360-ros2` (separate repository) uses the C++ API directly: one `Context`, one

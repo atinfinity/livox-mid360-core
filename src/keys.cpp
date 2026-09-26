@@ -28,6 +28,8 @@ std::string_view to_string(Key k) noexcept
       return "pointcloud_host_ipcfg";
     case Key::kImuHostIpCfg:
       return "imu_host_ipcfg";
+    case Key::kLogHostIpCfg:
+      return "log_host_ipcfg";
     case Key::kInstallAttitude:
       return "install_attitude";
     case Key::kFovCfg0:
@@ -120,6 +122,7 @@ std::optional<std::size_t> key_value_length(Key k) noexcept
     case Key::kStateInfoHostIpCfg:
     case Key::kPointCloudHostIpCfg:
     case Key::kImuHostIpCfg:
+    case Key::kLogHostIpCfg:
     case Key::kLocalTimeNow:
     case Key::kLastSyncTime:
     case Key::kTimeOffset:

@@ -170,6 +170,10 @@ std::string_view to_string(CmdId id) noexcept
       return "FACTORY_RESET";
     case CmdId::kSetGpsTimestamp:
       return "SET_GPS_TIMESTAMP";
+    case CmdId::kPushLog:
+      return "PUSH_LOG";
+    case CmdId::kCollectionLog:
+      return "COLLECTION_LOG";
   }
   return "UNKNOWN";
 }
