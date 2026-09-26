@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Livox Mid-360 simulator: a fake LiDAR speaking the wire protocol over UDP.
+"""
+Livox Mid-360 simulator: a fake LiDAR speaking the wire protocol over UDP.
 
 Used by the C++ integration tests (and by hand) while no hardware is available. Design
 decisions are recorded in GitHub issue #3. Standard library only.
@@ -19,6 +20,8 @@ Behaviour the simulator assumes and that must be reconciled with hardware (#11):
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
+from dataclasses import dataclass, field
 import json
 import os
 import random
@@ -27,8 +30,6 @@ import socket
 import struct
 import sys
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import livox_mid360_proto as proto  # noqa: E402
@@ -134,10 +135,10 @@ PUSH_RATE = 1.0
 
 def factory_settings() -> dict[int, bytes]:
     """Writable keys at factory defaults (pcl_data_type=1, imu off, no host configured)."""
-    zero = lambda n: b"\0" * n  # noqa: E731
+    zero = lambda n: b'\0' * n  # noqa: E731
     return {
-        KEY_PCL_DATA_TYPE: b"\x01",
-        KEY_PATTERN_MODE: b"\x00",
+        KEY_PCL_DATA_TYPE: b'\x01',
+        KEY_PATTERN_MODE: b'\x00',
         KEY_LIDAR_IPCFG: bytes([192, 168, 1, 100, 255, 255, 255, 0, 192, 168, 1, 1]),
         KEY_STATE_HOST: zero(8),
         KEY_PCL_HOST: zero(8),
@@ -145,22 +146,22 @@ def factory_settings() -> dict[int, bytes]:
         KEY_INSTALL_ATTITUDE: zero(24),
         KEY_FOV0: zero(20),
         KEY_FOV1: zero(20),
-        KEY_FOV_EN: b"\x00",
-        KEY_DETECT_MODE: b"\x00",
+        KEY_FOV_EN: b'\x00',
+        KEY_DETECT_MODE: b'\x00',
         KEY_FUNC_IO: zero(4),
         KEY_WORK_TGT_MODE: bytes([WS_SAMPLING]),
-        KEY_IMU_EN: b"\x00",
-        KEY_SPEED_MODE: b"\x00",
-        KEY_TIME_FILTER: b"\x00",
-        KEY_PC_FREQ_MOD: b"\x00",
-        KEY_IMU_SENSOR_CFG: b"\x00\x00\x00",
+        KEY_IMU_EN: b'\x00',
+        KEY_SPEED_MODE: b'\x00',
+        KEY_TIME_FILTER: b'\x00',
+        KEY_PC_FREQ_MOD: b'\x00',
+        KEY_IMU_SENSOR_CFG: b'\x00\x00\x00',
     }
 
 
 def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
-    ip = ".".join(map(str, v[:4]))
-    dst, src = struct.unpack_from("<HH", v, 4)
-    if v[:4] == b"\0\0\0\0" or dst == 0:
+    ip = '.'.join(map(str, v[:4]))
+    dst, src = struct.unpack_from('<HH', v, 4)
+    if v[:4] == b'\0\0\0\0' or dst == 0:
         return None
     return ip, dst, src
 
@@ -170,7 +171,7 @@ def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
 class DeviceModel:
     """Pure state machine + parameter table; no sockets, unit-testable."""
 
-    sn: str = "SIM0000000000001"
+    sn: str = 'SIM0000000000001'
     startup_delay: float = 0.3
     settings: dict[int, bytes] = field(default_factory=factory_settings)
     work_state: int = WS_MOTORSTARTUP
@@ -242,7 +243,7 @@ class DeviceModel:
         for key in keys:
             v = self.read_key(key, now_ns)
             if v is None:
-                return RET_PARAM_NOT_SUPPORT, [(key, b"")]
+                return RET_PARAM_NOT_SUPPORT, [(key, b'')]
             out.append((key, v))
         return RET_OK, out
 
@@ -250,29 +251,29 @@ class DeviceModel:
         if key in self.settings:
             return self.settings[key]
         ro = {
-            KEY_SN: self.sn.encode().ljust(16, b"\0")[:16],
-            KEY_PRODUCT_INFO: b"MID360-SIM".ljust(64, b"\0"),
+            KEY_SN: self.sn.encode().ljust(16, b'\0')[:16],
+            KEY_PRODUCT_INFO: b'MID360-SIM'.ljust(64, b'\0'),
             KEY_VERSION_APP: bytes([0, 0, 0, 1]),
             KEY_VERSION_LOADER: bytes([0, 0, 0, 1]),
             KEY_VERSION_HW: bytes([0, 0, 0, 1]),
             KEY_MAC: bytes([2, 0, 0, 0, 0, 1]),
             KEY_CUR_WORK_STATE: bytes([self.work_state]),
-            KEY_CORE_TEMP: struct.pack("<i", 3500),
-            KEY_POWERUP_CNT: struct.pack("<I", self.powerup_cnt),
-            KEY_LOCAL_TIME: struct.pack("<Q", now_ns),
-            KEY_LAST_SYNC_TIME: struct.pack("<Q", 0),
-            KEY_TIME_OFFSET: struct.pack("<q", self.time_offset_ns),
+            KEY_CORE_TEMP: struct.pack('<i', 3500),
+            KEY_POWERUP_CNT: struct.pack('<I', self.powerup_cnt),
+            KEY_LOCAL_TIME: struct.pack('<Q', now_ns),
+            KEY_LAST_SYNC_TIME: struct.pack('<Q', 0),
+            KEY_TIME_OFFSET: struct.pack('<q', self.time_offset_ns),
             KEY_TIME_SYNC_TYPE: bytes([self.time_sync_type]),
-            KEY_DIAG_STATUS: struct.pack("<H", self.diag_status),
-            KEY_FW_TYPE: b"\x00",
-            KEY_HMS: struct.pack("<8I", *self.hms),
+            KEY_DIAG_STATUS: struct.pack('<H', self.diag_status),
+            KEY_FW_TYPE: b'\x00',
+            KEY_HMS: struct.pack('<8I', *self.hms),
         }
         return ro.get(key)
 
     def push_payload(self, now_ns: int) -> bytes:
         keys = [KEY_CUR_WORK_STATE, KEY_DIAG_STATUS, KEY_HMS, KEY_SN, KEY_LOCAL_TIME]
         kvs = [(k, self.read_key(k, now_ns)) for k in keys]
-        return struct.pack("<HH", len(kvs), 0) + proto.encode_kv_list(kvs)
+        return struct.pack('<HH', len(kvs), 0) + proto.encode_kv_list(kvs)
 
     def set_gps_time(self, ns: int, now_ns: int) -> None:
         self.time_offset_ns = ns - now_ns
@@ -334,6 +335,8 @@ class PointSource:
 
 # --------------------------------------------------------------------------- simulator
 class Simulator:
+    """Sockets, threads and JSON control channel around one DeviceModel."""
+
     def __init__(self, args: argparse.Namespace, out=sys.stdout, control=sys.stdin) -> None:
         self.args = args
         self.out = out
@@ -354,7 +357,7 @@ class Simulator:
         self.frame_cnt = 0
         self.frame_started = 0.0
         self.next_pcl = self.next_imu = self.next_push = self.next_stats = 0.0
-        self.sent = {"pcl": 0, "imu": 0, "push": 0, "pcl_dropped": 0}
+        self.sent = {'pcl': 0, 'imu': 0, 'push': 0, 'pcl_dropped': 0}
         self.silence_until = 0.0
         self.drop_ack = 0
         self.running = True
@@ -367,7 +370,7 @@ class Simulator:
     # -- setup ---------------------------------------------------------------
     def _open_sockets(self) -> None:
         base = self.args.base_port
-        names = ["discovery", "cmd", "push", "pcl", "imu"]
+        names = ['discovery', 'cmd', 'push', 'pcl', 'imu']
         for i, name in enumerate(names):
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -375,34 +378,34 @@ class Simulator:
             s.bind((self.args.bind, 0 if base == 0 else base + 100 * i))
             self.socks[name] = s
             self.ports[name] = s.getsockname()[1]
-        self.sel.register(self.socks["discovery"], selectors.EVENT_READ, "discovery")
-        self.sel.register(self.socks["cmd"], selectors.EVENT_READ, "cmd")
+        self.sel.register(self.socks['discovery'], selectors.EVENT_READ, 'discovery')
+        self.sel.register(self.socks['cmd'], selectors.EVENT_READ, 'cmd')
         if self.control is not None:
             try:
-                self.sel.register(self.control, selectors.EVENT_READ, "control")
+                self.sel.register(self.control, selectors.EVENT_READ, 'control')
             except (ValueError, OSError):
                 self.control = None
 
     def lidar_ip(self) -> str:
-        if self.args.bind not in ("", "0.0.0.0"):
+        if self.args.bind not in ('', '0.0.0.0'):
             return self.args.bind
-        return "127.0.0.1"
+        return '127.0.0.1'
 
     # -- events ----------------------------------------------------------------
     def emit(self, **ev) -> None:
         try:
-            self.out.write(json.dumps(ev, separators=(",", ":")) + "\n")
+            self.out.write(json.dumps(ev, separators=(',', ':')) + '\n')
             self.out.flush()
         except (BrokenPipeError, ValueError):  # parent closed stdout
             self.running = False
 
     def log(self, msg: str) -> None:
         if self.verbose:
-            sys.stderr.write(f"[sim] {msg}\n")
+            sys.stderr.write(f'[sim] {msg}\n')
             sys.stderr.flush()
 
     def _on_state(self, old: int, new: int) -> None:
-        self.emit(event="state", **{"from": old, "to": new})
+        self.emit(event='state', **{'from': old, 'to': new})
         if new == WS_SAMPLING:
             now = time.monotonic()
             self.frame_started = now
@@ -415,7 +418,7 @@ class Simulator:
         self.next_push = now  # pushes run from boot; unsent while no host is configured
         self.next_stats = now + 1.0
         self.emit(
-            event="ready", ip=self.lidar_ip(), ports=self.ports, sn=self.model.sn, pid=os.getpid()
+            event='ready', ip=self.lidar_ip(), ports=self.ports, sn=self.model.sn, pid=os.getpid()
         )
         while self.running:
             now = time.monotonic()
@@ -424,11 +427,11 @@ class Simulator:
             timeout = max(0.0, min(self._next_deadline(now) - now, 0.05))
             for key, _ in self.sel.select(timeout):
                 kind = key.data
-                if kind == "control":
+                if kind == 'control':
                     self._handle_control()
                 else:
                     self._handle_datagram(kind)
-        self.emit(event="exit", sent=self.sent)
+        self.emit(event='exit', sent=self.sent)
 
     def _next_deadline(self, now: float) -> float:
         d = [self.next_push, self.next_stats]
@@ -455,47 +458,47 @@ class Simulator:
         try:
             req = json.loads(line)
         except json.JSONDecodeError as e:
-            self.emit(event="error", error=f"bad json: {e}")
+            self.emit(event='error', error=f'bad json: {e}')
             return
         self.apply_control(req)
 
     def apply_control(self, req: dict) -> None:
-        cmd = req.get("cmd")
+        cmd = req.get('cmd')
         now = time.monotonic()
-        if cmd == "quit":
+        if cmd == 'quit':
             self.running = False
-        elif cmd == "silence":
-            self.silence_until = now + float(req.get("seconds", 1.0))
-        elif cmd == "hms":
-            codes = [int(c) for c in req.get("codes", [])][:8]
+        elif cmd == 'silence':
+            self.silence_until = now + float(req.get('seconds', 1.0))
+        elif cmd == 'hms':
+            codes = [int(c) for c in req.get('codes', [])][:8]
             self.model.hms = (codes + [0] * 8)[:8]
-        elif cmd == "drop_ack":
-            self.drop_ack += int(req.get("count", 1))
-        elif cmd == "reboot":
+        elif cmd == 'drop_ack':
+            self.drop_ack += int(req.get('count', 1))
+        elif cmd == 'reboot':
             self._do_reboot(now)
-        elif cmd == "set_state":
-            self.model.settings[KEY_WORK_TGT_MODE] = bytes([int(req["state"])])
-            self.model._set_state(int(req["state"]))
-        elif cmd == "drop_rate":
-            self.drop_rate = float(req.get("rate", 0.0))
-        elif cmd == "frame_ms":
-            self.frame_s = float(req.get("ms", 100.0)) / 1000.0
+        elif cmd == 'set_state':
+            self.model.settings[KEY_WORK_TGT_MODE] = bytes([int(req['state'])])
+            self.model._set_state(int(req['state']))
+        elif cmd == 'drop_rate':
+            self.drop_rate = float(req.get('rate', 0.0))
+        elif cmd == 'frame_ms':
+            self.frame_s = float(req.get('ms', 100.0)) / 1000.0
             self.frame_started = now
-        elif cmd == "status":
+        elif cmd == 'status':
             self.emit(
-                event="status",
+                event='status',
                 state=self.model.work_state,
                 sent=self.sent,
                 hosts={
-                    "pcl": self.model.host(KEY_PCL_HOST),
-                    "imu": self.model.host(KEY_IMU_HOST),
-                    "push": self.model.host(KEY_STATE_HOST),
+                    'pcl': self.model.host(KEY_PCL_HOST),
+                    'imu': self.model.host(KEY_IMU_HOST),
+                    'push': self.model.host(KEY_STATE_HOST),
                 },
             )
         else:
-            self.emit(event="error", error=f"unknown control cmd: {cmd!r}")
+            self.emit(event='error', error=f'unknown control cmd: {cmd!r}')
             return
-        self.emit(event="control", cmd=cmd)
+        self.emit(event='control', cmd=cmd)
 
     def _do_reboot(self, now: float) -> None:
         self.seq = 0
@@ -513,32 +516,32 @@ class Simulator:
             return
         now = time.monotonic()
         if now < self.silence_until:
-            self.log(f"ignoring {len(data)}B from {addr} (silence)")
+            self.log(f'ignoring {len(data)}B from {addr} (silence)')
             return
         try:
             frame = proto.CommandFrame.parse(data)
         except ValueError as e:
-            self.emit(event="bad_frame", **{"from": f"{addr[0]}:{addr[1]}", "error": str(e)})
+            self.emit(event='bad_frame', **{'from': f'{addr[0]}:{addr[1]}', 'error': str(e)})
             return
         if frame.cmd_type != REQ:
             return
-        if kind == "discovery" and frame.cmd_id != CMD_DISCOVERY:
+        if kind == 'discovery' and frame.cmd_id != CMD_DISCOVERY:
             return
-        if kind == "cmd" and frame.cmd_id == CMD_DISCOVERY:
+        if kind == 'cmd' and frame.cmd_id == CMD_DISCOVERY:
             return
         ret, payload = self._dispatch(frame, addr, now)
         self.emit(
-            event="cmd",
+            event='cmd',
             cmd_id=frame.cmd_id,
             seq=frame.seq_num,
             ret=ret,
-            **{"from": f"{addr[0]}:{addr[1]}"},
+            **{'from': f'{addr[0]}:{addr[1]}'},
         )
         if payload is None:
             return
         if self.drop_ack > 0:
             self.drop_ack -= 1
-            self.emit(event="ack_dropped", cmd_id=frame.cmd_id, seq=frame.seq_num)
+            self.emit(event='ack_dropped', cmd_id=frame.cmd_id, seq=frame.seq_num)
             return
         ack = proto.CommandFrame(frame.seq_num, frame.cmd_id, ACK, SENDER_LIDAR, payload).encode()
         sock.sendto(ack, addr)
@@ -547,48 +550,48 @@ class Simulator:
         now_ns = self.now_ns()
         m = self.model
         if f.cmd_id == CMD_DISCOVERY:
-            sn = m.sn.encode().ljust(16, b"\0")[:16]
-            ip = bytes(int(x) for x in self.lidar_ip().split("."))
+            sn = m.sn.encode().ljust(16, b'\0')[:16]
+            ip = bytes(int(x) for x in self.lidar_ip().split('.'))
             return RET_OK, struct.pack(
-                "<BB16s4sH", RET_OK, PROVISIONAL_DEV_TYPE, sn, ip, self.ports["cmd"]
+                '<BB16s4sH', RET_OK, PROVISIONAL_DEV_TYPE, sn, ip, self.ports['cmd']
             )
         if f.cmd_id == CMD_PARAM_CONFIG:
             try:
-                n, _ = struct.unpack_from("<HH", f.data, 0)
+                n, _ = struct.unpack_from('<HH', f.data, 0)
                 kvs = proto.parse_kv_list(f.data[4:], n)
             except (struct.error, ValueError):
-                return RET_FAIL, struct.pack("<BH", RET_FAIL, 0)
+                return RET_FAIL, struct.pack('<BH', RET_FAIL, 0)
             ret, err = m.configure(kvs)
             if ret == RET_OK:
-                self.log(f"configured {[hex(k) for k, _ in kvs]}")
-            return ret, struct.pack("<BH", ret, err)
+                self.log(f'configured {[hex(k) for k, _ in kvs]}')
+            return ret, struct.pack('<BH', ret, err)
         if f.cmd_id == CMD_PARAM_INQUIRE:
             try:
-                n, _ = struct.unpack_from("<HH", f.data, 0)
-                keys = list(struct.unpack_from(f"<{n}H", f.data, 4))
+                n, _ = struct.unpack_from('<HH', f.data, 0)
+                keys = list(struct.unpack_from(f'<{n}H', f.data, 4))
             except struct.error:
-                return RET_FAIL, struct.pack("<BH", RET_FAIL, 0)
+                return RET_FAIL, struct.pack('<BH', RET_FAIL, 0)
             ret, kvs = m.inquire(keys, now_ns)
             if ret != RET_OK:
-                return ret, struct.pack("<BH", ret, 0)
-            return ret, struct.pack("<BH", ret, len(kvs)) + proto.encode_kv_list(kvs)
+                return ret, struct.pack('<BH', ret, 0)
+            return ret, struct.pack('<BH', ret, len(kvs)) + proto.encode_kv_list(kvs)
         if f.cmd_id == CMD_REBOOT:
             # The ACK is sent by the caller before the silence window is checked again.
             self._do_reboot(now)
-            return RET_OK, struct.pack("<B", RET_OK)
+            return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_FACTORY_RESET:
             m.factory_reset(now + self.args.reboot_silence)
             self.seq = 0
             self.udp_cnt_pcl = self.udp_cnt_imu = self.frame_cnt = 0
             self.silence_until = now + self.args.reboot_silence
-            return RET_OK, struct.pack("<B", RET_OK)
+            return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_SET_GPS_TIME:
             if len(f.data) < 9 or f.data[0] != 2:
-                return RET_FAIL, struct.pack("<B", RET_FAIL)
-            (ns,) = struct.unpack_from("<Q", f.data, 1)
+                return RET_FAIL, struct.pack('<B', RET_FAIL)
+            (ns,) = struct.unpack_from('<Q', f.data, 1)
             m.set_gps_time(ns, now_ns)
-            return RET_OK, struct.pack("<B", RET_OK)
-        return RET_FAIL, struct.pack("<B", RET_FAIL)  # unknown cmd_id
+            return RET_OK, struct.pack('<B', RET_OK)
+        return RET_FAIL, struct.pack('<B', RET_FAIL)  # unknown cmd_id
 
     # -- periodic senders ------------------------------------------------------
     def now_ns(self) -> int:
@@ -623,7 +626,7 @@ class Simulator:
             self._send_push()
             self.next_push += 1.0 / self.push_rate
         if now >= self.next_stats:
-            self.emit(event="sent", **self.sent, state=m.work_state)
+            self.emit(event='sent', **self.sent, state=m.work_state)
             self.next_stats += 1.0
 
     def _send_pcl(self, host, interval_s: float) -> None:
@@ -642,10 +645,10 @@ class Simulator:
         if host is None:
             return
         if self.drop_rate > 0 and self._drop_rng.random() < self.drop_rate:
-            self.sent["pcl_dropped"] += 1
+            self.sent['pcl_dropped'] += 1
             return
-        self._sendto("pcl", pkt.encode(), host)
-        self.sent["pcl"] += 1
+        self._sendto('pcl', pkt.encode(), host)
+        self.sent['pcl'] += 1
 
     def _send_imu(self, host, interval_s: float) -> None:
         pkt = proto.DataPacket(
@@ -661,8 +664,8 @@ class Simulator:
         self.udp_cnt_imu = (self.udp_cnt_imu + 1) & 0xFFFF
         if host is None:
             return
-        self._sendto("imu", pkt.encode(), host)
-        self.sent["imu"] += 1
+        self._sendto('imu', pkt.encode(), host)
+        self.sent['imu'] += 1
 
     def _send_push(self) -> None:
         host = self.model.host(KEY_STATE_HOST)
@@ -672,60 +675,60 @@ class Simulator:
         frame = proto.CommandFrame(
             self.seq, CMD_INFO_PUSH, REQ, SENDER_LIDAR, self.model.push_payload(self.now_ns())
         ).encode()
-        self._sendto("push", frame, host)
-        self.sent["push"] += 1
+        self._sendto('push', frame, host)
+        self.sent['push'] += 1
 
     def _sendto(self, kind: str, data: bytes, host: tuple[str, int, int]) -> None:
         try:
             self.socks[kind].sendto(data, (host[0], host[1]))
         except OSError as e:
-            self.log(f"send {kind} to {host[:2]} failed: {e}")
+            self.log(f'send {kind} to {host[:2]} failed: {e}')
 
 
 # --------------------------------------------------------------------------- CLI
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Livox Mid-360 simulator")
-    p.add_argument("--bind", default="0.0.0.0", help="address to bind (default 0.0.0.0)")
+    p = argparse.ArgumentParser(description='Livox Mid-360 simulator')
+    p.add_argument('--bind', default='0.0.0.0', help='address to bind (default 0.0.0.0)')
     p.add_argument(
-        "--base-port",
+        '--base-port',
         type=int,
         default=proto.PORT_DISCOVERY,
-        help="discovery port; cmd/push/pcl/imu follow at +100..+400. 0 = pick free ports",
+        help='discovery port; cmd/push/pcl/imu follow at +100..+400. 0 = pick free ports',
     )
-    p.add_argument("--sn", default="SIM0000000000001")
-    p.add_argument("--seed", type=int, default=1)
+    p.add_argument('--sn', default='SIM0000000000001')
+    p.add_argument('--seed', type=int, default=1)
     p.add_argument(
-        "--startup-delay", type=float, default=0.3, help="seconds spent in MOTORSTARTUP"
-    )
-    p.add_argument(
-        "--reboot-silence", type=float, default=0.5, help="seconds of silence after 0x0200"
+        '--startup-delay', type=float, default=0.3, help='seconds spent in MOTORSTARTUP'
     )
     p.add_argument(
-        "--frame-ms",
+        '--reboot-silence', type=float, default=0.5, help='seconds of silence after 0x0200'
+    )
+    p.add_argument(
+        '--frame-ms',
         type=float,
         default=100.0,
-        help="frame_cnt period; 0 = frame_cnt never changes (non-repetitive scan)",
+        help='frame_cnt period; 0 = frame_cnt never changes (non-repetitive scan)',
     )
-    p.add_argument("--rate-multiplier", type=float, default=1.0)
+    p.add_argument('--rate-multiplier', type=float, default=1.0)
     p.add_argument(
-        "--push-rate",
+        '--push-rate',
         type=float,
         default=PUSH_RATE,
-        help="0x0102 push rate in Hz, independent of --rate-multiplier (default 1)",
+        help='0x0102 push rate in Hz, independent of --rate-multiplier (default 1)',
     )
     p.add_argument(
-        "--drop-rate", type=float, default=0.0, help="fraction of point-cloud packets to drop"
+        '--drop-rate', type=float, default=0.0, help='fraction of point-cloud packets to drop'
     )
-    p.add_argument("--quit-on-eof", action="store_true", default=True)
-    p.add_argument("--no-quit-on-eof", dest="quit_on_eof", action="store_false")
-    p.add_argument("--verbose", "-v", action="store_true")
+    p.add_argument('--quit-on-eof', action='store_true', default=True)
+    p.add_argument('--no-quit-on-eof', dest='quit_on_eof', action='store_false')
+    p.add_argument('--verbose', '-v', action='store_true')
     return p
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if len(args.sn) > 16:
-        sys.exit("--sn must be at most 16 characters")
+        sys.exit('--sn must be at most 16 characters')
     sim = Simulator(args)
     try:
         sim.run()
@@ -734,5 +737,5 @@ def main(argv=None) -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())
