@@ -1,17 +1,56 @@
-# Python tooling for tools/. Shared with livox-mid360-ros2 (issue #17):
-# line-length 99 matches ament_flake8's default, pep257 matches ament_pep257.
+# Python tooling for tools/. Shared with livox-mid360-ros2 (issues #17, #64).
+#
+# ruff is configured so that code it accepts also passes the ROS 2 Python style checks,
+# ament_flake8 (flake8 + flake8-blind-except, -builtins, -class-newline, -comprehensions,
+# -deprecated, -import-order (google style), -quotes; max-line-length 99;
+# extend-ignore B902,C816,D100-D107,D203,D212,D404,I202) and ament_pep257 (pydocstyle with the
+# "ament" convention: everything except D100-D107, D203, D212, D404). Verified by running the
+# real tools on tools/ (see CONTRIBUTING.md, Lint). Known gaps: ruff has no port of
+# flake8-deprecated or flake8-class-newline, and its isort emulation of the google import
+# order is an approximation.
 [tool.ruff]
 line-length = 99
 target-version = "py310"
 extend-exclude = ["build*", "_install"]
 
+[tool.ruff.format]
+quote-style = "single"  # flake8-quotes Q000
+
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "N", "D"]
+select = [
+  "E", "F", "W",  # pycodestyle / pyflakes (flake8 core)
+  "I",            # import order (flake8-import-order, google style)
+  "UP",           # pyupgrade: not part of ament_flake8, kept from the previous config
+  "B",            # flake8-bugbear: not part of ament_flake8, kept from the previous config
+  "N",            # pep8-naming: not part of ament_flake8, kept from the previous config
+  "D",            # pydocstyle (ament_pep257)
+  "Q",            # flake8-quotes
+  "A",            # flake8-builtins
+  "C4",           # flake8-comprehensions
+  "BLE",          # flake8-blind-except
+]
 ignore = [
-  "D1",   # missing docstrings: not enforced (tests, small helpers)
-  "D203", # one-blank-line-before-class (conflicts with D211)
-  "D213", # multi-line-summary-second-line (conflicts with D212)
+  # ament_pep257 "ament" convention
+  "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",  # missing docstrings
+  "D203",  # one-blank-line-before-class (conflicts with D211)
+  "D212",  # multi-line-summary-first-line: ament keeps D213 (summary on the second line)
+  "D404",  # first-word-of-docstring-should-not-be-this
+  # ament_flake8's extend-ignore (B902 blind except, C816 trailing comma) has no ruff
+  # counterpart to switch off: B902 is BLE001 here and stays on, C816 is flake8-commas.
 ]
 
-[tool.ruff.lint.pydocstyle]
-convention = "pep257"
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "single"
+multiline-quotes = "double"
+docstring-quotes = "double"
+
+[tool.ruff.lint.isort]
+# flake8-import-order "google": one section for stdlib, one for third-party, one for local,
+# names sorted case-insensitively with "import x" and "from x import y" interleaved.
+force-sort-within-sections = true
+order-by-type = false
+case-sensitive = false
+known-first-party = ["livox_mid360_proto", "livox_mid360_sim"]
+
+# No [tool.ruff.lint.pydocstyle] convention: ruff's "pep257" preset would also silence D213,
+# whereas ament_pep257 only ignores the codes listed above (so D213 is enforced).
