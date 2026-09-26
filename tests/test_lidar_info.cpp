@@ -283,8 +283,8 @@ TEST_CASE("decode_status fills every key and formats the line", "[lidar_info]")
   bytes::write_le<std::uint16_t>(diag, 0, 0x0021);  // system 1, scan 2
   const auto fw = std::vector<std::byte>{std::byte{1}};
   std::vector<std::byte> hms(32);
-  bytes::write_le<std::uint32_t>(hms, 0, 0x0103800a);
-  bytes::write_le<std::uint32_t>(hms, 8, 0x0201800b);
+  bytes::write_le<std::uint32_t>(hms, 0, 0x01030002);
+  bytes::write_le<std::uint32_t>(hms, 8, 0x02010003);
   const std::vector<KeyValue> kvs{
     kv<Key::kCurWorkState>(state),   kv<Key::kCoreTemp>(temp),     kv<Key::kPowerupCnt>(cnt),
     kv<Key::kLocalTimeNow>(now),     kv<Key::kTimeOffset>(offset), kv<Key::kTimeSyncType>(sync),
@@ -302,15 +302,15 @@ TEST_CASE("decode_status fills every key and formats the line", "[lidar_info]")
   CHECK(s.lidar_diag_status->scan == 2);
   CHECK(s.fw_type == FwType::kApp);
   REQUIRE(s.hms_code.has_value());
-  CHECK((*s.hms_code)[0].raw == 0x0103800a);
-  CHECK((*s.hms_code)[2].raw == 0x0201800b);
+  CHECK((*s.hms_code)[0].raw == 0x01030002);
+  CHECK((*s.hms_code)[2].raw == 0x02010003);
   CHECK(
     to_string(s) ==
     "cur_work_state=IDLE core_temp=35.12C powerup_cnt=7 local_time_now=1000000000 "
     "time_offset=-5 time_sync_type=gps lidar_diag_status=sys1/scan2/rng0/comm0 fw_type=app "
-    "hms=[0x0103800a:" +
-      std::string(to_string(decode_hms(0x0103800a).level)) +
-      ",0x0201800b:" + std::string(to_string(decode_hms(0x0201800b).level)) + "]");
+    "hms=[0x01030002:" +
+      std::string(to_string(decode_hms(0x01030002).level)) +
+      ",0x02010003:" + std::string(to_string(decode_hms(0x02010003).level)) + "]");
   CHECK(to_string(decode_status({})).empty());
 }
 
@@ -398,9 +398,9 @@ TEST_CASE("Device::pushed_status follows the simulator push", "[lidar_info][sim]
   CHECK(wait_for([](const LidarStatus & p) { return p.cur_work_state == WorkState::kSampling; }));
   CHECK(dev->work_state() == WorkState::kSampling);
 
-  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[17006602]})"));  // 0x0103800a
+  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[16973826]})"));  // 0x01030002
   CHECK(wait_for(
-    [](const LidarStatus & p) { return p.hms_code && (*p.hms_code)[0].raw == 0x0103800a; }));
-  CHECK(dev->hms()[0].raw == 0x0103800a);
-  CHECK(to_string(*dev->pushed_status()).find("hms=[0x0103800a:") != std::string::npos);
+    [](const LidarStatus & p) { return p.hms_code && (*p.hms_code)[0].raw == 0x01030002; }));
+  CHECK(dev->hms()[0].raw == 0x01030002);
+  CHECK(to_string(*dev->pushed_status()).find("hms=[0x01030002:") != std::string::npos);
 }
