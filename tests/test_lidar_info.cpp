@@ -177,6 +177,9 @@ TEST_CASE("Device::identity fails when the LiDAR does not answer", "[lidar_info]
   }
   auto dev = f.open();
   REQUIRE(f.sim->control(R"({"cmd":"silence","seconds":1.5})"));
+  // The simulator serves its control line and the command socket from one select() wake:
+  // without this the request can be answered before the silence takes effect.
+  REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
   auto id = dev->identity(RequestOptions{.timeout = 50ms, .attempts = 1});
   REQUIRE_FALSE(id.has_value());
   CHECK(id.error().kind == DeviceError::Kind::kSession);

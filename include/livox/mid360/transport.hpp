@@ -114,6 +114,8 @@ inline constexpr std::size_t kMaxDatagramSize = 1500;
 
 struct SocketOptions
 {
+  /// SO_REUSEADDR, applied only when binding to an explicit port: an ephemeral port
+  /// (port 0) is always exclusive, so that the kernel cannot hand out one that is in use.
   bool reuse_address = true;
   bool broadcast = false;
   /// Requested SO_RCVBUF in bytes; 0 leaves the OS default untouched. The kernel may

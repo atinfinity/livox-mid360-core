@@ -544,7 +544,10 @@ class Simulator:
         names = ['discovery', 'cmd', 'push', 'pcl', 'imu']
         for i, name in enumerate(names):
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if base != 0:
+                # Never on an ephemeral port: Linux would then consider a port held by
+                # another SO_REUSEADDR socket of the same user free and could hand it out.
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((self.args.bind, 0 if base == 0 else base + 100 * i))
             self.socks[name] = s

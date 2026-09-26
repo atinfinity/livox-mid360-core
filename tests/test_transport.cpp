@@ -158,6 +158,18 @@ TEST_CASE("Binding the same port twice reports kAddressInUse", "[transport][sock
   CHECK(b.error().errno_value == EADDRINUSE);
 }
 
+TEST_CASE("An ephemeral port is exclusive even for a SO_REUSEADDR socket", "[transport][socket]")
+{
+  // Port 0 binds never set SO_REUSEADDR: a later socket, even one that asks for the option,
+  // must not be able to share (and silently take over) the port the kernel handed out.
+  const UdpSocket a = open_loopback();
+  SocketOptions opts;
+  opts.reuse_address = true;
+  const auto b = UdpSocket::open(a.local_endpoint(), opts);
+  REQUIRE_FALSE(b.has_value());
+  CHECK(b.error().code == TransportErrorCode::kAddressInUse);
+}
+
 TEST_CASE("Reserved options are rejected", "[transport][socket]")
 {
   SocketOptions opts;
