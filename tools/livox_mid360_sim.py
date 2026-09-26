@@ -38,6 +38,7 @@ import livox_mid360_proto as proto  # noqa: E402
 # --------------------------------------------------------------------------- constants
 CMD_DISCOVERY, CMD_PARAM_CONFIG, CMD_PARAM_INQUIRE, CMD_INFO_PUSH = 0x0000, 0x0100, 0x0101, 0x0102
 CMD_REBOOT, CMD_FACTORY_RESET, CMD_SET_GPS_TIME = 0x0200, 0x0201, 0x0202
+CMD_PUSH_LOG, CMD_COLLECTION_LOG = 0x0300, 0x0301  # firmware log (#44), LiDAR port 56500
 REQ, ACK = 0, 1
 SENDER_HOST, SENDER_LIDAR = 0, 1
 
@@ -69,6 +70,7 @@ PROVISIONAL_DEV_TYPE = 9  # [unverified] see docs/protocol_notes.md / #11
 
 KEY_PCL_DATA_TYPE, KEY_PATTERN_MODE, KEY_LIDAR_IPCFG = 0x0000, 0x0001, 0x0004
 KEY_STATE_HOST, KEY_PCL_HOST, KEY_IMU_HOST = 0x0005, 0x0006, 0x0007
+KEY_LOG_HOST = 0x0009
 KEY_INSTALL_ATTITUDE, KEY_FOV0, KEY_FOV1, KEY_FOV_EN = 0x0012, 0x0015, 0x0016, 0x0017
 KEY_DETECT_MODE, KEY_FUNC_IO, KEY_WORK_TGT_MODE, KEY_IMU_EN = 0x0018, 0x0019, 0x001A, 0x001C
 KEY_SPEED_MODE, KEY_TIME_FILTER, KEY_PC_FREQ_MOD, KEY_IMU_SENSOR_CFG = (
@@ -101,6 +103,7 @@ WRITABLE_LEN = {
     KEY_STATE_HOST: 8,
     KEY_PCL_HOST: 8,
     KEY_IMU_HOST: 8,
+    KEY_LOG_HOST: 8,
     KEY_INSTALL_ATTITUDE: 24,
     KEY_FOV0: 20,
     KEY_FOV1: 20,
@@ -151,6 +154,7 @@ def factory_settings() -> dict[int, bytes]:
         KEY_STATE_HOST: zero(8),
         KEY_PCL_HOST: zero(8),
         KEY_IMU_HOST: zero(8),
+        KEY_LOG_HOST: zero(8),
         KEY_INSTALL_ATTITUDE: zero(24),
         KEY_FOV0: zero(20),
         KEY_FOV1: zero(20),
@@ -164,6 +168,24 @@ def factory_settings() -> dict[int, bytes]:
         KEY_PC_FREQ_MOD: b'\x00',
         KEY_IMU_SENSOR_CFG: b'\x00\x00\x00',
     }
+
+
+LOG_TYPES = (0, 1)  # 0 realtime, 1 exception
+LOG_FLAG_ACK, LOG_FLAG_BEGIN, LOG_FLAG_END = 0x01, 0x02, 0x04
+
+
+@dataclass
+class LogStream:
+    """One enabled firmware log type: file_index / trans_index as the LiDAR would count."""
+
+    log_type: int
+    file_index: int = 1
+    trans_index: int = 0  # last sent; 0 = the next chunk begins the file
+    requester: tuple[str, int] | None = None
+
+    def new_file(self) -> None:
+        self.file_index = (self.file_index + 1) & 0xFF
+        self.trans_index = 0
 
 
 def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
@@ -572,7 +594,12 @@ class Simulator:
         self.frame_cnt = 0
         self.frame_started = 0.0
         self.next_pcl = self.next_imu = self.next_push = self.next_stats = 0.0
-        self.sent = {'pcl': 0, 'imu': 0, 'push': 0, 'pcl_dropped': 0}
+        self.sent = {'pcl': 0, 'imu': 0, 'push': 0, 'pcl_dropped': 0, 'log': 0}
+        # Firmware log collection (#44): one stream per log_type (0 realtime, 1 exception).
+        self.log_streams: dict[int, LogStream] = {}
+        self.log_drop = 0  # chunks to skip (trans_index still advances) -> gap on the host
+        self.log_acks_received = 0
+        self.next_log = 0.0
         self.silence_until = 0.0
         self.drop_ack = 0
         self.running = True
@@ -585,7 +612,7 @@ class Simulator:
     # -- setup ---------------------------------------------------------------
     def _open_sockets(self) -> None:
         base = self.args.base_port
-        names = ['discovery', 'cmd', 'push', 'pcl', 'imu']
+        names = ['discovery', 'cmd', 'push', 'pcl', 'imu', 'log']
         for i, name in enumerate(names):
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             if base != 0:
@@ -598,6 +625,7 @@ class Simulator:
             self.ports[name] = s.getsockname()[1]
         self.sel.register(self.socks['discovery'], selectors.EVENT_READ, 'discovery')
         self.sel.register(self.socks['cmd'], selectors.EVENT_READ, 'cmd')
+        self.sel.register(self.socks['log'], selectors.EVENT_READ, 'log')
         if self.control is not None:
             try:
                 self.sel.register(self.control, selectors.EVENT_READ, 'control')
@@ -691,6 +719,8 @@ class Simulator:
 
     def _next_deadline(self, now: float) -> float:
         d = [self.next_push, self.next_stats]
+        if self.log_streams:
+            d.append(self.next_log)
         if self.model.timed:
             d.append(self.model.state_deadline)
         if self.model.sampling:
@@ -735,6 +765,12 @@ class Simulator:
                 return
         elif cmd == 'drop_ack':
             self.drop_ack += int(req.get('count', 1))
+        elif cmd == 'log_drop':
+            self.log_drop += int(req.get('n', 1))
+        elif cmd == 'log_new_file':
+            for stream in self.log_streams.values():
+                self._send_log_chunk(stream, end=True)
+                stream.new_file()
         elif cmd == 'reboot':
             self._do_reboot(now)
             self._apply_pending_rebind()
@@ -754,7 +790,10 @@ class Simulator:
                     'pcl': self.model.host(KEY_PCL_HOST),
                     'imu': self.model.host(KEY_IMU_HOST),
                     'push': self.model.host(KEY_STATE_HOST),
+                    'log': self.model.host(KEY_LOG_HOST),
                 },
+                log_enabled=sorted(self.log_streams),
+                log_acks_received=self.log_acks_received,
             )
         else:
             self.emit(event='error', error=f'unknown control cmd: {cmd!r}')
@@ -794,6 +833,12 @@ class Simulator:
             return
         if kind == 'cmd' and frame.cmd_id == CMD_DISCOVERY:
             return
+        if kind == 'log':
+            if frame.cmd_id == CMD_PUSH_LOG:  # host ACK for a pushed chunk (REQ 0x0300)
+                self._on_log_ack(frame, addr)
+                return
+            if frame.cmd_id != CMD_COLLECTION_LOG:
+                return
         ret, payload = self._dispatch(frame, addr, now)
         self.emit(
             event='cmd',
@@ -856,7 +901,90 @@ class Simulator:
             (ns,) = struct.unpack_from('<Q', f.data, 1)
             m.set_gps_time(ns, now_ns)
             return RET_OK, struct.pack('<B', RET_OK)
+        if f.cmd_id == CMD_COLLECTION_LOG:
+            if len(f.data) < 2 or f.data[0] not in LOG_TYPES:
+                return RET_FAIL, struct.pack('<B', RET_FAIL)
+            self._log_control(f.data[0], f.data[1] != 0, addr)
+            return RET_OK, struct.pack('<B', RET_OK)
         return RET_FAIL, struct.pack('<B', RET_FAIL)  # unknown cmd_id
+
+    # -- firmware log (#44) --------------------------------------------------
+    def _log_control(self, log_type: int, enable: bool, addr) -> None:
+        stream = self.log_streams.get(log_type)
+        if enable:
+            if stream is None:
+                stream = LogStream(log_type=log_type)
+                self.log_streams[log_type] = stream
+                if not self.log_streams or self.next_log == 0.0:
+                    self.next_log = time.monotonic() + self.args.log_chunk_interval
+            stream.requester = addr  # fallback destination when key 0x0009 is unset
+            self.log(f'log type {log_type} enabled for {addr}')
+        elif stream is not None:
+            self._send_log_chunk(stream, end=True)
+            del self.log_streams[log_type]
+            self.log(f'log type {log_type} disabled')
+
+    def _log_dest(self, stream: LogStream) -> tuple[str, int] | None:
+        if not self.args.log_ignore_hostcfg:
+            host = self.model.host(KEY_LOG_HOST)
+            if host is not None:
+                return host[0], host[1]
+        return stream.requester
+
+    def _send_log_chunk(self, stream: LogStream, end: bool = False) -> None:
+        dest = self._log_dest(stream)
+        stream.trans_index = (stream.trans_index + 1) & 0xFFFFFFFF
+        flags = 0
+        if stream.trans_index == 1:
+            flags |= LOG_FLAG_BEGIN
+        if end:
+            flags |= LOG_FLAG_END
+        every = self.args.log_ack_every
+        if every > 0 and (stream.trans_index % every == 0 or end):
+            flags |= LOG_FLAG_ACK
+        line = (
+            f'{self.model.sn} log{stream.log_type} file{stream.file_index} '
+            f'chunk{stream.trans_index} t={time.monotonic():.3f}\n'
+        ).encode()
+        n = 0 if end else self.args.log_chunk_bytes
+        data = (line * (n // len(line) + 1))[:n]
+        header = struct.pack(
+            '<BBBBIHIH',
+            stream.log_type,
+            stream.file_index,
+            1,
+            flags,
+            int(time.time()) & 0xFFFFFFFF,
+            0,
+            stream.trans_index,
+            len(data),
+        )
+        if not end and self.log_drop > 0:
+            self.log_drop -= 1
+            self.emit(event='log_dropped', file_index=stream.file_index, trans=stream.trans_index)
+            return
+        if dest is None:
+            return
+        self.seq = (self.seq + 1) & 0xFFFFFFFF
+        frame = proto.CommandFrame(
+            self.seq, CMD_PUSH_LOG, REQ, SENDER_LIDAR, header + data
+        ).encode()
+        try:
+            self.socks['log'].sendto(frame, dest)
+        except OSError as e:
+            self.log(f'send log to {dest} failed: {e}')
+            return
+        self.sent['log'] += 1
+
+    def _on_log_ack(self, frame: proto.CommandFrame, addr) -> None:
+        if len(frame.data) < 7:
+            self.emit(
+                event='bad_frame', **{'from': f'{addr[0]}:{addr[1]}', 'error': 'short log ack'}
+            )
+            return
+        ret, log_type, file_index, trans = struct.unpack_from('<BBBI', frame.data, 0)
+        self.log_acks_received += 1
+        self.emit(event='log_ack', ret=ret, log_type=log_type, file_index=file_index, trans=trans)
 
     # -- periodic senders ------------------------------------------------------
     def now_ns(self) -> int:
@@ -890,6 +1018,10 @@ class Simulator:
         if now >= self.next_push:
             self._send_push()
             self.next_push += 1.0 / self.push_rate
+        if self.log_streams and now >= self.next_log:
+            for stream in list(self.log_streams.values()):
+                self._send_log_chunk(stream)
+            self.next_log = max(self.next_log + self.args.log_chunk_interval, now)
         if now >= self.next_stats:
             self.emit(event='sent', **self.sent, state=m.work_state)
             self.next_stats += 1.0
@@ -1024,6 +1156,24 @@ def build_parser() -> argparse.ArgumentParser:
         '--imu-cfg-unsupported',
         action='store_true',
         help='emulate firmware without key 0x002B (write and read answered with 0x20)',
+    )
+    p.add_argument(
+        '--log-chunk-interval',
+        type=float,
+        default=0.05,
+        help='seconds between firmware log chunks (0x0300) per enabled log type',
+    )
+    p.add_argument('--log-chunk-bytes', type=int, default=512, help='data bytes per log chunk')
+    p.add_argument(
+        '--log-ack-every',
+        type=int,
+        default=1,
+        help='request a host ACK on every Nth chunk (0 = never; the file end always asks)',
+    )
+    p.add_argument(
+        '--log-ignore-hostcfg',
+        action='store_true',
+        help='send log chunks to the 0x0301 sender instead of the key 0x0009 host',
     )
     p.add_argument('--quit-on-eof', action='store_true', default=True)
     p.add_argument('--no-quit-on-eof', dest='quit_on_eof', action='store_false')

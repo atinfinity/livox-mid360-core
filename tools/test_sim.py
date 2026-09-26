@@ -374,6 +374,15 @@ class DeviceModelTest(unittest.TestCase):
         self.assertNotIn(sim.KEY_CORE_TEMP, kvs)
         self.assertIn(sim.KEY_DIAG_STATUS, kvs)
 
+    def test_log_host_key_is_writable_and_zero_by_default(self) -> None:
+        self.assertIsNone(self.m.host(sim.KEY_LOG_HOST))
+        cfg = proto.encode_host_ipcfg('192.168.1.5', 56501, 56500)
+        self.assertEqual(self.m.configure([(sim.KEY_LOG_HOST, cfg)]), (sim.RET_OK, 0))
+        self.assertEqual(self.m.host(sim.KEY_LOG_HOST), ('192.168.1.5', 56501, 56500))
+        self.assertEqual(
+            self.m.configure([(sim.KEY_LOG_HOST, b'\0' * 7)])[0], sim.RET_PARAM_INVALID_LEN
+        )
+
     def test_push_payload_parses(self) -> None:
         self.m.hms = [0x02100003] + [0] * 7
         kvs = dict(proto.parse_info_push(self.m.push_payload(123)))
@@ -590,6 +599,76 @@ class EndToEndTest(unittest.TestCase):
         ack = self.request(sim.CMD_PARAM_INQUIRE, proto.encode_param_inquire([sim.KEY_SN]), cmd)
         self.assertEqual(proto.parse_param_inquire_ack(ack.data)[0], 0)
         self.assertTrue(any(e['event'] == 'ack_dropped' for e in self.events()))
+
+    def test_firmware_log_stream_gap_and_ack(self) -> None:
+        self.s.args.log_chunk_interval = 0.01
+        self.s.args.log_chunk_bytes = 64
+        log = ('127.0.0.1', self.s.ports['log'])
+        # Host log socket; key 0x0009 points the stream at it.
+        host_log = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        host_log.bind(('127.0.0.1', 0))
+        host_log.settimeout(3)
+        try:
+            cfg = proto.encode_host_ipcfg('127.0.0.1', host_log.getsockname()[1], 56500)
+            ack = self.request(
+                sim.CMD_PARAM_CONFIG,
+                proto.encode_param_config([(sim.KEY_LOG_HOST, cfg)]),
+                ('127.0.0.1', self.s.ports['cmd']),
+            )
+            self.assertEqual(ack.data[0], sim.RET_OK)
+            self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x00\x01', log).data, b'\x00')
+            self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x00\x01', log).data, b'\x00')
+            self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x05\x01', log).data, b'\x01')
+
+            def chunk():
+                d, addr = host_log.recvfrom(2048)
+                f = proto.CommandFrame.parse(d)
+                self.assertEqual((f.cmd_id, f.cmd_type), (sim.CMD_PUSH_LOG, 0))
+                hdr = struct.unpack_from('<BBBBIHIH', f.data, 0)
+                self.assertEqual(hdr[7], len(f.data) - 16)
+                return hdr, f.data[16:], addr
+
+            hdr, data, addr = chunk()
+            self.assertEqual((hdr[0], hdr[1], hdr[6]), (0, 1, 1))
+            self.assertTrue(hdr[3] & sim.LOG_FLAG_BEGIN)
+            self.assertTrue(hdr[3] & sim.LOG_FLAG_ACK)
+            self.assertEqual(len(data), 64)
+            self.assertTrue(data.startswith(self.s.model.sn.encode()))
+            # Acknowledge it the way the SDK does.
+            ack_payload = struct.pack('<BBBI', 0, hdr[0], hdr[1], hdr[6])
+            host_log.sendto(
+                proto.CommandFrame(9, sim.CMD_PUSH_LOG, 0, 0, ack_payload).encode(), addr
+            )
+            hdr, _, _ = chunk()
+            self.assertEqual(hdr[6], 2)
+            self.send_control('{"cmd":"log_drop","n":2}')
+            seen = [chunk()[0][6] for _ in range(6)]
+            self.assertIn(5, seen)
+            self.assertNotIn(3, seen)
+            self.assertNotIn(4, seen)
+            self.send_control('{"cmd":"log_new_file"}')
+            ended = begun = False
+            for _ in range(20):
+                hdr, data, _ = chunk()
+                if hdr[3] & sim.LOG_FLAG_END:
+                    ended = True
+                    self.assertEqual(len(data), 0)
+                if hdr[1] == 2 and hdr[3] & sim.LOG_FLAG_BEGIN:
+                    self.assertEqual(hdr[6], 1)
+                    begun = True
+                    break
+            self.assertTrue(ended and begun)
+            self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x00\x00', log).data, b'\x00')
+            self.send_control('{"cmd":"status"}')
+            deadline = time.monotonic() + 3
+            while '"event":"status"' not in self.out.getvalue() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            status = [e for e in self.events() if e['event'] == 'status'][-1]
+            self.assertEqual(status['log_enabled'], [])
+            self.assertGreaterEqual(status['log_acks_received'], 1)
+            self.assertEqual(status['hosts']['log'][1], host_log.getsockname()[1])
+        finally:
+            host_log.close()
 
 
 if __name__ == '__main__':

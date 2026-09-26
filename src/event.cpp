@@ -25,6 +25,8 @@ std::string_view to_string(Event::Kind kind) noexcept
       return "reconnected";
     case Event::Kind::kStats:
       return "stats";
+    case Event::Kind::kFirmwareLogGap:
+      return "firmware_log_gap";
   }
   return "unknown";
 }
@@ -84,6 +86,11 @@ std::string to_string(const Event & event)
       break;
     case Event::Kind::kReconnected:
       out += " attempts=" + std::to_string(event.attempts);
+      break;
+    case Event::Kind::kFirmwareLogGap:
+      out += " file=" + std::to_string(event.log_file_index) +
+             " expected=" + std::to_string(event.log_expected) +
+             " actual=" + std::to_string(event.log_actual);
       break;
   }
   return out;

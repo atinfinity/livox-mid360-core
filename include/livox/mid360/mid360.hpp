@@ -12,6 +12,7 @@
 #include "livox/mid360/device.hpp"
 #include "livox/mid360/event.hpp"
 #include "livox/mid360/export.hpp"
+#include "livox/mid360/firmware_log.hpp"
 #include "livox/mid360/frame.hpp"
 #include "livox/mid360/hms.hpp"
 #include "livox/mid360/keys.hpp"

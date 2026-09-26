@@ -24,6 +24,7 @@ using Clock = std::chrono::steady_clock;
 constexpr std::uint64_t kPushTag = 1;
 constexpr std::uint64_t kPointTag = 2;
 constexpr std::uint64_t kImuTag = 3;
+constexpr std::uint64_t kLogTag = 4;
 constexpr auto kMaxPoll = std::chrono::milliseconds{100};
 
 DeviceError transport_error(const TransportError & err)
@@ -143,6 +144,10 @@ void Context::Impl::run()
           socket = &imu_socket;
           port = detail::DataPort::kImu;
           break;
+        case kLogTag:
+          socket = &log_socket;
+          port = detail::DataPort::kLog;
+          break;
         default:
           continue;
       }
@@ -159,6 +164,9 @@ void Context::Impl::run()
           break;
         }
         datagrams.fetch_add(*n, std::memory_order_relaxed);
+        if (port == detail::DataPort::kLog) {
+          log_datagrams.fetch_add(*n, std::memory_order_relaxed);
+        }
         for (std::size_t i = 0; i < *n; ++i) {
           const Datagram & d = batch[i];
           const auto it =
@@ -208,6 +216,10 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
   if (!imu) {
     return std::unexpected(transport_error(imu.error()));
   }
+  auto log = open(opts.log_port);
+  if (!log) {
+    return std::unexpected(transport_error(log.error()));
+  }
   auto poller = Poller::create();
   if (!poller) {
     return std::unexpected(transport_error(poller.error()));
@@ -215,10 +227,11 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
   impl->push_socket = std::move(*push);
   impl->point_socket = std::move(*point);
   impl->imu_socket = std::move(*imu);
+  impl->log_socket = std::move(*log);
   impl->poller = std::move(*poller);
   for (auto [socket, tag] :
        {std::pair{&impl->push_socket, kPushTag}, std::pair{&impl->point_socket, kPointTag},
-        std::pair{&impl->imu_socket, kImuTag}}) {
+        std::pair{&impl->imu_socket, kImuTag}, std::pair{&impl->log_socket, kLogTag}}) {
     if (auto r = impl->poller.add(*socket, tag); !r) {
       return std::unexpected(transport_error(r.error()));
     }
@@ -226,6 +239,7 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
   impl->options.push_port = impl->push_socket.local_endpoint().port;
   impl->options.point_port = impl->point_socket.local_endpoint().port;
   impl->options.imu_port = impl->imu_socket.local_endpoint().port;
+  impl->options.log_port = impl->log_socket.local_endpoint().port;
 
   Impl * raw = impl.get();
   impl->thread = std::thread([raw] { raw->run(); });
@@ -278,6 +292,7 @@ ContextStats Context::stats() const
   return ContextStats{
     .datagrams = impl_->datagrams.load(std::memory_order_relaxed),
     .unknown_source = impl_->unknown_source.load(std::memory_order_relaxed),
+    .log_datagrams = impl_->log_datagrams.load(std::memory_order_relaxed),
   };
 }
 
