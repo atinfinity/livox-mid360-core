@@ -170,7 +170,8 @@ TEST_CASE("Device::set<K> / get<K>: every writable key round-trips", "[device][k
   SECTION("kDetectMode") { roundtrip<Key::kDetectMode>(*dev, DetectMode::kSensitive); }
   SECTION("kFuncIoCfg")
   {
-    roundtrip<Key::kFuncIoCfg>(*dev, FuncIoConfig{.in0 = 0, .in1 = 0, .out0 = 2, .out1 = 1});
+    roundtrip<Key::kFuncIoCfg>(
+      *dev, FuncIoConfig{.out0 = FuncOut::kSafetyZone, .out1 = FuncOut::kFollowInput});
   }
   SECTION("kWorkTgtMode: only the ACK is awaited")
   {

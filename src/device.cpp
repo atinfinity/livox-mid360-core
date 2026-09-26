@@ -1159,6 +1159,22 @@ std::expected<InstallAttitude, DeviceError> Device::install_attitude(
   return get<Key::kInstallAttitude>(opts);
 }
 
+std::expected<SetResult, DeviceError> Device::set_func_io_config(
+  const FuncIoConfig & c, std::optional<RequestOptions> opts)
+{
+  if (!func_io_config_valid(c)) {
+    DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+    err.key = Key::kFuncIoCfg;
+    return std::unexpected(err);
+  }
+  return set<Key::kFuncIoCfg>(c, opts);
+}
+
+std::expected<FuncIoConfig, DeviceError> Device::func_io_config(std::optional<RequestOptions> opts)
+{
+  return get<Key::kFuncIoCfg>(opts);
+}
+
 std::expected<FovSettings, DeviceError> Device::fov(std::optional<RequestOptions> opts)
 {
   static constexpr std::array<Key, 3> kKeys{Key::kFovCfg0, Key::kFovCfg1, Key::kFovCfgEn};

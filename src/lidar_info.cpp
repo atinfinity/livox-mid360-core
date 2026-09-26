@@ -230,10 +230,41 @@ std::string to_string(const FovSettings & s)
   return out;
 }
 
+std::string_view to_string(FuncIn0 f) noexcept
+{
+  switch (f) {
+    case FuncIn0::kPps:
+      return "pps";
+  }
+  return "unknown";
+}
+
+std::string_view to_string(FuncIn1 f) noexcept
+{
+  switch (f) {
+    case FuncIn1::kGps:
+      return "gps";
+  }
+  return "unknown";
+}
+
+std::string_view to_string(FuncOut f) noexcept
+{
+  switch (f) {
+    case FuncOut::kNone:
+      return "none";
+    case FuncOut::kFollowInput:
+      return "follow_input";
+    case FuncOut::kSafetyZone:
+      return "safety_zone";
+  }
+  return "unknown";
+}
+
 std::string to_string(const FuncIoConfig & c)
 {
-  return std::to_string(c.in0) + '/' + std::to_string(c.in1) + '/' + std::to_string(c.out0) + '/' +
-         std::to_string(c.out1);
+  return std::string(to_string(c.in0)) + '/' + std::string(to_string(c.in1)) + '/' +
+         std::string(to_string(c.out0)) + '/' + std::string(to_string(c.out1));
 }
 
 std::string to_string(const ImuSensorConfig & c)

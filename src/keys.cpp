@@ -174,6 +174,13 @@ bool install_attitude_valid(const InstallAttitude & a) noexcept
   return ok(a.roll_deg) && ok(a.pitch_deg) && ok(a.yaw_deg);
 }
 
+bool func_io_config_valid(const FuncIoConfig & c) noexcept
+{
+  return c.in0 == FuncIn0::kPps && c.in1 == FuncIn1::kGps &&
+         static_cast<std::uint8_t>(c.out0) <= static_cast<std::uint8_t>(FuncOut::kSafetyZone) &&
+         static_cast<std::uint8_t>(c.out1) <= static_cast<std::uint8_t>(FuncOut::kSafetyZone);
+}
+
 bool fov_in_range(const FovConfig & f) noexcept
 {
   const auto yaw = [](std::int32_t v) { return v >= 0 && v < 360; };
@@ -230,7 +237,9 @@ std::array<std::byte, 20> encode_fov_config(const FovConfig & f) noexcept
 
 std::array<std::byte, 4> encode_func_io_config(const FuncIoConfig & c) noexcept
 {
-  return {std::byte{c.in0}, std::byte{c.in1}, std::byte{c.out0}, std::byte{c.out1}};
+  return {
+    std::byte{static_cast<std::uint8_t>(c.in0)}, std::byte{static_cast<std::uint8_t>(c.in1)},
+    std::byte{static_cast<std::uint8_t>(c.out0)}, std::byte{static_cast<std::uint8_t>(c.out1)}};
 }
 
 std::array<std::byte, 3> encode_imu_sensor_config(const ImuSensorConfig & c) noexcept
@@ -329,9 +338,15 @@ std::expected<FuncIoConfig, KeyError> decode_func_io_config(std::span<const std:
   if (v.size() != 4) {
     return std::unexpected(KeyError::kWrongLength);
   }
-  return FuncIoConfig{
-    read_le<std::uint8_t>(v, 0), read_le<std::uint8_t>(v, 1), read_le<std::uint8_t>(v, 2),
-    read_le<std::uint8_t>(v, 3)};
+  const FuncIoConfig c{
+    static_cast<FuncIn0>(read_le<std::uint8_t>(v, 0)),
+    static_cast<FuncIn1>(read_le<std::uint8_t>(v, 1)),
+    static_cast<FuncOut>(read_le<std::uint8_t>(v, 2)),
+    static_cast<FuncOut>(read_le<std::uint8_t>(v, 3))};
+  if (!func_io_config_valid(c)) {
+    return std::unexpected(KeyError::kOutOfRange);
+  }
+  return c;
 }
 
 std::expected<ImuSensorConfig, KeyError> decode_imu_sensor_config(
