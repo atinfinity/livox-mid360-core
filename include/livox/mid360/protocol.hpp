@@ -29,12 +29,13 @@ inline constexpr std::uint16_t kCommandPort = 56100;     ///< LiDAR control comm
 inline constexpr std::uint16_t kPushPort = 56200;        ///< LiDAR-side source port for 0x0102 push
 inline constexpr std::uint16_t kPointCloudPort = 56300;  ///< LiDAR-side source port for point cloud
 inline constexpr std::uint16_t kImuPort = 56400;         ///< LiDAR-side source port for IMU
-inline constexpr std::uint16_t kLogPort = 56500;         ///< LiDAR log port (out of scope for v1)
+inline constexpr std::uint16_t kLogPort = 56500;         ///< LiDAR log port (0x03xx, #44)
 
 inline constexpr std::uint16_t kDefaultHostCommandPort = 56101;
 inline constexpr std::uint16_t kDefaultHostPushPort = 56201;
 inline constexpr std::uint16_t kDefaultHostPointCloudPort = 56301;
 inline constexpr std::uint16_t kDefaultHostImuPort = 56401;
+inline constexpr std::uint16_t kDefaultHostLogPort = 56501;  ///< firmware log (#44)
 
 inline constexpr std::uint8_t kCommandSof = 0xAA;
 inline constexpr std::uint8_t kProtocolVersion = 0;
@@ -57,7 +58,9 @@ enum class CmdId : std::uint16_t
   kReboot = 0x0200,
   kFactoryReset = 0x0201,
   kSetGpsTimestamp = 0x0202,
-  // 0x03xx (log) and 0x04xx (upgrade) are intentionally not modelled in v1.
+  kPushLog = 0x0300,        ///< LiDAR → host on the log port; see firmware_log.hpp (#44)
+  kCollectionLog = 0x0301,  ///< host → LiDAR port 56500: start / stop a log type
+  // 0x0302 (log time sync) is defined by SDK2 but never used; 0x04xx (upgrade) is not modelled.
 };
 
 enum class CmdType : std::uint8_t

@@ -40,7 +40,7 @@ std::unique_ptr<Context> loopback_context()
 {
   ContextOptions o;
   o.bind_address = {127, 0, 0, 1};
-  o.push_port = o.point_port = o.imu_port = 0;
+  o.push_port = o.point_port = o.imu_port = o.log_port = 0;
   auto c = Context::create(o);
   REQUIRE(c.has_value());
   return std::move(*c);
@@ -84,7 +84,9 @@ struct Fixture
 
   [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions & o = options()) const
   {
-    auto d = Device::open(*context, discovered(), o);
+    DeviceOptions with_ports = o;
+    with_ports.lidar_log_port = sim->ports().log;  // the simulator's 0x03xx socket (#44)
+    auto d = Device::open(*context, discovered(), with_ports);
     if (!d) {
       FAIL(to_string(d.error()));
     }
@@ -788,4 +790,165 @@ TEST_CASE("Device: stop discards the partial frame and re-enables callbacks", "[
   REQUIRE(dev->start_sampling().has_value());
   REQUIRE(wait_until([&] { return rec.frames >= 1; }, 6s));
   CHECK(rec.ok);
+}
+
+// ---------------------------------------------------------------------------
+// Firmware log collection (issue #44)
+// ---------------------------------------------------------------------------
+namespace
+{
+struct LogRecorder
+{
+  std::atomic<std::uint64_t> chunks{0};
+  std::atomic<std::uint64_t> bytes{0};
+  std::atomic<std::uint64_t> begins{0};
+  std::atomic<std::uint64_t> ends{0};
+  std::atomic<std::uint64_t> gap_events{0};
+  std::atomic<bool> ok{true};
+  std::mutex mutex;
+  std::vector<std::uint32_t> trans;  ///< trans_index in delivery order (file 1 only)
+  std::vector<Event> gaps;
+
+  void attach(Device & d)
+  {
+    REQUIRE(d.on_firmware_log([this](const FirmwareLogChunk & c) {
+               ++chunks;
+               bytes += c.data.size();
+               if (c.header.flags.file_begin()) ++begins;
+               if (c.header.flags.file_end()) ++ends;
+               if (c.host_receive_time_ns == 0 || c.header.log_type != FirmwareLogType::kRealTime)
+                 ok = false;
+               const std::lock_guard lock(mutex);
+               if (c.header.file_index == 1) trans.push_back(c.header.trans_index);
+             })
+              .has_value());
+    REQUIRE(d.on_event([this](const Event & e) {
+               if (e.kind == Event::Kind::kFirmwareLogGap) {
+                 ++gap_events;
+                 const std::lock_guard lock(mutex);
+                 gaps.push_back(e);
+               }
+             })
+              .has_value());
+  }
+};
+}  // namespace
+
+TEST_CASE("Device: firmware log start, chunks in order, ACKs and stop", "[sim][device]")
+{
+  Fixture f({"--log-chunk-interval", "0.02", "--log-chunk-bytes", "100"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  LogRecorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  CHECK(dev->stats().log_chunks == 0);
+  REQUIRE(dev->start_firmware_log().has_value());
+  REQUIRE(wait_until([&] { return rec.chunks >= 10; }));
+  REQUIRE(dev->stop_firmware_log().has_value());
+  REQUIRE(wait_until([&] { return rec.ends >= 1; }));
+  const auto after = rec.chunks.load();
+  std::this_thread::sleep_for(100ms);
+  CHECK(rec.chunks == after);  // nothing after the end packet
+  CHECK(rec.begins == 1);
+  CHECK(rec.gap_events == 0);
+  CHECK(rec.ok);
+  {
+    const std::lock_guard lock(rec.mutex);
+    REQUIRE(rec.trans.size() >= 10);
+    for (std::size_t i = 0; i < rec.trans.size(); ++i) {
+      CHECK(rec.trans[i] == i + 1);
+    }
+  }
+  const DeviceStats s = dev->stats();
+  CHECK(s.log_chunks == rec.chunks);
+  CHECK(s.log_bytes == rec.bytes);
+  CHECK(s.log_bytes >= 1000);
+  CHECK(s.log_gaps == 0);
+  CHECK(s.log_acks_sent == s.log_chunks);  // --log-ack-every defaults to 1
+  CHECK(s.bad_log_packets == 0);
+  CHECK(s.last_log_time_ns > 0);
+  CHECK(f.context->stats().log_datagrams >= s.log_chunks);
+  // The simulator saw our ACKs and the 0x0009 host it was pointed at.
+  REQUIRE(f.sim->control(R"({"cmd":"status"})"));
+  const auto status = f.sim->wait_event(R"("event":"status")");
+  REQUIRE(status.has_value());
+  CHECK(status->find("\"log_acks_received\":0") == std::string::npos);
+  CHECK(status->find("\"log_enabled\":[]") != std::string::npos);
+  CHECK(status->find("\"log\":null") == std::string::npos);  // key 0x0009 was written
+}
+
+TEST_CASE("Device: firmware log gap event and new file", "[sim][device]")
+{
+  Fixture f({"--log-chunk-interval", "0.02", "--log-ack-every", "0"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  LogRecorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_firmware_log(FirmwareLogType::kRealTime).has_value());
+  REQUIRE(wait_until([&] { return rec.chunks >= 3; }));
+  REQUIRE(f.sim->control(R"({"cmd":"log_drop","n":2})"));
+  REQUIRE(wait_until([&] { return rec.gap_events >= 1; }));
+  {
+    const std::lock_guard lock(rec.mutex);
+    REQUIRE(rec.gaps.size() == 1);
+    const Event & g = rec.gaps.front();
+    CHECK(g.log_file_index == 1);
+    CHECK(g.log_actual == g.log_expected + 2);
+    CHECK(to_string(g).find("firmware_log_gap") != std::string::npos);
+  }
+  CHECK(dev->stats().log_gaps == 1);
+  CHECK(dev->stats().log_acks_sent == 0);
+  // A new file restarts trans_index at 1 without a gap.
+  REQUIRE(f.sim->control(R"({"cmd":"log_new_file"})"));
+  REQUIRE(wait_until([&] { return rec.begins >= 2 && rec.ends >= 1; }));
+  REQUIRE(wait_until([&] { return rec.chunks >= 12; }));
+  CHECK(rec.gap_events == 1);
+  REQUIRE(dev->stop_firmware_log().has_value());
+}
+
+TEST_CASE("Device: firmware log without on_firmware_log still counts and ACKs", "[sim][device]")
+{
+  Fixture f({"--log-chunk-interval", "0.02", "--log-ignore-hostcfg"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+  REQUIRE(dev->start_firmware_log().has_value());
+  REQUIRE(wait_until([&] { return dev->stats().log_chunks >= 5; }));
+  CHECK(dev->stats().log_acks_sent >= 5);
+  REQUIRE(dev->stop_firmware_log().has_value());
+  // Subscribing afterwards is allowed and works for the next start.
+  std::atomic<std::uint64_t> n{0};
+  REQUIRE(dev->on_firmware_log([&](const FirmwareLogChunk &) { ++n; }).has_value());
+  REQUIRE(dev->start_firmware_log().has_value());
+  REQUIRE(wait_until([&] { return n >= 3; }));
+  REQUIRE(dev->stop_firmware_log().has_value());
+}
+
+TEST_CASE(
+  "Device: firmware log start times out when the LiDAR ignores the log port", "[sim][device]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  // Key 0x0009 is accepted on the command port, then 0x0301 goes to a port nobody answers.
+  DeviceOptions quiet = Fixture::options();
+  quiet.session.request = {.timeout = 50ms, .attempts = 2};
+  quiet.lidar_log_port = 1;  // no UDP listener there
+  auto opened = Device::open(*f.context, f.discovered(), quiet);
+  REQUIRE(opened.has_value());
+  auto & dev = *opened;
+  {
+    const auto r = dev->start_firmware_log();
+    REQUIRE(!r.has_value());
+    REQUIRE(r.error().session.has_value());
+    CHECK(r.error().session->kind == SessionErrorKind::kTimeout);
+    CHECK(r.error().session->attempts == 2);
+    CHECK(r.error().session->cmd_id == static_cast<std::uint16_t>(CmdId::kCollectionLog));
+  }
 }
