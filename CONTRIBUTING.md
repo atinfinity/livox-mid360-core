@@ -27,7 +27,7 @@ work and project decisions are in [docs/roadmap.md](docs/roadmap.md).
 ## Lint
 
 Style and static analysis are enforced by the `Lint` workflow (clang-format 19, clang-tidy 19,
-ruff). The configuration files `.clang-format`, `.clang-tidy` and `pyproject.toml` are shared
+ruff, ament_cppcheck, ament_lint_cmake). The configuration files `.clang-format`, `.clang-tidy` and `pyproject.toml` are shared
 with `livox-mid360-ros2` (`ament_clang_format --config`; ruff reads `pyproject.toml` directly,
 `ament_flake8` cannot, see below).
 
@@ -59,12 +59,26 @@ python3 -m venv .venv-ament && .venv-ament/bin/pip install flake8 flake8-blind-e
 .venv-ament/bin/ament_flake8 tools/ && .venv-ament/bin/ament_pep257 tools/
 ```
 
+Of the ROS 2 `ament_lint_common` set, two more checks run here because they are cheap and
+useful on a plain CMake library (#65): `ament_cppcheck` (cppcheck from apt, with
+`AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1` because ament refuses cppcheck 2.x by default) and
+`ament_lint_cmake` (all-lower-case command names, 140 columns). Both are installed with pip
+from the `jazzy` branch of [ament_lint](https://github.com/ament/ament_lint) (`AMENT_LINT_BRANCH`
+in `lint.yml`). The rest is deliberately not run: `ament_cpplint` would need five filters for
+tool limitations (C++23 headers, Catch2 macros) and its remaining findings were fixed once by
+hand; `ament_copyright` requires the ROS 2 header format, and files here keep the one-line
+`SPDX-License-Identifier: Apache-2.0`; `ament_uncrustify` conflicts with clang-format, so the
+ROS 2 driver package uses `ament_cmake_clang_format` instead. The driver's `colcon test` never
+lints this library's files, so these are consistency checks, not requirements.
+
 Run the same checks as CI locally with:
 
 ```sh
-scripts/lint.sh            # check (clang-tidy needs clang-19 and builds build-tidy/)
-scripts/lint.sh --fix      # apply clang-format and ruff fixes
-scripts/lint.sh --no-tidy  # formatting only
+scripts/lint.sh              # check (clang-tidy needs clang-19 and builds build-tidy/)
+scripts/lint.sh --fix        # apply clang-format and ruff fixes
+scripts/lint.sh --no-tidy    # formatting only
+scripts/lint.sh --no-ament   # without the ROS 2 checks (needs cppcheck and the ament tools)
+scripts/lint.sh --ament-only # only the ROS 2 checks
 ```
 
 ## Fuzzing

@@ -20,6 +20,7 @@ on:
 
 env:
   RUFF_VERSION: 0.16.9
+  AMENT_LINT_BRANCH: jazzy  # ROS 2 distribution whose ament_lint tools are used (#65)
 
 jobs:
   clang-format:
@@ -50,3 +51,16 @@ jobs:
       - run: pipx install "ruff==${RUFF_VERSION}"
       - run: ruff check tools/
       - run: ruff format --check tools/
+
+  # The ROS 2 (ament_lint_common) checks that are cheap and useful on a plain CMake library:
+  # cppcheck and lint_cmake. See CONTRIBUTING.md (Lint) and issue #65 for what is left out.
+  ament:
+    name: ament_cppcheck / ament_lint_cmake
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cppcheck
+      - run: |
+          pipx install "git+https://github.com/ament/ament_lint.git@${AMENT_LINT_BRANCH}#subdirectory=ament_cppcheck"
+          pipx install "git+https://github.com/ament/ament_lint.git@${AMENT_LINT_BRANCH}#subdirectory=ament_lint_cmake"
+      - run: scripts/lint.sh --ament-only
