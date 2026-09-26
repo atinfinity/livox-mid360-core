@@ -43,13 +43,21 @@ struct DeviceStats
   std::int64_t time_offset_ns =
     0;  ///< kHostOffsetOnce: host - LiDAR, measured once (again after a sync loss)
   bool time_offset_valid = false;
+  // --- firmware log (#44), see Device::on_firmware_log ---
+  std::uint64_t log_chunks = 0;        ///< 0x0300 pushes delivered (begin / end included)
+  std::uint64_t log_bytes = 0;         ///< log payload bytes delivered
+  std::uint64_t log_gaps = 0;          ///< kFirmwareLogGap events raised
+  std::uint64_t log_acks_sent = 0;     ///< pushes that asked for an ACK and got one
+  std::uint64_t bad_log_packets = 0;   ///< log-port datagrams that failed to parse
+  std::uint64_t last_log_time_ns = 0;  ///< host receive time of the last push, 0 = none
 };
 
 /// Counters of the shared receive side, snapshot via Context::stats().
 struct ContextStats
 {
-  std::uint64_t datagrams = 0;       ///< received on the three sockets
+  std::uint64_t datagrams = 0;       ///< received on the four sockets
   std::uint64_t unknown_source = 0;  ///< dropped: source IP not registered by any Device
+  std::uint64_t log_datagrams = 0;   ///< of `datagrams`, those on the firmware log socket
 };
 
 /// Why a Device left the connected state (Event::reason, issue #8).
@@ -67,12 +75,13 @@ struct Event
 {
   enum class Kind : std::uint8_t
   {
-    kStateChanged,  ///< `old_state` -> `new_state` seen in a 0x0102 push
-    kHms,           ///< the set of active `hms` codes changed; see `hms_level`
-    kDiagChanged,   ///< key 0x800E changed: `diag_old` -> `diag_new` (#55)
-    kDisconnected,  ///< see `reason` (#8); commands fail with kDisconnected until kReconnected
-    kReconnected,   ///< session, host setup and sampling re-established after `attempts`
-    kStats,         ///< periodic `stats` snapshot (#6)
+    kStateChanged,    ///< `old_state` -> `new_state` seen in a 0x0102 push
+    kHms,             ///< the set of active `hms` codes changed; see `hms_level`
+    kDiagChanged,     ///< key 0x800E changed: `diag_old` -> `diag_new` (#55)
+    kDisconnected,    ///< see `reason` (#8); commands fail with kDisconnected until kReconnected
+    kReconnected,     ///< session, host setup and sampling re-established after `attempts`
+    kStats,           ///< periodic `stats` snapshot (#6)
+    kFirmwareLogGap,  ///< log `trans_index` jumped inside one file (#44); see `log_*`
   };
   Kind kind = Kind::kStats;
   std::uint64_t time_ns = 0;                          ///< host time of the observation
@@ -85,6 +94,9 @@ struct Event
   DiagStatus diag_old;                     ///< kDiagChanged (all normal before the first push)
   DiagStatus diag_new;                     ///< kDiagChanged
   DeviceStats stats;                       ///< kStats
+  std::uint8_t log_file_index = 0;         ///< kFirmwareLogGap
+  std::uint32_t log_expected = 0;          ///< kFirmwareLogGap: trans_index expected
+  std::uint32_t log_actual = 0;            ///< kFirmwareLogGap: trans_index received
 };
 
 [[nodiscard]] std::string_view to_string(Event::Kind kind) noexcept;

@@ -34,6 +34,7 @@ enum class Key : std::uint16_t
   kStateInfoHostIpCfg = 0x0005,   ///< u8[8] ip, dst port, src port
   kPointCloudHostIpCfg = 0x0006,  ///< u8[8]
   kImuHostIpCfg = 0x0007,         ///< u8[8]
+  kLogHostIpCfg = 0x0009,         ///< u8[8] firmware log host (#44); SDK2 only reads it
   kInstallAttitude = 0x0012,      ///< 24 bytes: 3 float deg + 3 int mm
   kFovCfg0 = 0x0015,              ///< 20 bytes
   kFovCfg1 = 0x0016,              ///< 20 bytes
@@ -85,7 +86,7 @@ enum class KeyError : std::uint8_t
 using Ipv4 = std::array<std::uint8_t, 4>;
 
 struct HostIpConfig
-{  ///< keys 0x0005 / 0x0006 / 0x0007
+{  ///< keys 0x0005 / 0x0006 / 0x0007 / 0x0009
   Ipv4 ip{};
   std::uint16_t dst_port = 0;  ///< host-side listening port
   std::uint16_t src_port = 0;  ///< LiDAR-side source port
@@ -406,6 +407,8 @@ template <> struct key_traits<Key::kStateInfoHostIpCfg>
 template <> struct key_traits<Key::kPointCloudHostIpCfg>
 : detail::WritableTraits<HostIpConfig, encode_host_ip_config, decode_host_ip_config> {};
 template <> struct key_traits<Key::kImuHostIpCfg>
+: detail::WritableTraits<HostIpConfig, encode_host_ip_config, decode_host_ip_config> {};
+template <> struct key_traits<Key::kLogHostIpCfg>
 : detail::WritableTraits<HostIpConfig, encode_host_ip_config, decode_host_ip_config> {};
 template <> struct key_traits<Key::kInstallAttitude>
 : detail::WritableTraits<InstallAttitude, encode_install_attitude, decode_install_attitude> {};

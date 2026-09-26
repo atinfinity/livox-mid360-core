@@ -33,3 +33,32 @@ build/examples/minimal_receive --lidar-ip 127.0.0.1 --host-ip 127.0.0.1 --second
 
 `run_against_sim.sh` does the same for 2 s and is registered as the ctest
 `example_minimal_receive` so the sample cannot rot.
+
+## collect_firmware_log
+
+`collect_firmware_log.cpp` collects the LiDAR's own firmware log (#44): `Device::open` →
+`on_firmware_log` → `start_firmware_log`, one output file per firmware log file, a progress
+line per second on stdout (`file 1: N bytes, M chunks, G gaps`), events (including
+`firmware_log_gap`) on stderr, `stop_firmware_log` and a summary on exit.
+
+| Flag | Meaning |
+|---|---|
+| `--lidar-ip` / `--host-ip` | as above |
+| `--out DIR` | output directory (created; default `.`) |
+| `--duration N` | stop after N seconds; 0 = until SIGINT |
+| `--log-port N` | host port for the log stream (default 56501) |
+| `--type realtime\|exception` | log type to collect (default realtime) |
+| `--start-sampling` | also start sampling, so the log reflects a working LiDAR |
+
+Files are named `<SN>_<UTC start, e.g. 20260927T101500Z>_<type>_<file_index>.log`; a new one
+is opened on every packet flagged "file begin". Exit codes: 0 ok, 1 usage, 2 setup failure,
+3 no chunk received (the empty file is kept).
+
+```sh
+build/examples/collect_firmware_log --lidar-ip 192.168.1.10 --host-ip 192.168.1.5 --out logs --duration 30
+# simulator:
+python3 tools/livox_mid360_sim.py --bind 127.0.0.1 &
+build/examples/collect_firmware_log --lidar-ip 127.0.0.1 --host-ip 127.0.0.1 --out /tmp/fwlog --duration 3
+```
+
+The ctest `example_collect_firmware_log` runs it for 2 s against the simulator.

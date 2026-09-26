@@ -63,7 +63,7 @@ class SimProcess
 public:
   struct Ports
   {
-    std::uint16_t discovery = 0, cmd = 0, push = 0, pcl = 0, imu = 0;
+    std::uint16_t discovery = 0, cmd = 0, push = 0, pcl = 0, imu = 0, log = 0;
   };
 
   /// Python interpreter from LIVOX_MID360_PYTHON (CMake) or PATH; nullopt if none.
@@ -155,7 +155,8 @@ public:
       auto port = [&](const char * k) {
         return static_cast<std::uint16_t>(json_int(*line, k).value_or(0));
       };
-      sim.ports_ = {port("discovery"), port("cmd"), port("push"), port("pcl"), port("imu")};
+      sim.ports_ = {port("discovery"), port("cmd"), port("push"),
+                    port("pcl"),       port("imu"), port("log")};
       if (sim.ports_.discovery == 0 || sim.ports_.cmd == 0) {
         error = "ready line lacked ports: " + *line;
         return std::nullopt;

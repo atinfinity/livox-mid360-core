@@ -113,7 +113,7 @@ dev->reset();  // Devices before the Context
 ```
 
 A runnable version with CLI flags, SIGINT handling and a simulator recipe is
-`examples/minimal_receive.cpp` (see `examples/README.md`).
+`examples/minimal_receive.cpp` and `examples/collect_firmware_log.cpp` (see `examples/README.md`).
 
 The lower layers stay available on their own: `Session` / `apply_host_setup` for synchronous
 control without a receive thread, and `parse_data_packet` / `decode_cartesian32` for raw

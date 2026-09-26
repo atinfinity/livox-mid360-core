@@ -21,7 +21,7 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | Option | Default | Meaning |
 |---|---|---|
 | `--bind` | `0.0.0.0` | address to bind; also reported as `lidar_ip` in the discovery ACK (127.0.0.1 when unspecified) |
-| `--base-port` | 56000 | discovery port; cmd, push, pcl, imu follow at +100, +200, +300, +400. `0` picks free ports |
+| `--base-port` | 56000 | discovery port; cmd, push, pcl, imu, log follow at +100, +200, +300, +400, +500. `0` picks free ports |
 | `--sn` | `SIM0000000000001` | serial number (≤ 16 chars) |
 | `--product-info` | `MID360-SIM` | key 0x8001 (≤ 64 chars) |
 | `--version-app` / `--version-loader` / `--version-hardware` | `0.0.0.1` | keys 0x8002–0x8004 as `a.b.c.d` |
@@ -34,6 +34,10 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--push-rate` | 1.0 | 0x0102 push rate in Hz, not affected by `--rate-multiplier` |
 | `--drop-rate` | 0 | fraction of point-cloud packets silently dropped (`udp_cnt` still advances) |
 | `--imu-cfg-unsupported` | | emulate firmware without key `0x002B`: its write, read and any inquire naming it answer `0x20` |
+| `--log-chunk-interval` | 0.05 s | period of firmware log chunks (0x0300) per enabled log type (#44) |
+| `--log-chunk-bytes` | 512 | data bytes per log chunk |
+| `--log-ack-every` | 1 | ask for a host ACK on every Nth chunk; `0` never (the file-end packet always asks) |
+| `--log-ignore-hostcfg` | | send log chunks to the sender of 0x0301 instead of the host in key 0x0009 |
 | `--no-quit-on-eof` | | keep running when stdin closes (default: quit) |
 | `--verbose` | | log to stderr |
 
@@ -62,22 +66,32 @@ The process is driven over its standard streams so that any test harness can use
 | `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR); `work_tgt_mode` is untouched, so forcing a work substate makes the machine chase the target again |
 | `drop_rate` | `rate` | change the point-cloud drop fraction at run time |
 | `frame_ms` | `ms` | change the `frame_cnt` period at run time (`0` freezes it); the current frame restarts now |
+| `log_drop` | `n` | skip the next `n` log chunks (`trans_index` still advances → gap on the host) |
+| `log_new_file` | | end the current firmware log file(s) and start the next `file_index` |
 | `status` | | emit a `status` event |
 
 | Event | Fields | When |
 |---|---|---|
-| `ready` | `ip`, `ports{discovery,cmd,push,pcl,imu}`, `sn`, `pid` | sockets bound, main loop starting |
+| `ready` | `ip`, `ports{discovery,cmd,push,pcl,imu,log}`, `sn`, `pid` | sockets bound, main loop starting |
 | `state` | `from`, `to` | work state changed (values as in `WorkState`) |
 | `cmd` | `cmd_id`, `seq`, `ret`, `from` | a request was handled |
 | `ack_dropped` | `cmd_id`, `seq` | a request was handled but the ACK withheld (`drop_ack`) |
 | `bad_frame` | `from`, `error` | a datagram failed to parse |
-| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `state` | once per second |
+| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `log`, `state` | once per second |
+| `log_dropped` | `file_index`, `trans` | a log chunk was withheld (`log_drop`) |
+| `log_ack` | `ret`, `log_type`, `file_index`, `trans` | the host acknowledged a log chunk |
 | `control` | `cmd` | a control command was applied |
-| `status` | `state`, `sent`, `hosts` | answer to `status` |
+| `status` | `state`, `sent`, `hosts{pcl,imu,push,log}`, `log_enabled`, `log_acks_received` | answer to `status` |
 | `error` | `error` | malformed or unknown control line |
 | `exit` | `sent` | leaving the main loop |
 
 ## Behaviour
+
+- **Firmware log** (#44): a sixth socket at `+500` answers `0x0301` (payload `{log_type,
+  enable}`) and streams `0x0300` chunks of `--log-chunk-bytes` synthetic text every
+  `--log-chunk-interval` for each enabled type. The first chunk of a file carries the begin
+  flag, every `--log-ack-every`th the ACK flag; host ACKs (REQ `0x0300` with `{ret, type,
+  file_index, trans_index}`) are counted in `status.log_acks_received`.
 
 - **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries `dev_type = 9`
   (provisional), the bound address and the real command port), `0x0100` configure, `0x0101`
@@ -157,6 +171,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
 | Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
+| Firmware log (#44) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | the SDK2 source shows the wire format only; the LiDAR's counting, destination choice and end-of-file behaviour are unknown |
 | FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
 | `pattern_mode` | only 0 accepted; 1 / 2 → `0x20`, others → `0x03`; never restarts the motor | the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code |

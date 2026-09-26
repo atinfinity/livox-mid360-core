@@ -398,8 +398,8 @@ items that touch this document most:
 - Typed parameter APIs on `Device`: firmware version (#38), FOV (#39), coordinate format /
   scan pattern / frame rate (#40), stored settings and live status read-back (#41), detection
   mode (#46), IMU enable and sensor config (#47).
-- Diagnostics: firmware log stream on port 56500, 0x03xx (#44); SDK logging (#42) is in
-  [api.md](api.md#logging).
+- Diagnostics: firmware log stream on port 56500, 0x03xx (#44, [api.md](api.md#firmware-log));
+  SDK logging (#42) is in [api.md](api.md#logging).
 - Point tag accessors (#34), lvx2 record / replay CLI (#35), examples (`examples/`), simulator
   state-machine fidelity (#45).
 - C ABI: the mapping table in [api.md](api.md#c-abi-mapping-phase-3); all output structs are
