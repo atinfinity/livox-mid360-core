@@ -87,6 +87,32 @@ std::string_view to_string(DataType t) noexcept
   return "UNKNOWN";
 }
 
+std::string_view to_string(TagConfidence c) noexcept
+{
+  switch (c) {
+    case TagConfidence::kHigh:
+      return "high";
+    case TagConfidence::kMedium:
+      return "medium";
+    case TagConfidence::kLow:
+      return "low";
+    case TagConfidence::kReserved:
+      return "reserved";
+  }
+  return "unknown";
+}
+
+std::string to_string(const TagInfo & t)
+{
+  std::string out = "glue=" + std::string(to_string(t.adjacent_glue)) +
+                    " particles=" + std::string(to_string(t.particles)) +
+                    " other=" + std::string(to_string(t.other));
+  if (t.reserved != TagConfidence::kHigh) {
+    out += " reserved=" + std::string(to_string(t.reserved));
+  }
+  return out;
+}
+
 std::string_view to_string(TimeType t) noexcept
 {
   switch (t) {
