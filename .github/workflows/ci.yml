@@ -11,12 +11,14 @@ on:
       - 'docs/**'
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
+      - '.git-blame-ignore-revs'
   pull_request:
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
+      - '.git-blame-ignore-revs'
 
 jobs:
   build-test:
