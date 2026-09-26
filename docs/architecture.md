@@ -285,7 +285,7 @@ flowchart TB
   App -- "unique_ptr" --> DevA["Device A"]
   App -- "unique_ptr" --> DevB["Device B"]
   Ctx -. "registry: non-owning<br/>{ip, serial, Receiver*, Device*}" .-> DevA
-  Ctx -. .-> DevB
+  Ctx -.-> DevB
   DevA -- "owns" --> SesA["Session A<br/>(command socket)"]
   DevA -- "owns" --> WA["worker thread A"]
   DevB -- "owns" --> SesB["Session B"]
