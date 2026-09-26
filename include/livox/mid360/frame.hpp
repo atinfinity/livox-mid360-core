@@ -10,6 +10,7 @@
 #include <deque>
 #include <mutex>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "livox/mid360/export.hpp"
