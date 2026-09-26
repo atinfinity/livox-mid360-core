@@ -267,12 +267,12 @@ out and the push is stale, `kRebootRequested`, `kUser`) enter the same path thro
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Connected: Device::open()
-  Connected --> Disconnected: push timeout, stale command timeout, reboot(), disconnect()
+  [*] --> Connected: open
+  Connected --> Disconnected: push timeout, stale command timeout, reboot, disconnect
   Disconnected --> Disconnected: attempt fails, backoff
   Disconnected --> Connected: attempt succeeds, kReconnected
-  Connected --> [*]: Device destroyed
-  Disconnected --> [*]: Device destroyed, stop_token cancels the attempt
+  Connected --> [*]: destructor
+  Disconnected --> [*]: destructor, stop_token cancels the attempt
 ```
 
 While disconnected, commands fail fast with `kDisconnected`; pushes that still arrive are
