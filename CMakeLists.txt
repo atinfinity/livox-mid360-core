@@ -65,6 +65,7 @@ add_library(mid360_core
   src/session.cpp
   src/config.cpp
   src/frame_assembler.cpp
+  src/extrinsic.cpp
   src/event.cpp
   src/log.cpp
   src/context.cpp

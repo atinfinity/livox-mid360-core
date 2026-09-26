@@ -240,6 +240,10 @@ struct FovSettings
 /// either 0.0.0.0 (none) or inside the subnet and different from `ip`. The codec does not
 /// check this; Device::set_lidar_ip_config() does.
 [[nodiscard]] bool lidar_ip_config_valid(const LidarIpConfig & c) noexcept;
+/// Key 0x0012 sanity (issue #51): the three angles finite and within [-180, 180] degrees.
+/// The offsets are int32 mm and always encodable. The codec does not check this;
+/// Device::set_install_attitude() does.
+[[nodiscard]] bool install_attitude_valid(const InstallAttitude & a) noexcept;
 
 // ---------------------------------------------------------------------------
 // Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).

@@ -311,6 +311,34 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   CHECK(same(dev->fov()->fov0, kFront));
 }
 
+TEST_CASE("Device::set_install_attitude / install_attitude round trip and rejection", "[sim]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+  const InstallAttitude a{
+    .roll_deg = 1.5F, .pitch_deg = -2.5F, .yaw_deg = 90.0F, .x_mm = 10, .y_mm = -20, .z_mm = 30};
+  const auto r = dev->set_install_attitude(a);
+  REQUIRE(r.has_value());
+  CHECK_FALSE(r->reboot_required);
+  const auto back = dev->install_attitude();
+  REQUIRE(back.has_value());
+  CHECK(back->roll_deg == a.roll_deg);
+  CHECK(back->pitch_deg == a.pitch_deg);
+  CHECK(back->yaw_deg == a.yaw_deg);
+  CHECK(back->x_mm == a.x_mm);
+  CHECK(back->y_mm == a.y_mm);
+  CHECK(back->z_mm == a.z_mm);
+
+  const auto bad = dev->set_install_attitude({.yaw_deg = 360.0F});
+  REQUIRE_FALSE(bad.has_value());
+  CHECK(bad.error().kind == DeviceError::Kind::kInvalidArgument);
+  CHECK(bad.error().key == Key::kInstallAttitude);
+  CHECK(dev->install_attitude()->yaw_deg == a.yaw_deg);  // nothing was sent
+}
+
 TEST_CASE("Simulator crops the point cloud to the enabled windows", "[fov][sim]")
 {
   Fixture f;
