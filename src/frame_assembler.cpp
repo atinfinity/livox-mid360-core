@@ -49,10 +49,14 @@ std::uint64_t TimeMapper::map(const DataPacketHeader & h, std::uint64_t recv_tim
       break;
   }
   if (h.time_type != TimeType::kNoSync) {
+    synced_ = true;
     return h.timestamp_ns;  // synchronised: trust it
   }
-  if (!offset_) {
+  // Measured once, and again after a synced stretch: the LiDAR clock jumped with the sync,
+  // so an offset taken before it no longer relates the free-running clock to the host (#53).
+  if (!offset_ || synced_) {
     offset_ = static_cast<std::int64_t>(recv_time_ns) - static_cast<std::int64_t>(h.timestamp_ns);
+    synced_ = false;
   }
   return static_cast<std::uint64_t>(static_cast<std::int64_t>(h.timestamp_ns) + *offset_);
 }
