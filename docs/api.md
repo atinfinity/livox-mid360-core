@@ -489,6 +489,47 @@ The destructor requests a stop that the attempt observes within about 100 ms eve
 `discover()` or `Session::connect` (`DiscoveryOptions::stop` / `SessionOptions::stop`,
 `std::stop_token`), so tearing down a Device mid-outage does not wait for the timeouts.
 
+## Logging
+
+Decisions recorded in [issue #42](https://github.com/atinfinity/livox-mid360-core/issues/42).
+The SDK is silent by default: nothing is written to stdout or stderr unless the application
+installs a handler. `log.hpp` provides one process-wide level and one process-wide handler:
+
+```cpp
+set_log_level(LogLevel::kInfo);
+set_log_handler(stderr_log_handler());                 // or:
+auto file = file_log_handler("/var/log/mid360.log");   // expected<LogHandler, DeviceError>
+if (file) set_log_handler(*file);
+set_log_handler([](const LogRecord & r) { my_logger(r.level, r.serial_number, r.message); });
+```
+
+- **Record**: `LogRecord{level, time_ns, serial_number, message}`. `time_ns` is the system
+  clock in nanoseconds since the Unix epoch; `serial_number` is empty for records that are
+  not device-scoped (Context socket errors, unknown-source datagrams). Both string views are
+  valid only during the handler call; copy them to keep them.
+- **Levels**, ordered `kOff < kError < kWarn < kInfo < kDebug < kTrace`; a record is emitted
+  when its level is `<=` the level set. `kError`: socket failures on the receive thread
+  (EAGAIN excluded). `kWarn`: disconnect with its reason, command timeouts after every
+  attempt. `kInfo`: `open`/close, work-state transitions, reconnect attempts and their
+  backoff, host-setup replay, reconnected. `kDebug`: per-request retries, datagrams from
+  unknown sources. `kTrace` is reserved.
+- **Cost**: the level check is one relaxed atomic load before any formatting, so `kOff` and
+  `kError` are free on the receive thread. A record is formatted with `std::format_to_n`
+  into a 256-byte stack buffer (longer messages are truncated) and never allocates.
+- **Threads**: records are emitted from the Context receive thread, the Device worker thread
+  and caller threads, never while an SDK mutex is held. `set_log_handler` is safe while a
+  Context runs: it is an atomic swap of a `shared_ptr`; a handler that is executing at the
+  swap finishes its call and the old handler object is destroyed when that call returns. The
+  handler must not throw (the call path is `noexcept`, so a throw terminates, as for the
+  data callbacks) and must not call back into the SDK.
+- **Sinks**: `format_log_record()` renders `2026-09-26T12:34:56.789Z W [serial] message`
+  (UTC, millisecond precision, one-letter level, `[-]` without serial) for custom sinks;
+  `stderr_log_handler()` writes that line to stderr; `file_log_handler(path, append = true)`
+  writes and flushes it per record, and fails with `DeviceError::Kind::kIo` plus
+  `errno_value` when the file cannot be opened.
+- This is the SDK's own diagnostic trail. The LiDAR **firmware** log stream (port 56500,
+  0x03xx commands) is a separate feature, tracked in #44.
+
 ## Multiple devices
 
 Every Device opened on a Context is registered under its source IP (dispatch) and its serial
@@ -520,6 +561,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `ReconnectOptions`, `DisconnectReason` | same layout, `typedef struct` / `enum` |
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
 | `set<K>` / `get<K>` (#57) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper (#38–#56) exists |
+| `set_log_level` / `set_log_handler` (#42) | `livox_mid360_set_log_level(level)` / `livox_mid360_set_log_handler(cb, user)` with `livox_mid360_log_record_t` (`level`, `time_ns`, NUL-terminated `serial_number` and `message` valid during the call) |
 
 `livox-mid360-ros2` (separate repository) uses the C++ API directly: one `Context`, one
 `Device` per LiDAR, `on_frame` publishing from the receive thread or through a queue.

@@ -19,6 +19,7 @@
 
 #include "context_impl.hpp"
 #include "frame_assembler.hpp"
+#include "log_detail.hpp"
 
 namespace livox::mid360
 {
@@ -55,6 +56,7 @@ struct Device::Impl : detail::Receiver
     SessionOptions sopts, std::stop_source stop_source, Session s)
   : context(ctx),
     options(o),
+    serial(dev.serial_number),
     host_setup(setup),
     frame_policy_(o.frame_policy),
     session_options(std::move(sopts)),
@@ -71,6 +73,7 @@ struct Device::Impl : detail::Receiver
   // --- fixed after open ---------------------------------------------------
   Context::Impl & context;
   const DeviceOptions options;
+  const std::string serial;  ///< identifies the LiDAR across reconnects; tags log records
   /// Replayed on reconnect. Starts as applied at open(); every key it models that a later
   /// successful 0x0100 carried (set_point_format(), set_fov(), configure(), ...) overwrites
   /// it, so a reconnect restores the last value the Device wrote. Guarded by setup_mutex.
@@ -249,6 +252,9 @@ struct Device::Impl : detail::Receiver
           ev.old_state = *old;
           ev.new_state = *next.cur_work_state;
           state_event = ev;
+          LIVOX_LOG(
+            LogLevel::kInfo, serial, "state {} -> {}", to_string(*old),
+            to_string(*next.cur_work_state));
         }
       }
       if (next.hms_code) {
@@ -428,6 +434,7 @@ struct Device::Impl : detail::Receiver
     }
     disconnects.fetch_add(1, std::memory_order_relaxed);
     attempts.store(0, std::memory_order_relaxed);
+    LIVOX_LOG(LogLevel::kWarn, serial, "disconnected: {}", to_string(reason));
     discard_requested.store(true, std::memory_order_release);
     Event ev;
     ev.kind = Event::Kind::kDisconnected;
@@ -452,6 +459,9 @@ struct Device::Impl : detail::Receiver
     if (err.kind != SessionErrorKind::kTimeout) {
       return;
     }
+    LIVOX_LOG(
+      LogLevel::kWarn, serial, "command {:#06x} timed out after {} attempt(s)", err.cmd_id,
+      err.attempts);
     if (Clock::now() - last_push_steady() > options.reconnect.push_timeout / 3) {
       declare_disconnected(DisconnectReason::kCommandTimeout);
     }
@@ -467,6 +477,7 @@ struct Device::Impl : detail::Receiver
     }
     const std::uint32_t n = attempts.fetch_add(1, std::memory_order_relaxed) + 1;
     DiscoveredDevice target = snapshot_info();
+    LIVOX_LOG(LogLevel::kInfo, serial, "reconnect attempt {} to {}", n, ip_to_string(target.ip));
 
     // 1. The last known endpoint (a cable pull keeps the address), serial verified.
     auto s = Session::connect(target, session_options);
@@ -512,6 +523,7 @@ struct Device::Impl : detail::Receiver
     if (auto r = apply_host_setup(session, replay); !r) {
       return std::unexpected(wrap(r.error()));
     }
+    LIVOX_LOG(LogLevel::kInfo, serial, "host setup replayed");
     if (sampling_requested.load(std::memory_order_acquire)) {
       if (auto r = set_mode_locked(WorkState::kSampling, std::nullopt); !r) {
         return r;
@@ -524,6 +536,7 @@ struct Device::Impl : detail::Receiver
     ev.kind = Event::Kind::kReconnected;
     ev.time_ns = realtime_now_ns();
     ev.attempts = n;
+    LIVOX_LOG(LogLevel::kInfo, serial, "reconnected after {} attempt(s)", n);
     {
       const std::lock_guard clock(conn_mutex);
       pending.push_back(ev);
@@ -550,6 +563,12 @@ struct Device::Impl : detail::Receiver
         lock.lock();
         if (r) {
           break;
+        }
+        if (detail::log_enabled(LogLevel::kInfo)) {
+          detail::log(
+            LogLevel::kInfo, serial, "reconnect attempt failed: {}; next in {} ms",
+            to_string(r.error()),
+            std::chrono::duration_cast<std::chrono::milliseconds>(backoff).count());
         }
         conn_cv.wait_for(
           lock, backoff, [&] { return stopping() || connected.load(std::memory_order_acquire); });
@@ -727,6 +746,7 @@ std::expected<std::unique_ptr<Device>, DeviceError> Device::open(
     Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
   auto dev = std::unique_ptr<Device>(new Device(std::move(impl)));
   ctx.bind(dev->impl_.get(), dev.get());
+  LIVOX_LOG(LogLevel::kInfo, dev->impl_->serial, "opened {}", ip_to_string(device.ip));
   return dev;
 }
 
@@ -748,6 +768,9 @@ Device::~Device()
     }
   }
   impl_->context.remove(impl_.get());
+  if (detail::log_enabled(LogLevel::kInfo)) {
+    detail::log_emit(LogLevel::kInfo, impl_->serial, "closed");  // noexcept: destructor
+  }
 }
 
 std::expected<void, DeviceError> Device::on_packet(PacketCallback cb)

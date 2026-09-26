@@ -31,6 +31,7 @@ option(LIVOX_MID360_BUILD_FUZZERS "Build libFuzzer targets (Clang only)" OFF)
 option(LIVOX_MID360_WARNINGS_AS_ERRORS "Treat warnings as errors" ${PROJECT_IS_TOP_LEVEL})
 option(LIVOX_MID360_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(LIVOX_MID360_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(LIVOX_MID360_ENABLE_TSAN "Enable ThreadSanitizer (not with ASan)" OFF)
 option(LIVOX_MID360_ENABLE_COVERAGE "Instrument for gcov/gcovr coverage (--coverage)" OFF)
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
@@ -65,6 +66,7 @@ add_library(mid360_core
   src/config.cpp
   src/frame_assembler.cpp
   src/event.cpp
+  src/log.cpp
   src/context.cpp
   src/device.cpp
   src/transport.cpp)

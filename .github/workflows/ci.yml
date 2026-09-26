@@ -22,7 +22,7 @@ on:
 
 jobs:
   build-test:
-    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}${{ matrix.sanitize && ' / ASan+UBSan' || '' }}${{ matrix.os == 'ubuntu-24.04-arm' && ' / arm64' || '' }}
+    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}${{ matrix.sanitize && ' / ASan+UBSan' || '' }}${{ matrix.tsan && ' / TSan' || '' }}${{ matrix.os == 'ubuntu-24.04-arm' && ' / arm64' || '' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,7 +34,15 @@ jobs:
           - { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
         build_type: [Release]
         sanitize: [false]
+        tsan: [false]
         include:
+          # ThreadSanitizer (issue #42): the logging handler swap and the receive / worker
+          # thread hand-offs. Release keeps the simulator-driven tests fast enough.
+          - os: ubuntu-24.04
+            compiler: { name: clang-19, cc: clang-19, cxx: clang++-19, apt: "clang-19 libclang-rt-19-dev" }
+            build_type: Release
+            sanitize: false
+            tsan: true
           - os: ubuntu-24.04
             compiler: { name: gcc-14, cc: gcc-14, cxx: g++-14, apt: g++-14 }
             build_type: Debug
@@ -75,6 +83,10 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DLIVOX_MID360_ENABLE_ASAN=${{ matrix.sanitize && 'ON' || 'OFF' }}
           -DLIVOX_MID360_ENABLE_UBSAN=${{ matrix.sanitize && 'ON' || 'OFF' }}
+          -DLIVOX_MID360_ENABLE_TSAN=${{ matrix.tsan && 'ON' || 'OFF' }}
+      - name: Lower ASLR entropy for TSan
+        if: matrix.tsan
+        run: sudo sysctl vm.mmap_rnd_bits=28
       - name: Build
         run: cmake --build build
       - name: Test
