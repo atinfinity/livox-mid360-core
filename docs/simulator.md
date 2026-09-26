@@ -135,8 +135,9 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
 | Unknown key | ret `0x20` | same |
-| `lidar_ipcfg` write | ret `0x00` (no reboot required) | real device likely answers `0x21` |
+| `lidar_ipcfg` write | ret `0x21` (reboot required) when the value changes | wiki lists `0x21` but not when the firmware uses it |
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
-| Push contents | `cur_work_state`, `diag_status`, `hms`, `sn`, `local_time` | the wiki does not enumerate the pushed keys |
+| Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
+| Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
 | `frame_cnt` period | 100 ms | |

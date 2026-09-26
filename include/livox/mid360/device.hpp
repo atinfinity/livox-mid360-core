@@ -139,6 +139,12 @@ public:
   /// Keys 0x8000-0x8005. Missing keys leave their field empty; see decode_identity().
   std::expected<DeviceIdentity, DeviceError> identity(
     std::optional<RequestOptions> opts = std::nullopt);
+  /// The 16 modelled writable keys as stored by the LiDAR; see decode_settings().
+  std::expected<LidarSettings, DeviceError> settings(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// Keys 0x8006-0x8011 by inquire; see decode_status(). pushed_status() has the same data
+  /// from the last 0x0102 push without a round trip.
+  std::expected<LidarStatus, DeviceError> status(std::optional<RequestOptions> opts = std::nullopt);
 
   // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
   /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()
@@ -224,9 +230,12 @@ public:
   // --- observation (thread-safe snapshots)
   /// Discovery record; `ip` / `cmd_port` / `from` follow a reconnect to a new address.
   [[nodiscard]] DiscoveredDevice info() const;
-  /// cur_work_state from the last 0x0102 push; nullopt before the first push.
+  /// decode_status() of the last 0x0102 push; nullopt before the first push. Fields the
+  /// push does not carry stay empty.
+  [[nodiscard]] std::optional<LidarStatus> pushed_status() const;
+  /// cur_work_state from pushed_status(); nullopt before the first push.
   [[nodiscard]] std::optional<WorkState> work_state() const;
-  /// hms_code slots from the last 0x0102 push (all inactive before the first push).
+  /// hms_code slots from pushed_status() (all inactive before the first push).
   [[nodiscard]] std::array<HmsCode, 8> hms() const;
   [[nodiscard]] DeviceStats stats() const;
   [[nodiscard]] SessionStats session_stats() const;
