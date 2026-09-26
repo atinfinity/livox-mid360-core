@@ -502,7 +502,9 @@ class PointSource:
         out = []
         for _ in range(n):
             depth_mm = r.randint(500, 40000)
-            refl, tag = r.randint(0, 255), r.randint(0, 3)
+            refl = r.randint(0, 255)
+            # glue / particles / other each 0..2 (high / medium / low), reserved bits 0 (#34)
+            tag = r.randint(0, 2) | (r.randint(0, 2) << 2) | (r.randint(0, 2) << 4)
             if data_type == 1:
                 out.append(
                     (

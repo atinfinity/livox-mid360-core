@@ -116,7 +116,24 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
 - `Point{float x, y, z (m); uint8 reflectivity; uint8 tag; uint8 line; uint32 offset_ns}`:
   same semantics as livox_ros_driver2's `CustomPoint`. Mid-360 has no physical scan lines, so
   `line = sample index % 4` as the official driver does. `offset_ns` is relative to
-  `Frame::base_time_ns`.
+  `Frame::base_time_ns`. The raw `tag` byte is decoded by `tag_info()`, `adjacent_glue()`,
+  `particles()`, `other()` and `is_noise()` (issue #34; `tag.hpp` has the free
+  `decode_tag()` / `is_noise()` and `to_string`). Each 2-bit field is a `TagConfidence`
+  that the point is a normal return: `kHigh` 0, `kMedium` 1, `kLow` 2, `kReserved` 3.
+
+  | Bits | Field | Meaning |
+  | --- | --- | --- |
+  | 0–1 | `adjacent_glue` | glue points between adjacent objects |
+  | 2–3 | `particles` | rain, fog, dust |
+  | 4–5 | `other` | other properties |
+  | 6–7 | `reserved` | |
+
+  `is_noise(worst_accepted = kHigh)` is true when `adjacent_glue` or `particles` is worse
+  than `worst_accepted`; `other` and `reserved` are not consulted.
+
+  ```cpp
+  std::erase_if(frame.points, [](const Point & p) { return p.is_noise(TagConfidence::kMedium); });
+  ```
 - `Frame{index, base_time_ns, end_time_ns, std::vector<Point> points, packets,
   dropped_packets, frame_cnt, source_type, time_type}`. Spherical packets are converted to
   Cartesian. IMU data is never part of a frame (separate topic in ROS 2).
@@ -684,6 +701,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `std::function` callback | function pointer + `void* user` |
 | `Frame` | `const livox_mid360_frame_t*` with `const livox_mid360_point_t* points, size_t count` |
 | `Point`, `ImuData`, `Event`, `DeviceStats` | same layout, `typedef struct` |
+| `decode_tag()` / `is_noise()` (#34) | `livox_mid360_decode_tag(uint8_t, livox_mid360_tag_info_t*)` / `livox_mid360_is_noise(uint8_t, int worst_accepted)`; `livox_mid360_point_t` keeps the raw `tag` |
 | `DeviceError` | `int` code + `livox_mid360_error_string()` |
 | `Context::find` / `devices` | `livox_mid360_context_find(ctx, sn)` / `..._devices(ctx, out, cap)` |
 | `ReconnectOptions`, `DisconnectReason` | same layout, `typedef struct` / `enum` |
