@@ -564,6 +564,7 @@ class Simulator:
         self.args = args
         self.out = out
         self.control = control
+        self.control_buf = b''
         self.verbose = args.verbose
         self.model = DeviceModel(
             sn=args.sn,
@@ -731,22 +732,30 @@ class Simulator:
 
     # -- control channel -------------------------------------------------------
     def _handle_control(self) -> None:
-        line = self.control.readline()
-        if not line:  # EOF: parent went away
+        # Read raw bytes rather than readline(): a buffered TextIOWrapper would swallow
+        # several lines in one read, and select() never fires again for the buffered rest.
+        try:
+            data = os.read(self.control.fileno(), 65536)
+        except OSError:
+            data = b''
+        if not data:  # EOF: parent went away
             self.sel.unregister(self.control)
             self.control = None
             if self.args.quit_on_eof:
                 self.running = False
             return
-        line = line.strip()
-        if not line:
-            return
-        try:
-            req = json.loads(line)
-        except json.JSONDecodeError as e:
-            self.emit(event='error', error=f'bad json: {e}')
-            return
-        self.apply_control(req)
+        self.control_buf += data
+        while b'\n' in self.control_buf:
+            raw, _, self.control_buf = self.control_buf.partition(b'\n')
+            line = raw.decode('utf-8', 'replace').strip()
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+            except json.JSONDecodeError as e:
+                self.emit(event='error', error=f'bad json: {e}')
+                continue
+            self.apply_control(req)
 
     def apply_control(self, req: dict) -> None:
         cmd = req.get('cmd')
