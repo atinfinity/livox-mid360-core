@@ -210,6 +210,13 @@ public:
     return s;
   }
 
+  /// Barrier: control lines are handled in order, so a "status" round trip guarantees that
+  /// every earlier control line (e.g. set_status) has been applied.
+  [[nodiscard]] bool sync()
+  {
+    return control(R"({"cmd":"status"})") && wait_event(R"("event":"status")").has_value();
+  }
+
   /// Read events until one contains `needle` or EOF. Returns the matching line.
   std::optional<std::string> wait_event(std::string_view needle)
   {
