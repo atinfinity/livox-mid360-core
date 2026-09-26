@@ -1,5 +1,7 @@
 # Public API design (device layer)
 
+> The overview of all layers, threads and data flows is in [architecture.md](architecture.md).
+
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions
 are recorded in [issue #9](https://github.com/atinfinity/livox-mid360-core/issues/9); this page
 describes the resulting shape. The data path (#6: receive thread, dispatch, frames, IMU,

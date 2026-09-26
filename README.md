@@ -185,7 +185,7 @@ The lower layers stay available on their own: `Session` / `apply_host_setup` for
 control without a receive thread, and `parse_data_packet` / `decode_cartesian32` for raw
 datagrams (parsers return `std::expected<..., ParseError>` and **non-owning views** into the
 input buffer; keep the buffer alive while you use the result). See docs/api.md for the
-threading rules.
+threading rules and docs/architecture.md for how the layers, threads and data flows fit together.
 
 ## Layout
 
@@ -195,7 +195,7 @@ include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transpo
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
-docs/                   protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md
+docs/                   architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 
