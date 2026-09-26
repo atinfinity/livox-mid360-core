@@ -3,7 +3,18 @@ name: Lint
 on:
   push:
     branches: [main]
+    # Documentation-only changes skip this workflow (issue #59); see the note in ci.yml.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
 
 env:
   RUFF_VERSION: 0.16.9
