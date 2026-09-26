@@ -502,6 +502,34 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(states[-len(boot) :], boot)  # after the reboot
         self.assertEqual(states.count((sim.WS_READY, sim.WS_SAMPLING)), 2)
 
+    def test_ip_config_change_rebinds_after_reboot(self) -> None:
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        ack = self.request(
+            sim.CMD_PARAM_INQUIRE, proto.encode_param_inquire([sim.KEY_LIDAR_IPCFG]), cmd
+        )
+        _, kvs = proto.parse_param_inquire_ack(ack.data)
+        self.assertEqual(dict(kvs)[sim.KEY_LIDAR_IPCFG][:4], bytes([127, 0, 0, 1]))
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.bind(('127.0.0.2', 0))
+        except OSError:
+            self.skipTest('127.0.0.2 is not configured on the loopback interface')
+        finally:
+            probe.close()
+        new = bytes([127, 0, 0, 2, 255, 0, 0, 0, 0, 0, 0, 0])
+        ack = self.request(
+            sim.CMD_PARAM_CONFIG, proto.encode_param_config([(sim.KEY_LIDAR_IPCFG, new)]), cmd
+        )
+        self.assertEqual(ack.data[0], sim.RET_PARAM_REBOOT_EFFECT)
+        self.send_control('{"cmd":"reboot"}')
+        deadline = time.monotonic() + 3
+        while '"event":"rebound"' not in self.out.getvalue() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertIn('"event":"rebound","ip":"127.0.0.2"', self.out.getvalue())
+        time.sleep(self.s.args.reboot_silence + 0.2)
+        ack = self.request(sim.CMD_DISCOVERY, b'', ('127.0.0.2', self.s.ports['discovery']))
+        self.assertEqual(ack.data[18:22], bytes([127, 0, 0, 2]))
+
     def test_control_channel_hms_and_drop_ack(self) -> None:
         cmd = ('127.0.0.1', self.s.ports['cmd'])
         self.send_control('{"cmd":"hms","codes":[34603011]}')  # 0x02100003

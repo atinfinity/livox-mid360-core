@@ -98,6 +98,8 @@ struct Device::Impl : detail::Receiver
   mutable std::mutex conn_mutex;  ///< info_, pending, worker hand-off, session swap / cancel
   std::condition_variable conn_cv;
   DiscoveredDevice info_;
+  /// ip accepted by set_lidar_ip_config(); an extra discovery target after a reboot (#50).
+  std::optional<Ipv4> configured_ip;
   std::vector<Event> pending;  ///< raised on the receive thread at the next tick
   std::thread worker;
   bool worker_started = false;
@@ -508,6 +510,27 @@ struct Device::Impl : detail::Receiver
     }
   }
 
+  /// discover() with the reconnect options; nullopt when no answer carries our serial.
+  std::expected<std::optional<DiscoveredDevice>, SessionError> discover_by_serial(
+    std::vector<Endpoint> targets)
+  {
+    DiscoveryOptions d;
+    d.targets = std::move(targets);
+    d.timeout = options.reconnect.discovery_timeout;
+    d.bind_address = session_options.bind_address;
+    d.stop = stop.get_token();
+    auto found = discover(d);
+    if (!found) {
+      return std::unexpected(found.error());
+    }
+    const auto it = std::ranges::find_if(
+      *found, [&](const DiscoveredDevice & f) { return f.serial_number == serial; });
+    if (it == found->end()) {
+      return std::nullopt;
+    }
+    return *it;
+  }
+
   /// One recovery attempt; shared by the worker and Device::reconnect(). Holds cmd_mutex.
   std::expected<void, DeviceError> attempt()
   {
@@ -527,22 +550,28 @@ struct Device::Impl : detail::Receiver
         return std::unexpected(wrap(s.error()));
       }
       // 2. Discovery, filtered by serial (a reboot or DHCP may have moved the LiDAR).
-      DiscoveryOptions d;
-      d.targets = options.reconnect.discovery_targets;
-      d.timeout = options.reconnect.discovery_timeout;
-      d.bind_address = session_options.bind_address;
-      d.stop = stop.get_token();
-      auto found = discover(d);
-      if (!found) {
-        return std::unexpected(wrap(found.error()));
+      // The address set_lidar_ip_config() configured is tried first (unicast, answered
+      // fast), then the user's targets or broadcast (#50).
+      std::optional<DiscoveredDevice> moved;
+      if (configured_ip && *configured_ip != target.ip) {
+        auto by_ip =
+          discover_by_serial({Endpoint{*configured_ip, options.reconnect.discovery_port}});
+        if (!by_ip) {
+          return std::unexpected(wrap(by_ip.error()));
+        }
+        moved = *by_ip;
       }
-      const auto it = std::ranges::find_if(*found, [&](const DiscoveredDevice & f) {
-        return f.serial_number == target.serial_number;
-      });
-      if (it == found->end()) {
+      if (!moved) {
+        auto found = discover_by_serial(options.reconnect.discovery_targets);
+        if (!found) {
+          return std::unexpected(wrap(found.error()));
+        }
+        moved = *found;
+      }
+      if (!moved) {
         return std::unexpected(wrap(s.error()));
       }
-      target = *it;
+      target = *moved;
       s = Session::connect(target, session_options);
       if (!s) {
         return std::unexpected(wrap(s.error()));
@@ -1049,6 +1078,31 @@ std::expected<SetResult, DeviceError> Device::set_time_filter(
 std::expected<bool, DeviceError> Device::time_filter(std::optional<RequestOptions> opts)
 {
   return get<Key::kTimeFilter>(opts);
+}
+
+std::expected<SetResult, DeviceError> Device::set_lidar_ip_config(
+  const LidarIpConfig & cfg, std::optional<RequestOptions> opts)
+{
+  if (!lidar_ip_config_valid(cfg)) {
+    DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+    err.key = Key::kLidarIpCfg;
+    return std::unexpected(err);
+  }
+  auto r = set<Key::kLidarIpCfg>(cfg, opts);
+  if (r) {
+    const std::lock_guard lock(impl_->cmd_mutex);
+    impl_->configured_ip = cfg.ip;
+    LIVOX_LOG(
+      LogLevel::kInfo, impl_->serial, "lidar ip config {} reboot_required={}", ip_to_string(cfg.ip),
+      r->reboot_required);
+  }
+  return r;
+}
+
+std::expected<LidarIpConfig, DeviceError> Device::lidar_ip_config(
+  std::optional<RequestOptions> opts)
+{
+  return get<Key::kLidarIpCfg>(opts);
 }
 
 std::expected<SetResult, DeviceError> Device::set_fov(

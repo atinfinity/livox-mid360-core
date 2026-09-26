@@ -143,6 +143,30 @@ std::optional<std::size_t> key_value_length(Key k) noexcept
 // ---- encoders --------------------------------------------------------------
 std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept { return {std::byte{v}}; }
 std::array<std::byte, 1> encode_bool(bool v) noexcept { return encode_u8(v ? 1 : 0); }
+bool lidar_ip_config_valid(const LidarIpConfig & c) noexcept
+{
+  const auto u32 = [](const Ipv4 & a) {
+    return (std::uint32_t{a[0]} << 24) | (std::uint32_t{a[1]} << 16) | (std::uint32_t{a[2]} << 8) |
+           std::uint32_t{a[3]};
+  };
+  const std::uint32_t ip = u32(c.ip);
+  const std::uint32_t mask = u32(c.netmask);
+  const std::uint32_t gw = u32(c.gateway);
+  // Contiguous prefix: ~mask + 1 is a power of two; 1..30 bits.
+  const std::uint32_t host = ~mask;
+  if (mask == 0 || host == 0 || (host & (host + 1)) != 0 || mask == 0xFFFF'FFFEU) {
+    return false;
+  }
+  const std::uint32_t net = ip & mask;
+  if (ip == 0 || ip == 0xFFFF'FFFFU || ip == net || ip == (net | host)) {
+    return false;
+  }
+  if (gw != 0 && ((gw & mask) != net || gw == ip || gw == net || gw == (net | host))) {
+    return false;
+  }
+  return true;
+}
+
 bool fov_in_range(const FovConfig & f) noexcept
 {
   const auto yaw = [](std::int32_t v) { return v >= 0 && v < 360; };

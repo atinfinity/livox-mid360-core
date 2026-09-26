@@ -235,6 +235,11 @@ struct FovSettings
 /// start / stop are accepted (a wrapped or empty window). The codecs do not check this;
 /// Device::set_fov() and HostSetup do.
 [[nodiscard]] bool fov_in_range(const FovConfig & f) noexcept;
+/// Key 0x0004 sanity (issue #50): `ip` neither 0.0.0.0 nor 255.255.255.255 nor the subnet's
+/// network / broadcast address, `netmask` a contiguous prefix of 1 to 30 bits, `gateway`
+/// either 0.0.0.0 (none) or inside the subnet and different from `ip`. The codec does not
+/// check this; Device::set_lidar_ip_config() does.
+[[nodiscard]] bool lidar_ip_config_valid(const LidarIpConfig & c) noexcept;
 
 // ---------------------------------------------------------------------------
 // Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).

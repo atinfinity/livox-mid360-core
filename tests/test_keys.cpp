@@ -132,6 +132,24 @@ TEST_CASE("read-only decoders", "[keys]")
   CHECK((*m)[5] == 6);
   CHECK(decode_work_state(bytes_of({0x07})).error() == KeyError::kOutOfRange);
   CHECK(decode_work_state(bytes_of({0x06})).value() == WorkState::kMotorStartup);
+  const LidarIpConfig good{
+    .ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 0}, .gateway = {192, 168, 1, 1}};
+  CHECK(lidar_ip_config_valid(good));
+  CHECK(lidar_ip_config_valid({.ip = {10, 0, 0, 2}, .netmask = {255, 0, 0, 0}, .gateway = {}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {}, .netmask = {255, 255, 255, 0}, .gateway = {}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {255, 255, 255, 255}, .netmask = {255, 255, 255, 0}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {192, 168, 1, 0}, .netmask = {255, 255, 255, 0}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {192, 168, 1, 255}, .netmask = {255, 255, 255, 0}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {192, 168, 1, 12}, .netmask = {255, 0, 255, 0}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {192, 168, 1, 12}, .netmask = {}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 255}}));
+  CHECK_FALSE(lidar_ip_config_valid({.ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 254}}));
+  CHECK_FALSE(lidar_ip_config_valid(
+    {.ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 0}, .gateway = {192, 168, 2, 1}}));
+  CHECK_FALSE(lidar_ip_config_valid(
+    {.ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 0}, .gateway = {192, 168, 1, 12}}));
+  CHECK_FALSE(lidar_ip_config_valid(
+    {.ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 0}, .gateway = {192, 168, 1, 255}}));
   auto ds = decode_diag_status(bytes_of({0x21, 0x30}));
   REQUIRE(ds);
   CHECK(ds->system == DiagLevel::kWarning);

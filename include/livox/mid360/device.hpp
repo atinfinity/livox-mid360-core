@@ -59,6 +59,9 @@ struct ReconnectOptions
   std::chrono::milliseconds discovery_timeout{1000};
   /// Unicast discovery targets for the fallback; empty = broadcast (see DiscoveryOptions).
   std::vector<Endpoint> discovery_targets;
+  /// Port of the extra unicast target `{ip configured by set_lidar_ip_config(), port}` that
+  /// the fallback adds after a network-config change (#50). Tests point it at the simulator.
+  std::uint16_t discovery_port = kDiscoveryPort;
 };
 
 struct DeviceOptions
@@ -211,6 +214,17 @@ public:
   std::expected<SetResult, DeviceError> set_time_filter(
     bool on, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<bool, DeviceError> time_filter(std::optional<RequestOptions> opts = std::nullopt);
+
+  // --- LiDAR network config (issue #50): key 0x0004.
+  /// lidar_ip_config_valid() → else kInvalidArgument with `key` before any I/O. The LiDAR
+  /// answers a change with ret_code 0x21 (`reboot_required`, passed through as is): the new
+  /// address is used after reboot(). Reconnection then finds the LiDAR by serial through
+  /// discovery, which also unicasts to `{cfg.ip, reconnect.discovery_port}`, so a subnet
+  /// change that broadcast does not reach is still recovered. Not rebooted automatically.
+  std::expected<SetResult, DeviceError> set_lidar_ip_config(
+    const LidarIpConfig & cfg, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<LidarIpConfig, DeviceError> lidar_ip_config(
+    std::optional<RequestOptions> opts = std::nullopt);
 
   // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
   /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()

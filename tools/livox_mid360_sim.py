@@ -543,6 +543,11 @@ class Simulator:
             imu_cfg_unsupported=args.imu_cfg_unsupported,
         )
         self.model.on_state = self._on_state
+        self.bound_ip: str | None = None  # set by a reboot that moved the LiDAR (#50)
+        self.pending_rebind: str | None = None
+        # Key 0x0004 reports the address the simulator actually answers from.
+        own = bytes(int(x) for x in self.lidar_ip().split('.'))
+        self.model.settings[KEY_LIDAR_IPCFG] = own + self.model.settings[KEY_LIDAR_IPCFG][4:]
         self.points = PointSource(args.seed)
         self.rate = args.rate_multiplier
         self.push_rate = args.push_rate
@@ -589,9 +594,47 @@ class Simulator:
                 self.control = None
 
     def lidar_ip(self) -> str:
+        if self.bound_ip is not None:
+            return self.bound_ip
         if self.args.bind not in ('', '0.0.0.0'):
             return self.args.bind
         return '127.0.0.1'
+
+    def configured_ip(self) -> str:
+        return '.'.join(str(b) for b in self.model.settings[KEY_LIDAR_IPCFG][:4])
+
+    def _apply_pending_rebind(self) -> None:
+        """Rebind to the address a reboot scheduled, if any."""
+        if self.pending_rebind is not None:
+            ip, self.pending_rebind = self.pending_rebind, None
+            self._rebind(ip)
+
+    def _rebind(self, ip: str) -> bool:
+        """Move every socket to `ip` keeping the port numbers (a reboot after a 0x0004 write)."""
+        fresh: dict[str, socket.socket] = {}
+        try:
+            for name in self.socks:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                if self.args.base_port != 0:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.setblocking(False)
+                s.bind((ip, self.ports[name]))
+                fresh[name] = s
+        except OSError as e:
+            for s in fresh.values():
+                s.close()
+            self.emit(event='error', error=f'rebind to {ip} failed: {e}')
+            return False
+        for name in ('discovery', 'cmd'):
+            self.sel.unregister(self.socks[name])
+        for old in self.socks.values():
+            old.close()
+        self.socks = fresh
+        self.sel.register(self.socks['discovery'], selectors.EVENT_READ, 'discovery')
+        self.sel.register(self.socks['cmd'], selectors.EVENT_READ, 'cmd')
+        self.bound_ip = ip
+        self.emit(event='rebound', ip=ip, ports=self.ports)
+        return True
 
     # -- events ----------------------------------------------------------------
     def emit(self, **ev) -> None:
@@ -683,6 +726,7 @@ class Simulator:
             self.drop_ack += int(req.get('count', 1))
         elif cmd == 'reboot':
             self._do_reboot(now)
+            self._apply_pending_rebind()
         elif cmd == 'set_state':
             self.model.force_state(int(req['state']), now)
         elif cmd == 'drop_rate':
@@ -712,6 +756,10 @@ class Simulator:
         self.frame_cnt = 0
         self.silence_until = now + self.args.reboot_silence
         self.model.reboot(now + self.args.reboot_silence)
+        # A changed 0x0004 takes effect now [unverified: the wiki only says "after reboot"].
+        # Deferred so the reboot ACK still leaves the old socket.
+        if self.configured_ip() != self.lidar_ip():
+            self.pending_rebind = self.configured_ip()
 
     # -- command handling ------------------------------------------------------
     def _handle_datagram(self, kind: str) -> None:
@@ -751,6 +799,7 @@ class Simulator:
             return
         ack = proto.CommandFrame(frame.seq_num, frame.cmd_id, ACK, SENDER_LIDAR, payload).encode()
         sock.sendto(ack, addr)
+        self._apply_pending_rebind()
 
     def _dispatch(self, f: proto.CommandFrame, addr, now: float) -> tuple[int, bytes | None]:
         now_ns = self.now_ns()

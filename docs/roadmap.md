@@ -65,7 +65,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
 - #46 detection mode (normal / sensitive, key `0x0018`; `set_detect_mode()`): **done**
 - #47 IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range;
   `set_imu_enabled()`, `set_imu_sensor_config()`): **done**
-- #50 LiDAR network config (key `0x0004`) with reboot-required handling
+- #50 LiDAR network config (key `0x0004`) with reboot-required handling — **done**
 - #51 install attitude / extrinsics (key `0x0012`) and optional host-side transform
 - #52 function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs)
 - #53 time-sync status read-back (`0x8009`–`0x800C`) and `set_gps_time` integration with
