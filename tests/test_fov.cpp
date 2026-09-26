@@ -160,18 +160,42 @@ bool same(const std::optional<FovConfig> & a, const FovConfig & b)
 TEST_CASE("fov_in_range: yaw 0..359, pitch -9..59, reversed windows allowed", "[fov]")
 {
   CHECK(fov_in_range(kFront));
-  CHECK(fov_in_range({.yaw_start_deg = 359, .yaw_stop_deg = 0, .pitch_start_deg = 59,
-                      .pitch_stop_deg = -9, .rsvd = 0}));
-  CHECK(fov_in_range({.yaw_start_deg = 20, .yaw_stop_deg = 20, .pitch_start_deg = 0,
-                      .pitch_stop_deg = 0, .rsvd = 7}));
-  CHECK_FALSE(fov_in_range({.yaw_start_deg = 360, .yaw_stop_deg = 0, .pitch_start_deg = 0,
-                            .pitch_stop_deg = 0, .rsvd = 0}));
-  CHECK_FALSE(fov_in_range({.yaw_start_deg = 0, .yaw_stop_deg = -1, .pitch_start_deg = 0,
-                            .pitch_stop_deg = 0, .rsvd = 0}));
-  CHECK_FALSE(fov_in_range({.yaw_start_deg = 0, .yaw_stop_deg = 0, .pitch_start_deg = -10,
-                            .pitch_stop_deg = 0, .rsvd = 0}));
-  CHECK_FALSE(fov_in_range({.yaw_start_deg = 0, .yaw_stop_deg = 0, .pitch_start_deg = 0,
-                            .pitch_stop_deg = 60, .rsvd = 0}));
+  CHECK(fov_in_range(
+    {.yaw_start_deg = 359,
+     .yaw_stop_deg = 0,
+     .pitch_start_deg = 59,
+     .pitch_stop_deg = -9,
+     .rsvd = 0}));
+  CHECK(fov_in_range(
+    {.yaw_start_deg = 20,
+     .yaw_stop_deg = 20,
+     .pitch_start_deg = 0,
+     .pitch_stop_deg = 0,
+     .rsvd = 7}));
+  CHECK_FALSE(fov_in_range(
+    {.yaw_start_deg = 360,
+     .yaw_stop_deg = 0,
+     .pitch_start_deg = 0,
+     .pitch_stop_deg = 0,
+     .rsvd = 0}));
+  CHECK_FALSE(fov_in_range(
+    {.yaw_start_deg = 0,
+     .yaw_stop_deg = -1,
+     .pitch_start_deg = 0,
+     .pitch_stop_deg = 0,
+     .rsvd = 0}));
+  CHECK_FALSE(fov_in_range(
+    {.yaw_start_deg = 0,
+     .yaw_stop_deg = 0,
+     .pitch_start_deg = -10,
+     .pitch_stop_deg = 0,
+     .rsvd = 0}));
+  CHECK_FALSE(fov_in_range(
+    {.yaw_start_deg = 0,
+     .yaw_stop_deg = 0,
+     .pitch_start_deg = 0,
+     .pitch_stop_deg = 60,
+     .rsvd = 0}));
 }
 
 TEST_CASE("to_string(FovSettings) lists the present fields", "[fov]")
@@ -182,7 +206,8 @@ TEST_CASE("to_string(FovSettings) lists the present fields", "[fov]")
   CHECK(to_string(s) == "fov0=yaw0-90/pitch-5-5 enable=fov0:1,fov1:0");
 }
 
-TEST_CASE("host_setup_key_values: FOV keys follow the host keys, absent ones are skipped", "[fov][config]")
+TEST_CASE(
+  "host_setup_key_values: FOV keys follow the host keys, absent ones are skipped", "[fov][config]")
 {
   HostSetup setup;
   setup.fov = FovSettings{
@@ -234,8 +259,13 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   CHECK_FALSE(empty.error().key.has_value());
   const auto bad = dev->set_fov(FovSettings{
     .fov0 = kFront,
-    .fov1 = FovConfig{.yaw_start_deg = 0, .yaw_stop_deg = 360, .pitch_start_deg = 0,
-                      .pitch_stop_deg = 0, .rsvd = 0},
+    .fov1 =
+      FovConfig{
+        .yaw_start_deg = 0,
+        .yaw_stop_deg = 360,
+        .pitch_start_deg = 0,
+        .pitch_stop_deg = 0,
+        .rsvd = 0},
     .enable = std::nullopt});
   REQUIRE_FALSE(bad.has_value());
   CHECK(bad.error().kind == DeviceError::Kind::kInvalidArgument);
@@ -247,7 +277,7 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   const auto set = dev->set_fov(want);
   REQUIRE(set.has_value());
   CHECK_FALSE(set->reboot_required);
-  auto got = dev->fov();
+  const auto got = dev->fov();
   REQUIRE(got.has_value());
   CHECK(same(got->fov0, kFront));
   CHECK(same(got->fov1, kBack));
@@ -256,21 +286,21 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   CHECK(to_string(*got) == to_string(want));
 
   // Only the mask: the windows stay.
-  REQUIRE(dev->set_fov(FovSettings{
-                         .fov0 = std::nullopt,
-                         .fov1 = std::nullopt,
-                         .enable = FovEnable{.fov0 = false, .fov1 = true}})
+  REQUIRE(dev
+            ->set_fov(FovSettings{
+              .fov0 = std::nullopt,
+              .fov1 = std::nullopt,
+              .enable = FovEnable{.fov0 = false, .fov1 = true}})
             .has_value());
-  got = dev->fov();
-  REQUIRE(got.has_value());
-  CHECK(same(got->fov0, kFront));
-  CHECK_FALSE(got->enable->fov0);
-  CHECK(got->enable->fov1);
+  const auto after_mask = dev->fov();
+  REQUIRE(after_mask.has_value());
+  CHECK(same(after_mask->fov0, kFront));
+  CHECK_FALSE(after_mask->enable->fov0);
+  CHECK(after_mask->enable->fov1);
 
   // The simulator range-checks too: a raw out-of-range window is answered with 0x03.
   const auto raw = encode_fov_config(
-    {.yaw_start_deg = 0, .yaw_stop_deg = 0, .pitch_start_deg = 0, .pitch_stop_deg = 60,
-     .rsvd = 0});
+    {.yaw_start_deg = 0, .yaw_stop_deg = 0, .pitch_start_deg = 0, .pitch_stop_deg = 60, .rsvd = 0});
   const KeyValue kv{static_cast<std::uint16_t>(Key::kFovCfg0), raw};
   const auto rejected = dev->configure(std::span<const KeyValue>(&kv, 1));
   REQUIRE_FALSE(rejected.has_value());
@@ -290,10 +320,11 @@ TEST_CASE("Simulator crops the point cloud to the enabled windows", "[fov][sim]"
   auto dev = f.open();
   Recorder rec;
   rec.attach(*dev);
-  REQUIRE(dev
-            ->set_fov(FovSettings{
-              .fov0 = kFront, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = true, .fov1 = false}})
-            .has_value());
+  REQUIRE(
+    dev
+      ->set_fov(FovSettings{
+        .fov0 = kFront, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = true, .fov1 = false}})
+      .has_value());
   REQUIRE(dev->start_sampling().has_value());
   REQUIRE(wait_until([&] { return rec.frames >= 3; }));
   CHECK(rec.points > 0);
@@ -326,8 +357,13 @@ TEST_CASE("HostSetup::fov is applied at open and replayed after a reconnect", "[
   // Out of range: rejected before the request, with the key.
   o.host_setup.fov = FovSettings{
     .fov0 = std::nullopt,
-    .fov1 = FovConfig{.yaw_start_deg = -1, .yaw_stop_deg = 0, .pitch_start_deg = 0,
-                      .pitch_stop_deg = 0, .rsvd = 0},
+    .fov1 =
+      FovConfig{
+        .yaw_start_deg = -1,
+        .yaw_stop_deg = 0,
+        .pitch_start_deg = 0,
+        .pitch_stop_deg = 0,
+        .rsvd = 0},
     .enable = std::nullopt};
   const auto bad = Device::open(*f.context, f.discovered(), o);
   REQUIRE_FALSE(bad.has_value());
@@ -340,22 +376,23 @@ TEST_CASE("HostSetup::fov is applied at open and replayed after a reconnect", "[
   auto dev = f.open(o);
   Recorder rec;
   rec.attach(*dev);
-  auto got = dev->fov();
+  const auto got = dev->fov();
   REQUIRE(got.has_value());
   CHECK(same(got->fov0, kFront));
   CHECK(got->enable->fov0);
 
   // Something else changes the LiDAR; the reconnect restores the HostSetup value.
-  REQUIRE(dev
-            ->set_fov(FovSettings{
-              .fov0 = kBack, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = false, .fov1 = false}})
-            .has_value());
+  REQUIRE(
+    dev
+      ->set_fov(FovSettings{
+        .fov0 = kBack, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = false, .fov1 = false}})
+      .has_value());
   CHECK(same(dev->fov()->fov0, kBack));
   REQUIRE(f.sim->control(R"({"cmd":"silence","seconds":1.5})"));
   REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
   REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 8s));
-  got = dev->fov();
-  REQUIRE(got.has_value());
-  CHECK(same(got->fov0, kFront));
-  CHECK(got->enable->fov0);
+  const auto after_reconnect = dev->fov();
+  REQUIRE(after_reconnect.has_value());
+  CHECK(same(after_reconnect->fov0, kFront));
+  CHECK(after_reconnect->enable->fov0);
 }

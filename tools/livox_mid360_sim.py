@@ -391,9 +391,11 @@ class DeviceModel:
         return out
 
     def keeps_point(self, data_type: int, sample: tuple) -> bool:
-        """[unverified] FOV cropping, see #11: no enabled window keeps everything; otherwise a
+        """
+        [unverified] FOV cropping, see #11: no enabled window keeps everything; otherwise a
         point stays when it lies inside any enabled window. Yaw is [start, stop) with
-        wrap-around when start > stop (start == stop is empty); pitch is [start, stop]."""
+        wrap-around when start > stop (start == stop is empty); pitch is [start, stop].
+        """
         windows = self.fov_windows()
         if not windows:
             return True
@@ -775,14 +777,18 @@ class Simulator:
             self.next_stats += 1.0
 
     def _cropped_samples(self, dt: int) -> list[tuple]:
-        """POINTS_PER_PACKET samples inside the enabled FOV windows, drawing up to
-        MAX_FOV_DRAWS batches; a packet ends up shorter only for a tiny window."""
+        """
+        POINTS_PER_PACKET samples inside the enabled FOV windows, drawing up to
+        MAX_FOV_DRAWS batches; a packet ends up shorter only for a tiny window.
+        """
         m = self.model
         if not m.fov_windows():
             return self.points.samples(dt, POINTS_PER_PACKET)
         kept: list[tuple] = []
         for _ in range(MAX_FOV_DRAWS):
-            kept.extend(p for p in self.points.samples(dt, POINTS_PER_PACKET) if m.keeps_point(dt, p))
+            kept.extend(
+                p for p in self.points.samples(dt, POINTS_PER_PACKET) if m.keeps_point(dt, p)
+            )
             if len(kept) >= POINTS_PER_PACKET:
                 break
         return kept[:POINTS_PER_PACKET]
