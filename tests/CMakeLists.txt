@@ -1,11 +1,11 @@
 find_package(Catch2 3 QUIET)
 if(NOT Catch2_FOUND)
   include(FetchContent)
-  FetchContent_Declare(Catch2
+  fetchcontent_declare(Catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
     GIT_TAG v3.7.1
     GIT_SHALLOW TRUE)
-  FetchContent_MakeAvailable(Catch2)
+  fetchcontent_makeavailable(Catch2)
   list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 endif()
 include(Catch)

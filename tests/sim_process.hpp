@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 extern char ** environ;  // NOLINT(readability-redundant-declaration)
@@ -26,7 +27,7 @@ extern char ** environ;  // NOLINT(readability-redundant-declaration)
 #endif
 
 /// Minimal extractor for the flat "ready" JSON line; avoids a JSON dependency.
-inline std::optional<long> json_int(std::string_view line, std::string_view key)
+inline std::optional<std::int64_t> json_int(std::string_view line, std::string_view key)
 {
   const std::string needle = "\"" + std::string(key) + "\":";
   const auto pos = line.find(needle);
@@ -35,7 +36,7 @@ inline std::optional<long> json_int(std::string_view line, std::string_view key)
   }
   const char * start = line.data() + pos + needle.size();
   char * end = nullptr;
-  const long v = std::strtol(start, &end, 10);
+  const std::int64_t v = std::strtoll(start, &end, 10);
   if (end == start) {
     return std::nullopt;
   }

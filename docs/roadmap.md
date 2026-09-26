@@ -119,7 +119,7 @@ Fixed in phase 0 (2026-09-25) and not expected to change within v1.
 | Minimum firmware | Undecided. Firmware v13.18.0244 is the baseline for hardware verification (#11). |
 | Tests | Catch2 v3 from apt when available, otherwise FetchContent. |
 | Repository split | Core library here; ROS 2 driver and CLI in sister repositories `livox-mid360-ros2` and `livox-mid360-cli`. |
-| Lint | `.clang-format` (ROS 2 style: a verbatim copy of the `ament_clang_format` configuration, #63), `.clang-tidy` and `pyproject.toml` (ruff configured to match `ament_flake8` / `ament_pep257`, #64) are shared with `livox-mid360-ros2` through `ament_clang_format --config` / `ament_flake8 --config`. cpplint is not used because it conflicts with `#pragma once` (#17). |
+| Lint | `.clang-format` (ROS 2 style: a verbatim copy of the `ament_clang_format` configuration, #63), `.clang-tidy` and `pyproject.toml` (ruff configured to match `ament_flake8` / `ament_pep257`, #64) are shared with `livox-mid360-ros2` through `ament_clang_format --config` (ruff has no ament equivalent; the ROS 2 side uses the `ament_flake8` / `ament_pep257` defaults, which the ruff configuration matches). Of `ament_lint_common`, only `ament_cppcheck` and `ament_lint_cmake` run here (#65); the driver's `colcon test` never lints this library. Not adopted: `ament_cpplint` (tool limitations, its real findings fixed once), `ament_copyright` (files keep the one-line SPDX header; the driver repository uses the ROS 2 header format), `ament_uncrustify` (the driver package uses `ament_cmake_clang_format` with this repository's `.clang-format`). |
 | Trademark | The README states up front that the project is unofficial and unaffiliated with Livox / DJI. |
 
 Naming:

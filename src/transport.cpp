@@ -557,7 +557,7 @@ std::expected<std::span<const ReadyEvent>, TransportError> Poller::wait(
 #endif
   }
   for (std::size_t i = 0; i < entries_.size(); ++i) {
-    const short rev = fds[i + 1].revents;
+    const auto rev = fds[i + 1].revents;
     if (rev == 0) {
       continue;
     }

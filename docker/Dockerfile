@@ -3,7 +3,9 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential g++-13 g++-14 clang-19 libclang-rt-19-dev clang-format-19 clang-tidy-19 \
-      cmake ninja-build catch2 gcovr git python3 python3-pip ca-certificates \
+      cmake ninja-build catch2 gcovr cppcheck git python3 python3-pip ca-certificates \
     && pip3 install --break-system-packages --no-cache-dir ruff==0.16.9 \
+      "git+https://github.com/ament/ament_lint.git@jazzy#subdirectory=ament_cppcheck" \
+      "git+https://github.com/ament/ament_lint.git@jazzy#subdirectory=ament_lint_cmake" \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
