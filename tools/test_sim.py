@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Unit tests for the simulator's device model and an in-process end-to-end check.
+"""
+Unit tests for the simulator's device model and an in-process end-to-end check.
 
 python3 -m unittest tools/test_sim.py
 """
@@ -23,6 +24,8 @@ import livox_mid360_sim as sim  # noqa: E402
 
 
 class DeviceModelTest(unittest.TestCase):
+    """Work-state machine of DeviceModel, driven without sockets."""
+
     def setUp(self) -> None:
         self.m = sim.DeviceModel(startup_delay=1.0)
         self.events: list[tuple[int, int]] = []
@@ -54,37 +57,37 @@ class DeviceModelTest(unittest.TestCase):
 
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
         self.assertEqual(
-            self.m.configure([(sim.KEY_SN, b"x" * 16)]), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN)
+            self.m.configure([(sim.KEY_SN, b'x' * 16)]), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN)
         )
         self.assertEqual(
-            self.m.configure([(0x7FFF, b"\x00")]), (sim.RET_PARAM_NOT_SUPPORT, 0x7FFF)
+            self.m.configure([(0x7FFF, b'\x00')]), (sim.RET_PARAM_NOT_SUPPORT, 0x7FFF)
         )
         self.assertEqual(
-            self.m.configure([(sim.KEY_IMU_EN, b"\x00\x01")]),
+            self.m.configure([(sim.KEY_IMU_EN, b'\x00\x01')]),
             (sim.RET_PARAM_INVALID_LEN, sim.KEY_IMU_EN),
         )
         self.assertEqual(
-            self.m.configure([(sim.KEY_PCL_DATA_TYPE, b"\x07")]),
+            self.m.configure([(sim.KEY_PCL_DATA_TYPE, b'\x07')]),
             (sim.RET_OUT_OF_RANGE, sim.KEY_PCL_DATA_TYPE),
         )
         # Atomic: a bad key later in the list leaves earlier keys unapplied.
-        ret, err = self.m.configure([(sim.KEY_IMU_EN, b"\x01"), (sim.KEY_SN, b"x" * 16)])
+        ret, err = self.m.configure([(sim.KEY_IMU_EN, b'\x01'), (sim.KEY_SN, b'x' * 16)])
         self.assertEqual((ret, err), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN))
         self.assertFalse(self.m.imu_enabled)
 
     def test_configure_and_inquire_round_trip(self) -> None:
-        cfg = proto.encode_host_ipcfg("192.168.1.5", 56301, 56300)
+        cfg = proto.encode_host_ipcfg('192.168.1.5', 56301, 56300)
         self.assertEqual(
-            self.m.configure([(sim.KEY_PCL_HOST, cfg), (sim.KEY_IMU_EN, b"\x01")]), (0, 0)
+            self.m.configure([(sim.KEY_PCL_HOST, cfg), (sim.KEY_IMU_EN, b'\x01')]), (0, 0)
         )
         ret, kvs = self.m.inquire(
             [sim.KEY_PCL_HOST, sim.KEY_IMU_EN, sim.KEY_SN, sim.KEY_CUR_WORK_STATE], 0
         )
         self.assertEqual(ret, sim.RET_OK)
         self.assertEqual(dict(kvs)[sim.KEY_PCL_HOST], cfg)
-        self.assertEqual(dict(kvs)[sim.KEY_IMU_EN], b"\x01")
-        self.assertEqual(dict(kvs)[sim.KEY_SN], b"SIM0000000000001")
-        self.assertEqual(self.m.host(sim.KEY_PCL_HOST), ("192.168.1.5", 56301, 56300))
+        self.assertEqual(dict(kvs)[sim.KEY_IMU_EN], b'\x01')
+        self.assertEqual(dict(kvs)[sim.KEY_SN], b'SIM0000000000001')
+        self.assertEqual(self.m.host(sim.KEY_PCL_HOST), ('192.168.1.5', 56301, 56300))
         self.assertIsNone(self.m.host(sim.KEY_IMU_HOST))
         ret, _ = self.m.inquire([0x7FFF], 0)
         self.assertEqual(ret, sim.RET_PARAM_NOT_SUPPORT)
@@ -93,7 +96,7 @@ class DeviceModelTest(unittest.TestCase):
         self.m.power_on(0.0)
         self.m.tick(1.0)
         self.m.configure(
-            [(sim.KEY_IMU_EN, b"\x01"), (sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))]
+            [(sim.KEY_IMU_EN, b'\x01'), (sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))]
         )
         self.m.reboot(5.0)
         self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
@@ -103,7 +106,7 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
 
     def test_factory_reset_restores_defaults(self) -> None:
-        self.m.configure([(sim.KEY_IMU_EN, b"\x01"), (sim.KEY_PCL_DATA_TYPE, b"\x03")])
+        self.m.configure([(sim.KEY_IMU_EN, b'\x01'), (sim.KEY_PCL_DATA_TYPE, b'\x03')])
         self.m.hms = [0x02100003] + [0] * 7
         self.m.factory_reset(0.0)
         self.assertFalse(self.m.imu_enabled)
@@ -115,17 +118,19 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.time_offset_ns, 600)
         self.assertEqual(self.m.time_sync_type, 2)
         ret, kvs = self.m.inquire([sim.KEY_TIME_OFFSET, sim.KEY_TIME_SYNC_TYPE], 0)
-        self.assertEqual(struct.unpack("<q", dict(kvs)[sim.KEY_TIME_OFFSET])[0], 600)
+        self.assertEqual(struct.unpack('<q', dict(kvs)[sim.KEY_TIME_OFFSET])[0], 600)
 
     def test_push_payload_parses(self) -> None:
         self.m.hms = [0x02100003] + [0] * 7
         kvs = dict(proto.parse_info_push(self.m.push_payload(123)))
         self.assertEqual(kvs[sim.KEY_CUR_WORK_STATE], bytes([sim.WS_MOTORSTARTUP]))
-        self.assertEqual(struct.unpack("<8I", kvs[sim.KEY_HMS])[0], 0x02100003)
-        self.assertEqual(kvs[sim.KEY_LOCAL_TIME], struct.pack("<Q", 123))
+        self.assertEqual(struct.unpack('<8I', kvs[sim.KEY_HMS])[0], 0x02100003)
+        self.assertEqual(kvs[sim.KEY_LOCAL_TIME], struct.pack('<Q', 123))
 
 
 class PointSourceTest(unittest.TestCase):
+    """Point generator determinism."""
+
     def test_deterministic_for_seed(self) -> None:
         a = sim.PointSource(7).samples(1, 96)
         b = sim.PointSource(7).samples(1, 96)
@@ -142,28 +147,28 @@ class EndToEndTest(unittest.TestCase):
     def setUp(self) -> None:
         args = sim.build_parser().parse_args(
             [
-                "--bind",
-                "127.0.0.1",
-                "--base-port",
-                "0",
-                "--startup-delay",
-                "0.05",
-                "--reboot-silence",
-                "0.5",
+                '--bind',
+                '127.0.0.1',
+                '--base-port',
+                '0',
+                '--startup-delay',
+                '0.05',
+                '--reboot-silence',
+                '0.5',
             ]
         )
         self.out = io.StringIO()
         r, w = os.pipe()
-        self.control_file = os.fdopen(r, "r")
-        self.control_w = os.fdopen(w, "w")
+        self.control_file = os.fdopen(r, 'r')
+        self.control_w = os.fdopen(w, 'w')
         self.s = sim.Simulator(args, out=self.out, control=self.control_file)
         self.thread = threading.Thread(target=self.s.run, daemon=True)
         self.thread.start()
         self.host = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.host.bind(("127.0.0.1", 0))
+        self.host.bind(('127.0.0.1', 0))
         self.host.settimeout(3)
         self.pcl = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.pcl.bind(("127.0.0.1", 0))
+        self.pcl.bind(('127.0.0.1', 0))
         self.pcl.settimeout(3)
         self.seq = 0
 
@@ -176,7 +181,7 @@ class EndToEndTest(unittest.TestCase):
         self.control_file.close()
 
     def send_control(self, line: str) -> None:
-        self.control_w.write(line + "\n")
+        self.control_w.write(line + '\n')
         self.control_w.flush()
 
     def request(self, cmd_id: int, data: bytes, to) -> proto.CommandFrame:
@@ -193,18 +198,18 @@ class EndToEndTest(unittest.TestCase):
 
     def test_discovery_configure_stream_reboot(self) -> None:
         ports = self.s.ports
-        ack = self.request(sim.CMD_DISCOVERY, b"", ("127.0.0.1", ports["discovery"]))
+        ack = self.request(sim.CMD_DISCOVERY, b'', ('127.0.0.1', ports['discovery']))
         disc = proto.parse_discovery_ack(ack.data)
-        self.assertEqual(disc["sn"], "SIM0000000000001")
-        self.assertEqual(disc["cmd_port"], ports["cmd"])
-        cmd = (disc["lidar_ip"], disc["cmd_port"])
+        self.assertEqual(disc['sn'], 'SIM0000000000001')
+        self.assertEqual(disc['cmd_port'], ports['cmd'])
+        cmd = (disc['lidar_ip'], disc['cmd_port'])
 
         pcl_port = self.pcl.getsockname()[1]
         kvs = [
-            (sim.KEY_PCL_HOST, proto.encode_host_ipcfg("127.0.0.1", pcl_port, proto.PORT_PCL)),
+            (sim.KEY_PCL_HOST, proto.encode_host_ipcfg('127.0.0.1', pcl_port, proto.PORT_PCL)),
             (
                 sim.KEY_STATE_HOST,
-                proto.encode_host_ipcfg("127.0.0.1", self.host.getsockname()[1], proto.PORT_PUSH),
+                proto.encode_host_ipcfg('127.0.0.1', self.host.getsockname()[1], proto.PORT_PUSH),
             ),
         ]
         ack = self.request(sim.CMD_PARAM_CONFIG, proto.encode_param_config(kvs), cmd)
@@ -229,8 +234,8 @@ class EndToEndTest(unittest.TestCase):
         self.assertTrue(got_push)
 
         # Reboot: ACK, then silence, then back to SAMPLING with udp_cnt reset.
-        ack = self.request(sim.CMD_REBOOT, struct.pack("<H", 100), cmd)
-        self.assertEqual(ack.data, b"\x00")
+        ack = self.request(sim.CMD_REBOOT, struct.pack('<H', 100), cmd)
+        self.assertEqual(ack.data, b'\x00')
         self.pcl.settimeout(0.05)
         time.sleep(0.1)
         while True:  # drain anything already queued
@@ -243,17 +248,17 @@ class EndToEndTest(unittest.TestCase):
         self.pcl.settimeout(3)
         d, _ = self.pcl.recvfrom(2048)
         self.assertLess(proto.DataPacket.parse(d).udp_cnt, 50)
-        states = [(e["from"], e["to"]) for e in self.events() if e["event"] == "state"]
+        states = [(e['from'], e['to']) for e in self.events() if e['event'] == 'state']
         self.assertIn((sim.WS_MOTORSTARTUP, sim.WS_SAMPLING), states)
         self.assertGreaterEqual(states.count((sim.WS_MOTORSTARTUP, sim.WS_SAMPLING)), 2)
 
     def test_control_channel_hms_and_drop_ack(self) -> None:
-        cmd = ("127.0.0.1", self.s.ports["cmd"])
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
         self.send_control('{"cmd":"hms","codes":[34603011]}')  # 0x02100003
         time.sleep(0.1)
         ack = self.request(sim.CMD_PARAM_INQUIRE, proto.encode_param_inquire([sim.KEY_HMS]), cmd)
         ret, kvs = proto.parse_param_inquire_ack(ack.data)
-        self.assertEqual(struct.unpack("<8I", dict(kvs)[sim.KEY_HMS])[0], 0x02100003)
+        self.assertEqual(struct.unpack('<8I', dict(kvs)[sim.KEY_HMS])[0], 0x02100003)
 
         self.send_control('{"cmd":"drop_ack","count":1}')
         time.sleep(0.1)
@@ -270,8 +275,8 @@ class EndToEndTest(unittest.TestCase):
         self.host.settimeout(3)
         ack = self.request(sim.CMD_PARAM_INQUIRE, proto.encode_param_inquire([sim.KEY_SN]), cmd)
         self.assertEqual(proto.parse_param_inquire_ack(ack.data)[0], 0)
-        self.assertTrue(any(e["event"] == "ack_dropped" for e in self.events()))
+        self.assertTrue(any(e['event'] == 'ack_dropped' for e in self.events()))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
