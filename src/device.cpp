@@ -38,12 +38,12 @@ std::uint64_t realtime_now_ns() noexcept
 
 DeviceError wrap(const SessionError & err)
 {
-  return DeviceError{.kind = DeviceError::Kind::kSession, .session = err};
+  return DeviceError{.kind = DeviceError::Kind::kSession, .session = err, .key = std::nullopt};
 }
 
 DeviceError error(DeviceError::Kind kind)
 {
-  return DeviceError{.kind = kind, .session = std::nullopt};
+  return DeviceError{.kind = kind, .session = std::nullopt, .key = std::nullopt};
 }
 
 }  // namespace

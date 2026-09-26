@@ -30,7 +30,7 @@ DeviceError transport_error(const TransportError & err)
   SessionError s;
   s.kind = SessionErrorKind::kTransport;
   s.transport = err;
-  return DeviceError{.kind = DeviceError::Kind::kSession, .session = s};
+  return DeviceError{.kind = DeviceError::Kind::kSession, .session = s, .key = std::nullopt};
 }
 
 }  // namespace
@@ -176,8 +176,8 @@ void Context::Impl::run()
 std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const ContextOptions & opts)
 {
   if (opts.batch_size == 0) {
-    return std::unexpected(
-      DeviceError{.kind = DeviceError::Kind::kInvalidArgument, .session = std::nullopt});
+    return std::unexpected(DeviceError{
+      .kind = DeviceError::Kind::kInvalidArgument, .session = std::nullopt, .key = std::nullopt});
   }
   auto impl = std::make_unique<Impl>();
   impl->options = opts;

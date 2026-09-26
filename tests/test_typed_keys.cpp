@@ -139,22 +139,32 @@ TEST_CASE("Device::set<K> / get<K>: every writable key round-trips", "[device][k
   {
     roundtrip<Key::kInstallAttitude>(
       *dev, InstallAttitude{
-              .roll_deg = 1.5F, .pitch_deg = -2.0F, .yaw_deg = 90.0F, .x_mm = 10, .y_mm = -20,
+              .roll_deg = 1.5F,
+              .pitch_deg = -2.0F,
+              .yaw_deg = 90.0F,
+              .x_mm = 10,
+              .y_mm = -20,
               .z_mm = 300});
   }
   SECTION("kFovCfg0")
   {
     roundtrip<Key::kFovCfg0>(
       *dev, FovConfig{
-              .yaw_start_deg = 10, .yaw_stop_deg = 350, .pitch_start_deg = -5,
-              .pitch_stop_deg = 50, .rsvd = 0});
+              .yaw_start_deg = 10,
+              .yaw_stop_deg = 350,
+              .pitch_start_deg = -5,
+              .pitch_stop_deg = 50,
+              .rsvd = 0});
   }
   SECTION("kFovCfg1")
   {
     roundtrip<Key::kFovCfg1>(
       *dev, FovConfig{
-              .yaw_start_deg = 0, .yaw_stop_deg = 180, .pitch_start_deg = 0,
-              .pitch_stop_deg = 30, .rsvd = 0});
+              .yaw_start_deg = 0,
+              .yaw_stop_deg = 180,
+              .pitch_start_deg = 0,
+              .pitch_stop_deg = 30,
+              .rsvd = 0});
   }
   SECTION("kFovCfgEn") { roundtrip<Key::kFovCfgEn>(*dev, FovEnable{.fov0 = true, .fov1 = true}); }
   SECTION("kDetectMode") { roundtrip<Key::kDetectMode>(*dev, DetectMode::kSensitive); }
@@ -173,7 +183,8 @@ TEST_CASE("Device::set<K> / get<K>: every writable key round-trips", "[device][k
   {
     roundtrip<Key::kImuSensorCfg>(
       *dev, ImuSensorConfig{
-              .output_rate = ImuOutputRate::k500Hz, .accel_range = ImuAccelRange::k16g,
+              .output_rate = ImuOutputRate::k500Hz,
+              .accel_range = ImuAccelRange::k16g,
               .gyro_range = ImuGyroRange::k500dps});
   }
 }
@@ -192,8 +203,9 @@ TEST_CASE("Device::get<K>: every read-only key decodes", "[device][keys][sim]")
   auto info = dev->get<Key::kProductInfo>();
   REQUIRE(info.has_value());
   CHECK(*info == "MID360-SIM");
-  for (auto v : {dev->get<Key::kVersionApp>(), dev->get<Key::kVersionLoader>(),
-                 dev->get<Key::kVersionHardware>()}) {
+  for (auto v :
+       {dev->get<Key::kVersionApp>(), dev->get<Key::kVersionLoader>(),
+        dev->get<Key::kVersionHardware>()}) {
     REQUIRE(v.has_value());
     CHECK(v->v == std::array<std::uint8_t, 4>{0, 0, 0, 1});
   }
@@ -278,8 +290,8 @@ TEST_CASE("Device::set<K>: LiDAR rejections carry ret_code and error_key", "[dev
   }
   SECTION("set_many is all-or-nothing")
   {
-    auto r = dev->set_many<Key::kDetectMode, Key::kWorkTgtMode>(
-      DetectMode::kSensitive, WorkState::kError);
+    auto r =
+      dev->set_many<Key::kDetectMode, Key::kWorkTgtMode>(DetectMode::kSensitive, WorkState::kError);
     REQUIRE_FALSE(r.has_value());
     CHECK(r.error().session->error_key == static_cast<std::uint16_t>(Key::kWorkTgtMode));
     auto mode = dev->get<Key::kDetectMode>();
@@ -288,7 +300,8 @@ TEST_CASE("Device::set<K>: LiDAR rejections carry ret_code and error_key", "[dev
   }
 }
 
-TEST_CASE("Device::get<K>: an undecodable value is kDecodeFailed with the key", "[device][keys][sim]")
+TEST_CASE(
+  "Device::get<K>: an undecodable value is kDecodeFailed with the key", "[device][keys][sim]")
 {
   Fixture f;
   if (!f.sim) {
