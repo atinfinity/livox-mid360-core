@@ -82,7 +82,8 @@ The process is driven over its standard streams so that any test harness can use
   answered with ret `0x01`.
 - **Configure** validates every key first with the wiki return codes (`RetCode` in
   `protocol.hpp`): read-only → `0x22`, unknown → `0x20`, wrong length → `0x23`,
-  `pcl_data_type` outside 1–3 → `0x03`. All keys are applied only if none failed; the ACK's
+  `pcl_data_type` outside 1–3 → `0x03`, a FOV window (`0x0015` / `0x0016`) with yaw
+  outside [0, 360) or pitch outside (-10, 60) → `0x03`. All keys are applied only if none failed; the ACK's
   `error_key` names the offender. A *changed* `lidar_ipcfg` is stored and answered with `0x21`
   (reboot required, [unverified] which keys the LiDAR does this for, #11); writing the current
   value back is a plain `0x00`. Value lengths mirror `key_value_length()` in `keys.cpp`.
@@ -106,6 +107,12 @@ The process is driven over its standard streams so that any test harness can use
   256 packets and resynchronises if it falls more than 0.5 s behind.
 - **Data** is pseudo-random but deterministic for a seed; the C++ decoder only needs valid
   framing, CRCs and counters.
+- **FOV cropping** [unverified]: when `fov_cfg_en` enables at least one window, a point is
+  sent only if it lies inside an enabled window (yaw `[start, stop)` with wrap-around when
+  `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
+  `yaw = atan2(y, x)`, `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and
+  `90° - theta`. Each packet draws up to 16 batches of 96 points to fill its 96 slots, so a
+  narrow window only slows the generator; an empty window sends packets with `dot_num = 0`.
 
 ## Tests
 
@@ -139,5 +146,8 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
 | Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
+| FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
+| FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
+| FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window | the wiki defines neither the edge inclusivity nor the wrap-around |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
 | `frame_cnt` period | 100 ms | |

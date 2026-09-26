@@ -99,7 +99,7 @@ struct DeviceError
   };
   Kind kind = Kind::kSession;
   std::optional<SessionError> session;  ///< kSession only
-  std::optional<Key> key;               ///< kDecodeFailed only
+  std::optional<Key> key;  ///< kInvalidArgument (out-of-range FOV window) / kDecodeFailed
 };
 
 [[nodiscard]] std::string_view to_string(DeviceError::Kind kind) noexcept;

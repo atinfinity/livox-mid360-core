@@ -143,6 +143,14 @@ std::optional<std::size_t> key_value_length(Key k) noexcept
 // ---- encoders --------------------------------------------------------------
 std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept { return {std::byte{v}}; }
 std::array<std::byte, 1> encode_bool(bool v) noexcept { return encode_u8(v ? 1 : 0); }
+bool fov_in_range(const FovConfig & f) noexcept
+{
+  const auto yaw = [](std::int32_t v) { return v >= 0 && v < 360; };
+  const auto pitch = [](std::int32_t v) { return v > -10 && v < 60; };
+  return yaw(f.yaw_start_deg) && yaw(f.yaw_stop_deg) && pitch(f.pitch_start_deg) &&
+         pitch(f.pitch_stop_deg);
+}
+
 std::array<std::byte, 1> encode_fov_enable(FovEnable e) noexcept
 {
   return encode_u8(static_cast<std::uint8_t>((e.fov0 ? 1u : 0u) | (e.fov1 ? 2u : 0u)));

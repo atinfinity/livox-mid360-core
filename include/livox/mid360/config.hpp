@@ -20,9 +20,9 @@ namespace livox::mid360
 {
 
 /// What the LiDAR needs to know about this host. Sent as one 0x0100 request (keys 0x0005,
-/// 0x0006, 0x0007, 0x0000, 0x001C in that order) followed, when `work_tgt_mode` is set, by a
-/// second one with 0x001A. Keys not listed here (0x0004 lidar ipcfg, FOV, attitude, ...) are
-/// left to Session::configure.
+/// 0x0006, 0x0007, 0x0000, 0x001C in that order, then the present `fov` keys 0x0015 / 0x0016 /
+/// 0x0017) followed, when `work_tgt_mode` is set, by a second one with 0x001A. Keys not listed
+/// here (0x0004 lidar ipcfg, attitude, ...) are left to Session::configure.
 struct HostSetup
 {
   /// Host address the LiDAR sends to. Empty: the session socket's local address, which must
@@ -36,6 +36,10 @@ struct HostSetup
   /// Target work mode (key 0x001A). Only kSampling, kIdle and kReady are accepted; anything
   /// else → kInvalidArgument with error_key 0x001A. Empty: leave the mode unchanged.
   std::optional<WorkState> work_tgt_mode;
+  /// FOV windows / enable mask (issue #39) applied in the same request as the host keys, so a
+  /// reconnect restores them. Out-of-range window → kInvalidArgument with its key. Empty:
+  /// leave the stored FOV alone.
+  std::optional<FovSettings> fov;
   /// After setting `work_tgt_mode`, poll 0x8006 until it is observed. 0: return right after
   /// the ACK.
   std::chrono::milliseconds wait_timeout{10000};

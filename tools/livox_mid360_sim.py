@@ -23,6 +23,7 @@ import argparse
 from collections.abc import Callable
 from dataclasses import dataclass, field
 import json
+import math
 import os
 import random
 import selectors
@@ -133,6 +134,7 @@ READ_ONLY = {
 }
 
 POINTS_PER_PACKET = 96
+MAX_FOV_DRAWS = 16  # batches of POINTS_PER_PACKET drawn per packet while FOV cropping
 PCL_PACKET_RATE = 2000.0  # packets/s  (≈192k points/s)
 IMU_RATE = 200.0
 PUSH_RATE = 1.0
@@ -284,6 +286,8 @@ class DeviceModel:
                 return RET_PARAM_INVALID_LEN, key
             if key == KEY_PCL_DATA_TYPE and value[0] not in (1, 2, 3):
                 return RET_OUT_OF_RANGE, key
+            if key in (KEY_FOV0, KEY_FOV1) and not fov_in_range(value):
+                return RET_OUT_OF_RANGE, key
             if key == KEY_WORK_TGT_MODE:
                 # [unverified] return codes, see #11. ERROR / UPGRADE are left only by
                 # reboot / "abnormal disappearance"; 4/5/6/8 exist but are "Not Support".
@@ -377,6 +381,53 @@ class DeviceModel:
     def imu_enabled(self) -> bool:
         return self.settings[KEY_IMU_EN][0] != 0
 
+    def fov_windows(self) -> list[tuple[int, int, int, int]]:
+        """The enabled FOV windows as (yaw_start, yaw_stop, pitch_start, pitch_stop) degrees."""
+        mask = self.settings[KEY_FOV_EN][0]
+        out = []
+        for bit, key in ((1, KEY_FOV0), (2, KEY_FOV1)):
+            if mask & bit:
+                out.append(struct.unpack('<iiiiI', self.settings[key])[:4])
+        return out
+
+    def keeps_point(self, data_type: int, sample: tuple) -> bool:
+        """[unverified] FOV cropping, see #11: no enabled window keeps everything; otherwise a
+        point stays when it lies inside any enabled window. Yaw is [start, stop) with
+        wrap-around when start > stop (start == stop is empty); pitch is [start, stop]."""
+        windows = self.fov_windows()
+        if not windows:
+            return True
+        yaw, pitch = point_angles(data_type, sample)
+        return any(in_fov_window(w, yaw, pitch) for w in windows)
+
+
+# --------------------------------------------------------------------------- FOV
+def fov_in_range(value: bytes) -> bool:
+    """Wiki ranges for keys 0x0015 / 0x0016: yaw in [0, 360), pitch in (-10, 60)."""
+    yaw0, yaw1, pitch0, pitch1, _ = struct.unpack('<iiiiI', value)
+    return all(0 <= y < 360 for y in (yaw0, yaw1)) and all(-10 < p < 60 for p in (pitch0, pitch1))
+
+
+def point_angles(data_type: int, sample: tuple) -> tuple[float, float]:
+    """(yaw, pitch) in degrees of a sample; yaw in [0, 360), pitch in [-90, 90]."""
+    if data_type == 3:  # (depth, theta zenith, phi azimuth) in 0.01 deg
+        return sample[2] / 100.0 % 360.0, 90.0 - sample[1] / 100.0
+    x, y, z = sample[0], sample[1], sample[2]
+    yaw = math.degrees(math.atan2(y, x)) % 360.0
+    pitch = math.degrees(math.atan2(z, math.hypot(x, y)))
+    return yaw, pitch
+
+
+def in_fov_window(window: tuple[int, int, int, int], yaw: float, pitch: float) -> bool:
+    yaw0, yaw1, pitch0, pitch1 = window
+    if pitch < min(pitch0, pitch1) or pitch > max(pitch0, pitch1):
+        return False
+    if yaw0 == yaw1:
+        return False
+    if yaw0 < yaw1:
+        return yaw0 <= yaw < yaw1
+    return yaw >= yaw0 or yaw < yaw1
+
 
 # --------------------------------------------------------------------------- data generation
 class PointSource:
@@ -405,7 +456,7 @@ class PointSource:
                 d = depth_mm // 10
                 out.append((r.randint(-d, d), r.randint(-d, d), r.randint(-200, 200), refl, tag))
             else:
-                out.append((depth_mm, r.randint(0, 35999), r.randint(0, 35999), refl, tag))
+                out.append((depth_mm, r.randint(0, 18000), r.randint(0, 35999), refl, tag))
         return out
 
     def imu(self) -> tuple:
@@ -723,6 +774,19 @@ class Simulator:
             self.emit(event='sent', **self.sent, state=m.work_state)
             self.next_stats += 1.0
 
+    def _cropped_samples(self, dt: int) -> list[tuple]:
+        """POINTS_PER_PACKET samples inside the enabled FOV windows, drawing up to
+        MAX_FOV_DRAWS batches; a packet ends up shorter only for a tiny window."""
+        m = self.model
+        if not m.fov_windows():
+            return self.points.samples(dt, POINTS_PER_PACKET)
+        kept: list[tuple] = []
+        for _ in range(MAX_FOV_DRAWS):
+            kept.extend(p for p in self.points.samples(dt, POINTS_PER_PACKET) if m.keeps_point(dt, p))
+            if len(kept) >= POINTS_PER_PACKET:
+                break
+        return kept[:POINTS_PER_PACKET]
+
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
         pkt = proto.DataPacket(
@@ -733,7 +797,7 @@ class Simulator:
             data_type=dt,
             time_type=self.model.time_sync_type,
             timestamp_ns=self.now_ns(),
-            data=proto.pack_samples(dt, self.points.samples(dt, POINTS_PER_PACKET)),
+            data=proto.pack_samples(dt, self._cropped_samples(dt)),
         )
         self.udp_cnt_pcl = (self.udp_cnt_pcl + 1) & 0xFFFF
         if host is None:

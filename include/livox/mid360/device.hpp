@@ -146,6 +146,16 @@ public:
   /// from the last 0x0102 push without a round trip.
   std::expected<LidarStatus, DeviceError> status(std::optional<RequestOptions> opts = std::nullopt);
 
+  // --- FOV (issue #39): keys 0x0015 / 0x0016 / 0x0017.
+  /// One 0x0100 with the present fields of `fov` (the LiDAR applies all or none). Validated
+  /// before any I/O: no field → kInvalidArgument without `key`; a window outside
+  /// fov_in_range() → kInvalidArgument with `key` = 0x0015 / 0x0016. HostSetup::fov does the
+  /// same at open() and after a reconnect.
+  std::expected<SetResult, DeviceError> set_fov(
+    const FovSettings & fov, std::optional<RequestOptions> opts = std::nullopt);
+  /// One 0x0101 for the three keys. A key the ACK lacks leaves its field empty.
+  std::expected<FovSettings, DeviceError> fov(std::optional<RequestOptions> opts = std::nullopt);
+
   // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
   /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()
   /// does not wait for the state change (start_sampling() / stop_sampling() do). Read-only
