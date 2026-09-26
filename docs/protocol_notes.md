@@ -115,7 +115,9 @@ whether `0x07` is ever reported; the persistence of `work_tgt_mode`; and whether
 ## Return code 0x21 (PARAM_REBOOT_EFFECT)
 
 Treated as success-with-note by callers: the parameter was stored but needs a reboot
-(`lidar_ipcfg` is the obvious case).
+(`lidar_ipcfg` is the obvious case; `Device::set<K>()` reports it as
+`SetResult::reboot_required`). **[unverified]** Which keys answer `0x21`, and whether an
+unchanged value still does; the simulator answers `0x21` only for a changed `lidar_ipcfg`.
 
 ## HMS table
 

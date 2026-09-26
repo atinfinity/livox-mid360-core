@@ -96,6 +96,8 @@ std::string_view to_string(DeviceError::Kind kind) noexcept
       return "not_open";
     case DeviceError::Kind::kDisconnected:
       return "disconnected";
+    case DeviceError::Kind::kDecodeFailed:
+      return "decode_failed";
   }
   return "unknown";
 }
@@ -106,6 +108,10 @@ std::string to_string(const DeviceError & err)
   if (err.session) {
     out += ": ";
     out += to_string(*err.session);
+  }
+  if (err.key) {
+    out += ": key ";
+    out += to_string(*err.key);
   }
   return out;
 }

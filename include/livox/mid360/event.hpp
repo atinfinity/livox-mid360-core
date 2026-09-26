@@ -12,6 +12,7 @@
 
 #include "livox/mid360/export.hpp"
 #include "livox/mid360/hms.hpp"
+#include "livox/mid360/keys.hpp"
 #include "livox/mid360/protocol.hpp"
 #include "livox/mid360/session.hpp"
 
@@ -94,9 +95,11 @@ struct DeviceError
     kAlreadyRegistered,  ///< another Device with the same IP is open on this Context
     kNotOpen,            ///< Device was closed (or never opened)
     kDisconnected,       ///< command refused: the Device is between kDisconnected and kReconnected
+    kDecodeFailed,       ///< get<K>(): the ACK lacked `key` or its value did not decode (#57)
   };
   Kind kind = Kind::kSession;
   std::optional<SessionError> session;  ///< kSession only
+  std::optional<Key> key;               ///< kDecodeFailed only
 };
 
 [[nodiscard]] std::string_view to_string(DeviceError::Kind kind) noexcept;
