@@ -44,7 +44,11 @@ struct Fixture
 
   explicit Fixture(std::vector<std::string> extra = {})
   {
-    extra.insert(extra.end(), {"--rate-multiplier", "0.25", "--push-rate", "10"});
+    // 0.05 keeps the datagram rate (100 point + 10 IMU per second) well under what the
+    // Context receive thread sustains in Debug+ASan on a 2-vCPU runner (~300/s); at 0.25 it
+    // saturates, backlogs the sockets and keeps delivering IMU samples long after the
+    // simulator stopped sending them.
+    extra.insert(extra.end(), {"--rate-multiplier", "0.05", "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(extra));
     if (sim) {
       ContextOptions o;
@@ -256,8 +260,8 @@ TEST_CASE("IMU enable and output rate drive the IMU stream", "[settings][sim]")
   REQUIRE(dev->imu_enabled().value());
   REQUIRE(wait_until([&] { return rec.imu_samples > 0; }));
 
-  // 200 Hz x 0.25 rate multiplier = 50 samples/s; sanitizer builds on a loaded runner
-  // deliver far fewer, so only the direction of the change is asserted.
+  // 200 Hz x 0.05 rate multiplier = 10 samples/s; sanitizer builds on a loaded runner
+  // deliver fewer, so only the direction of the change is asserted.
   const auto base = rec.imu_over(1000ms);
   CHECK(base > 0);
 
@@ -268,12 +272,14 @@ TEST_CASE("IMU enable and output rate drive the IMU stream", "[settings][sim]")
               .gyro_range = ImuGyroRange::k2000dps})
             .has_value());
   std::this_thread::sleep_for(100ms);      // let the sender pick the new interval up
-  const auto fast = rec.imu_over(1000ms);  // 500 Hz x 0.25 = 125 samples/s
+  const auto fast = rec.imu_over(1000ms);  // 500 Hz x 0.05 = 25 samples/s
   CHECK(fast > base);
 
   REQUIRE(dev->set_imu_enabled(false).has_value());
   CHECK_FALSE(dev->imu_enabled().value());
-  std::this_thread::sleep_for(100ms);
+  // Samples already in flight (socket buffers, receive thread) may still arrive: wait for the
+  // stream to go quiet, then require that it stays quiet.
+  REQUIRE(wait_until([&] { return rec.imu_over(200ms) == 0; }));
   CHECK(rec.imu_over(300ms) == 0);
 
   REQUIRE(dev->set_imu_enabled(true).has_value());
