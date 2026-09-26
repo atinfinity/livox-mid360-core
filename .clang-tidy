@@ -3,6 +3,8 @@
 # modernize-use-ranges is off because Apple libc++ (macOS dev builds) lacks ranges algorithms;
 # owning-memory needs GSL; pro-type-vararg flags POSIX fcntl(). Omitting trailing members in
 # designated initializers is intentional and accepted by the -Werror builds.
+# readability-braces-around-statements is on because the ROS 2 style requires braces on every
+# if / for / while body (issue #63).
 Checks: >
   bugprone-*,
   performance-*,
@@ -24,7 +26,6 @@ Checks: >
   -modernize-use-designated-initializers,
   -modernize-use-ranges,
   -modernize-use-trailing-return-type,
-  -readability-braces-around-statements,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
   -readability-magic-numbers,
