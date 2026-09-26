@@ -82,7 +82,9 @@ The process is driven over its standard streams so that any test harness can use
   answered with ret `0x01`.
 - **Configure** validates every key first with the wiki return codes (`RetCode` in
   `protocol.hpp`): read-only → `0x22`, unknown → `0x20`, wrong length → `0x23`,
-  `pcl_data_type` outside 1–3 → `0x03`, a FOV window (`0x0015` / `0x0016`) with yaw
+  `pcl_data_type` outside 1–3 → `0x03`, `pattern_mode` 1 / 2 → `0x20` and any other non-zero
+  value → `0x03` (the base Mid-360 only scans non-repetitively, [unverified] which code, #11),
+  a FOV window (`0x0015` / `0x0016`) with yaw
   outside [0, 360) or pitch outside (-10, 60) → `0x03`. All keys are applied only if none failed; the ACK's
   `error_key` names the offender. A *changed* `lidar_ipcfg` is stored and answered with `0x21`
   (reboot required, [unverified] which keys the LiDAR does this for, #11); writing the current
@@ -93,8 +95,7 @@ The process is driven over its standard streams so that any test harness can use
   READY → SAMPLING. The pass-through READY has no dwell (SAMPLING → IDLE is immediate), but
   every transition emits a `state` event. `work_tgt_mode` accepts 1 / 2 / 9 only (4 / 5 / 6 /
   8 → `0x20`, undefined → `0x03`, in ERROR / UPGRADE → `0x02`); a write during SELFCHECK /
-  MOTORSTARTUP is stored and followed afterwards. A changed `pattern_mode` while READY /
-  SAMPLING restarts the motor. ERROR / UPGRADE are entered only by `set_state` and left by
+  MOTORSTARTUP is stored and followed afterwards. ERROR / UPGRADE are entered only by `set_state` and left by
   `set_state` or a reboot. Reboot and factory reset go back through SELFCHECK, reset
   `udp_cnt`/`frame_cnt`/`seq`, and stay silent for `--reboot-silence`. Reboot keeps every
   setting except `work_tgt_mode`; factory reset restores `factory_settings()`. All durations
@@ -148,6 +149,8 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
 | FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
+| `pattern_mode` | only 0 accepted; 1 / 2 → `0x20`, others → `0x03`; never restarts the motor | the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code |
+| `pcl_data_type` change while SAMPLING | the next packet is already in the new format | the wiki does not say whether the switch is immediate or aligned to a frame |
 | FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window | the wiki defines neither the edge inclusivity nor the wrap-around |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
 | `frame_cnt` period | 100 ms | |

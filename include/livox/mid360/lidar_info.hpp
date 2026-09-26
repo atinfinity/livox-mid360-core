@@ -46,6 +46,7 @@ inline constexpr std::array<Key, 6> kIdentityKeys{
 [[nodiscard]] std::string to_string(const DeviceIdentity & id);
 
 // --- typed key values -------------------------------------------------------------------
+[[nodiscard]] std::string_view to_string(ScanPattern p) noexcept;
 [[nodiscard]] std::string_view to_string(DetectMode m) noexcept;
 [[nodiscard]] std::string_view to_string(TimeSyncType t) noexcept;
 [[nodiscard]] std::string_view to_string(FwType t) noexcept;
@@ -78,7 +79,7 @@ inline constexpr std::array<Key, 6> kIdentityKeys{
 struct LidarSettings
 {
   std::optional<DataType> pcl_data_type;              ///< 0x0000
-  std::optional<std::uint8_t> pattern_mode;           ///< 0x0001
+  std::optional<ScanPattern> pattern_mode;            ///< 0x0001
   std::optional<LidarIpConfig> lidar_ipcfg;           ///< 0x0004
   std::optional<HostIpConfig> state_info_host_ipcfg;  ///< 0x0005
   std::optional<HostIpConfig> pointcloud_host_ipcfg;  ///< 0x0006

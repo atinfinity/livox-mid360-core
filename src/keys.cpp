@@ -391,6 +391,11 @@ std::expected<DataType, KeyError> decode_data_type(std::span<const std::byte> v)
   return d;
 }
 
+std::expected<ScanPattern, KeyError> decode_scan_pattern(std::span<const std::byte> v) noexcept
+{
+  return decode_enum_u8<ScanPattern>(v, 2);
+}
+
 std::expected<DetectMode, KeyError> decode_detect_mode(std::span<const std::byte> v) noexcept
 {
   return decode_enum_u8<DetectMode>(v, 1);

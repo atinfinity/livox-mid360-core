@@ -59,7 +59,8 @@ over them and only add what the raw key does not express (waits, combined keys, 
 
 - #38 firmware type and version query (`Device::identity()`, `lidar_info.hpp`): **done**
 - #39 FOV configuration and enable (`set_fov()` / `fov()`, `HostSetup::fov`): **done**
-- #40 coordinate format, scan pattern and point-cloud frame rate
+- #40 coordinate format, scan pattern and point-cloud frame rate (`set_point_format()`,
+  `set_scan_pattern()`, `set_frame_policy()`; no frame-rate key on the Mid-360): **done**
 - #41 read-back of stored settings and live status (`settings()` / `status()` / `pushed_status()`): **done**
 - #46 detection mode (normal / sensitive, key `0x0018`)
 - #47 IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range)

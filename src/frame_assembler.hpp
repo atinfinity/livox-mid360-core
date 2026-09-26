@@ -69,6 +69,10 @@ public:
   [[nodiscard]] std::optional<Frame> push(const DataPacketView & pkt, std::uint64_t recv_time_ns);
   /// Close and return the partial frame (idle close); nullopt when empty.
   [[nodiscard]] std::optional<Frame> flush();
+  /// Switch policy from the next packet on (Device::set_frame_policy()). The partial frame
+  /// is kept and closed by the new policy; the kFrameCounter fallback detection restarts.
+  void set_policy(FramePolicy policy) noexcept;
+  [[nodiscard]] const FramePolicy & policy() const noexcept { return policy_; }
   /// Drop the partial frame without delivering it (stop_sampling); its points are taken
   /// back out of `counters().points`. Drop / timestamp baselines are kept.
   void discard() noexcept;
