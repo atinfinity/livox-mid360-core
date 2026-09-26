@@ -44,7 +44,7 @@ bool is_requestable(WorkState s)
 HostSetupKeyValues host_setup_key_values(const HostSetup & setup, const Ipv4 & host_ip)
 {
   HostSetupKeyValues out;
-  out.storage.reserve(8 * 3 + 2 + 20 * 2 + 1);
+  out.storage.reserve(8 * 3 + 2 + 1 + 20 * 2 + 1 + 1 + 1 + 3);
   std::vector<std::size_t> lengths;
   const auto put = [&](Key key, std::span<const std::byte> bytes) {
     out.storage.insert(out.storage.end(), bytes.begin(), bytes.end());
@@ -70,6 +70,15 @@ HostSetupKeyValues host_setup_key_values(const HostSetup & setup, const Ipv4 & h
     if (setup.fov->enable) {
       put(Key::kFovCfgEn, encode_fov_enable(*setup.fov->enable));
     }
+  }
+  if (setup.detect_mode) {
+    put(Key::kDetectMode, encode_enum_u8(*setup.detect_mode));
+  }
+  if (setup.time_filter) {
+    put(Key::kTimeFilter, encode_u8(*setup.time_filter ? 1 : 0));
+  }
+  if (setup.imu_sensor_config) {
+    put(Key::kImuSensorCfg, encode_imu_sensor_config(*setup.imu_sensor_config));
   }
   // Fix the views up once storage has its final size.
   std::size_t off = 0;
