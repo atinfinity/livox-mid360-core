@@ -229,7 +229,7 @@ livox-mid360-core/
 - [x] ホスト設定フロー `HostSetup` / `apply_host_setup`（`config.hpp`、#5、docs/session.md「Host setup」）
 - [x] 公開 API 設計（Context/Device、スレッド規則、エラー型、docs/api.md、#9）
 - [x] 点群/IMU 受信、ドロップ計数、フレーム分割（`Context` / `Device` / `FrameAssembler`、#6、docs/api.md「Receive pipeline」。シミュレータで検証、実機は #11）
-- [ ] 状態機械と push 処理、HMS デコード
+- [x] push 処理（cur_work_state / hms_code）、`kStateChanged` / `kHms` イベント、`work_state()` / `hms()`（#7、docs/api.md「Push handling」）
 - [ ] 切断・再起動からの自動復帰、複数台
 - [ ] 数時間の長時間受信テスト、Livox Viewer 2 との目視比較
 

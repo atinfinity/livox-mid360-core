@@ -28,6 +28,7 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
 | `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, #11) |
 | `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and 200 pkt/s IMU rates |
+| `--push-rate` | 1.0 | 0x0102 push rate in Hz, not affected by `--rate-multiplier` |
 | `--drop-rate` | 0 | fraction of point-cloud packets silently dropped (`udp_cnt` still advances) |
 | `--no-quit-on-eof` | | keep running when stdin closes (default: quit) |
 | `--verbose` | | log to stderr |

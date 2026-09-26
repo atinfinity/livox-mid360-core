@@ -343,6 +343,7 @@ class Simulator:
         self.model.on_state = self._on_state
         self.points = PointSource(args.seed)
         self.rate = args.rate_multiplier
+        self.push_rate = args.push_rate
         self.frame_s = args.frame_ms / 1000.0
         self.drop_rate = args.drop_rate
         self._drop_rng = random.Random(args.seed ^ 0x5A5A)
@@ -619,7 +620,7 @@ class Simulator:
                     self.next_imu = now
         if now >= self.next_push:
             self._send_push()
-            self.next_push += 1.0 / (PUSH_RATE * self.rate)
+            self.next_push += 1.0 / self.push_rate
         if now >= self.next_stats:
             self.emit(event="sent", **self.sent, state=m.work_state)
             self.next_stats += 1.0
@@ -705,6 +706,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="frame_cnt period; 0 = frame_cnt never changes (non-repetitive scan)",
     )
     p.add_argument("--rate-multiplier", type=float, default=1.0)
+    p.add_argument(
+        "--push-rate",
+        type=float,
+        default=PUSH_RATE,
+        help="0x0102 push rate in Hz, independent of --rate-multiplier (default 1)",
+    )
     p.add_argument(
         "--drop-rate", type=float, default=0.0, help="fraction of point-cloud packets to drop"
     )

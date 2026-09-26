@@ -7,9 +7,10 @@
 //     your own thread instead;
 //   - an exception escaping a callback terminates the process;
 //   - a Device must not be destroyed from inside its own callbacks.
-// Data path implemented in #6; push / state / HMS are #7 and reconnection is #8.
+// Data path (#6) and push / state / HMS (#7) are implemented; reconnection is #8.
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -96,8 +97,10 @@ class Device {
 
   // --- observation (thread-safe snapshots)
   [[nodiscard]] const DiscoveredDevice& info() const noexcept;
-  [[nodiscard]] std::optional<WorkState> work_state()
-      const;  ///< last pushed 0x8006 (#7; nullopt until then)
+  /// cur_work_state from the last 0x0102 push; nullopt before the first push.
+  [[nodiscard]] std::optional<WorkState> work_state() const;
+  /// hms_code slots from the last 0x0102 push (all inactive before the first push).
+  [[nodiscard]] std::array<HmsCode, 8> hms() const;
   [[nodiscard]] DeviceStats stats() const;
   [[nodiscard]] SessionStats session_stats() const;
 

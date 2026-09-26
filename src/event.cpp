@@ -35,6 +35,8 @@ std::string to_string(const Event& event) {
       std::size_t active = 0;
       for (const HmsCode& c : event.hms) active += c.active() ? 1u : 0u;
       out += " active=" + std::to_string(active);
+      out += " level=";
+      out += to_string(event.hms_level);
       break;
     }
     case Event::Kind::kStats: {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Context / Device (issue #6) against tools/livox_mid360_sim.py: registration, frame and IMU
-// delivery, drop counting, frame_cnt splitting and fallback, idle close, stop / destruction.
+// delivery, drop counting, frame_cnt splitting and fallback, idle close, stop / destruction,
+// and 0x0102 push handling (issue #7): work_state(), hms(), kStateChanged / kHms events.
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -45,9 +46,10 @@ struct Fixture {
   std::unique_ptr<Context> context;
 
   /// The simulator streams at a quarter of the real rate (500 pkt/s point cloud, 50 Hz IMU)
-  /// so that sanitizer builds keep up; per-frame packet counts below assume this.
+  /// so that sanitizer builds keep up; per-frame packet counts below assume this. Pushes
+  /// come at 10 Hz so that state / HMS tests do not wait a second per step.
   explicit Fixture(std::vector<std::string> args = {}) {
-    args.insert(args.end(), {"--rate-multiplier", "0.25"});
+    args.insert(args.end(), {"--rate-multiplier", "0.25", "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(args));
     if (sim) context = loopback_context();
   }
@@ -83,9 +85,12 @@ struct Recorder {
   std::atomic<std::uint64_t> pcl_packets{0};  ///< on_packet, point cloud only
   std::atomic<std::uint64_t> imu_packets{0};
   std::atomic<std::uint64_t> stats_events{0};
+  std::atomic<std::uint64_t> state_events{0};
+  std::atomic<std::uint64_t> hms_events{0};
   std::atomic<bool> ok{true};
   std::mutex mutex;
-  std::vector<Frame> kept;  ///< headers only (points cleared) of every frame
+  std::vector<Frame> kept;    ///< headers only (points cleared) of every frame
+  std::vector<Event> events;  ///< kStateChanged / kHms in order
 
   void attach(Device& d) {
     REQUIRE(d.on_packet([this](const DataPacketView& p, const ReceiveInfo& info) {
@@ -113,8 +118,22 @@ struct Recorder {
                ++imu;
              }).has_value());
     REQUIRE(d.on_event([this](const Event& e) {
-               if (e.kind == Event::Kind::kStats) ++stats_events;
+               if (e.kind == Event::Kind::kStats) {
+                 ++stats_events;
+                 return;
+               }
+               if (e.time_ns == 0) ok = false;
+               const std::lock_guard lock(mutex);
+               events.push_back(e);
+               if (e.kind == Event::Kind::kStateChanged) ++state_events;
+               if (e.kind == Event::Kind::kHms) ++hms_events;
              }).has_value());
+  }
+
+  [[nodiscard]] Event event(std::size_t i) {
+    const std::lock_guard lock(mutex);
+    REQUIRE(i < events.size());
+    return events[i];
   }
 };
 
@@ -160,7 +179,8 @@ TEST_CASE("Event / DeviceError to_string", "[device]") {
   CHECK(to_string(e).starts_with("stats packets=7 "));
   e.kind = Event::Kind::kHms;
   e.hms[0].raw = 1;
-  CHECK(to_string(e) == "hms active=1");
+  e.hms_level = HmsLevel::kWarning;
+  CHECK(to_string(e) == "hms active=1 level=warning");
   CHECK(to_string(Event::Kind::kDisconnected) == "disconnected");
   DeviceError err;
   err.kind = DeviceError::Kind::kSession;
@@ -214,10 +234,11 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
   Recorder rec;  // outlives the Device: callbacks may run until the destructor returns
   auto dev = f.open(o);
   CHECK(dev->info().ip == Ipv4{127, 0, 0, 1});
-  CHECK_FALSE(dev->work_state().has_value());  // #7
   CHECK(dev->stats().packets == 0);
 
   rec.attach(*dev);
+  // Powers up into SAMPLING (default work_tgt_mode), possibly via MOTORSTARTUP.
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
   REQUIRE(dev->start_sampling().has_value());
   // Callbacks are frozen while sampling.
   const auto locked = dev->on_imu([](const ImuData&) {});
@@ -277,6 +298,90 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
   }));
   CHECK(dev->stats().packets == settled);
   dev.reset();  // before the Context
+}
+
+TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]") {
+  Fixture f;
+  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  for (const HmsCode& c : dev->hms()) CHECK_FALSE(c.active());
+
+  // The first push records the state without a kStateChanged. The simulator powers up
+  // into SAMPLING (default work_tgt_mode) after its MOTORSTARTUP delay, so depending on
+  // timing the first push carries either MOTORSTARTUP (then one MOTORSTARTUP -> SAMPLING
+  // event follows) or SAMPLING (no event).
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  CHECK(dev->stats().pushes >= 1);
+  CHECK(dev->stats().last_push_time_ns != 0);
+  CHECK(rec.state_events <= 1);
+  if (rec.state_events == 1) {
+    CHECK(rec.event(0).old_state == WorkState::kMotorStartup);
+    CHECK(rec.event(0).new_state == WorkState::kSampling);
+  }
+  CHECK(rec.hms_events == 0);  // all slots empty == baseline
+  std::size_t base = rec.state_events;
+
+  // Transitions requested by commands are reported by the push, not by the command.
+  REQUIRE(dev->stop_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.state_events >= base + 1; }));
+  CHECK(rec.event(base).old_state == WorkState::kSampling);
+  CHECK(rec.event(base).new_state == WorkState::kIdle);
+  CHECK(dev->work_state() == WorkState::kIdle);
+  ++base;
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.state_events >= base + 1; }));
+  {
+    const Event e = rec.event(base);
+    CHECK(e.kind == Event::Kind::kStateChanged);
+    CHECK(e.old_state == WorkState::kIdle);
+    CHECK(e.new_state == WorkState::kSampling);
+  }
+  CHECK(dev->work_state() == WorkState::kSampling);
+
+  // Two codes: abnormal 0x0001 level error, 0x0002 level warning -> one kHms at level error.
+  constexpr std::uint32_t kErr = 0x0001'0003;
+  constexpr std::uint32_t kWarn = 0x0002'0002;
+  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[65539,131074]})"));
+  REQUIRE(wait_until([&] { return rec.hms_events >= 1; }));
+  {
+    const Event e = rec.event(base + 1);
+    CHECK(e.kind == Event::Kind::kHms);
+    CHECK(e.hms_level == HmsLevel::kError);
+    CHECK(e.hms[0].raw == kErr);
+    CHECK(e.hms[0].abnormal_id == 1);
+    CHECK(e.hms[1].raw == kWarn);
+    CHECK_FALSE(e.hms[2].active());
+  }
+  CHECK(dev->hms()[1].level == HmsLevel::kWarning);
+
+  // Same set in another slot order: no event.
+  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[131074,65539]})"));
+  const auto pushes_before = dev->stats().pushes;
+  REQUIRE(wait_until([&] { return dev->stats().pushes >= pushes_before + 3; }));
+  CHECK(rec.hms_events == 1);
+  CHECK(dev->hms()[0].raw == kWarn);  // hms() still reflects wire order
+
+  // Error cleared: level drops to warning; then everything cleared: level none.
+  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[131074]})"));
+  REQUIRE(wait_until([&] { return rec.hms_events >= 2; }));
+  CHECK(rec.event(base + 2).hms_level == HmsLevel::kWarning);
+  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[]})"));
+  REQUIRE(wait_until([&] { return rec.hms_events >= 3; }));
+  CHECK(rec.event(base + 3).hms_level == HmsLevel::kNone);
+  for (const HmsCode& c : rec.event(base + 3).hms) CHECK_FALSE(c.active());
+  for (const HmsCode& c : dev->hms()) CHECK_FALSE(c.active());
+
+  // A LiDAR-side transition to ERROR shows up as well.
+  REQUIRE(f.sim->control(R"({"cmd":"set_state","state":4})"));
+  REQUIRE(wait_until([&] { return rec.state_events >= base + 2; }));
+  CHECK(rec.event(base + 4).old_state == WorkState::kSampling);
+  CHECK(rec.event(base + 4).new_state == WorkState::kError);
+  CHECK(dev->work_state() == WorkState::kError);
+  CHECK(rec.ok);
+  CHECK(dev->stats().bad_packets == 0);
+  dev.reset();
 }
 
 TEST_CASE("Device: drop_rate shows up in dropped_packets", "[sim][device]") {
