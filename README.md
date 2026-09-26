@@ -40,8 +40,10 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
   from the 0x0102 push. `BoundedQueue<T>` hands them to another thread. Tested against the
   simulator
 
-Not yet implemented (phase 2+): reconnection (#8),
-C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
+Reconnection after a cable pull or reboot is automatic (`ReconnectOptions`, #8) and several
+LiDARs share one `Context` (`Context::find()` by serial number).
+
+Not yet implemented (phase 3): C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
 upgrade (`0x04xx`) commands are intentionally out of scope.
 
 ## Requirements

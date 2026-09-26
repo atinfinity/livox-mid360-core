@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <string_view>
+#include <vector>
 
 #include "livox/mid360/event.hpp"
 #include "livox/mid360/export.hpp"
@@ -46,6 +48,13 @@ class Context {
   /// Effective options: ports requested as 0 are replaced by the bound ones.
   [[nodiscard]] const ContextOptions& options() const noexcept;
   [[nodiscard]] ContextStats stats() const;
+
+  // --- multi-device (issue #8): the Devices open on this Context, keyed by serial number.
+  // Non-owning: the caller keeps the unique_ptr and destroys it before the Context.
+  /// The open Device with this serial number, or nullptr.
+  [[nodiscard]] Device* find(std::string_view serial_number) const;
+  /// Every open Device, in registration order.
+  [[nodiscard]] std::vector<Device*> devices() const;
 
  private:
   friend class Device;

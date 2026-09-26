@@ -186,7 +186,7 @@ livox-mid360-core/
 │   ├── session.hpp            # discovery、同期コマンド、work-state ポーリング（#4）
 │   ├── export.hpp, version.hpp
 │   ├── config.hpp             # HostSetup / apply_host_setup（#5）
-│   ├── context.hpp, device.hpp, frame.hpp, event.hpp  # デバイス層（#9 設計、#6 受信パス実装、docs/api.md）。push/状態は #7、再接続は #8
+│   ├── context.hpp, device.hpp, frame.hpp, event.hpp  # デバイス層（#9 設計、#6 受信パス実装、docs/api.md）。push/状態は #7、再接続・複数台は #8
 │   └── mid360.hpp             # 公開 API のまとめ
 ├── src/
 ├── tools/                     # Python リファレンス実装、pcap 解析、golden vector 生成、シミュレータ
@@ -230,7 +230,7 @@ livox-mid360-core/
 - [x] 公開 API 設計（Context/Device、スレッド規則、エラー型、docs/api.md、#9）
 - [x] 点群/IMU 受信、ドロップ計数、フレーム分割（`Context` / `Device` / `FrameAssembler`、#6、docs/api.md「Receive pipeline」。シミュレータで検証、実機は #11）
 - [x] push 処理（cur_work_state / hms_code）、`kStateChanged` / `kHms` イベント、`work_state()` / `hms()`（#7、docs/api.md「Push handling」）
-- [ ] 切断・再起動からの自動復帰、複数台
+- [x] 切断・再起動からの自動復帰、複数台（`ReconnectOptions`、`kDisconnected` / `kReconnected`、`Context::find()`、#8、docs/api.md「Reconnection」。シミュレータで検証、実機は #12）
 - [ ] 数時間の長時間受信テスト、Livox Viewer 2 との目視比較
 
 ### フェーズ 3

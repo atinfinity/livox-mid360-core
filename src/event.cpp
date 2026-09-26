@@ -22,6 +22,22 @@ std::string_view to_string(Event::Kind kind) noexcept {
   return "unknown";
 }
 
+std::string_view to_string(DisconnectReason reason) noexcept {
+  switch (reason) {
+    case DisconnectReason::kNone:
+      return "none";
+    case DisconnectReason::kPushTimeout:
+      return "push_timeout";
+    case DisconnectReason::kCommandTimeout:
+      return "command_timeout";
+    case DisconnectReason::kRebootRequested:
+      return "reboot_requested";
+    case DisconnectReason::kUser:
+      return "user";
+  }
+  return "unknown";
+}
+
 std::string to_string(const Event& event) {
   std::string out(to_string(event.kind));
   switch (event.kind) {
@@ -49,7 +65,11 @@ std::string to_string(const Event& event) {
       break;
     }
     case Event::Kind::kDisconnected:
+      out += " reason=";
+      out += to_string(event.reason);
+      break;
     case Event::Kind::kReconnected:
+      out += " attempts=" + std::to_string(event.attempts);
       break;
   }
   return out;
@@ -67,6 +87,8 @@ std::string_view to_string(DeviceError::Kind kind) noexcept {
       return "already_registered";
     case DeviceError::Kind::kNotOpen:
       return "not_open";
+    case DeviceError::Kind::kDisconnected:
+      return "disconnected";
   }
   return "unknown";
 }

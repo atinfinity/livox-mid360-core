@@ -415,7 +415,7 @@ Poller::Poller(Poller&& other) noexcept
 
 Poller& Poller::operator=(Poller&& other) noexcept {
   if (this != &other) {
-    this->~Poller();
+    close_wake_fds();  // not the destructor: that would also destroy the vectors (double free)
     entries_ = std::move(other.entries_);
     ready_ = std::move(other.ready_);
     wake_read_fd_ = std::exchange(other.wake_read_fd_, -1);
@@ -426,6 +426,10 @@ Poller& Poller::operator=(Poller&& other) noexcept {
 }
 
 Poller::~Poller() {
+  close_wake_fds();
+}
+
+void Poller::close_wake_fds() noexcept {
   if (wake_write_fd_ >= 0 && wake_write_fd_ != wake_read_fd_) ::close(wake_write_fd_);
   if (wake_read_fd_ >= 0) ::close(wake_read_fd_);
   wake_read_fd_ = wake_write_fd_ = -1;

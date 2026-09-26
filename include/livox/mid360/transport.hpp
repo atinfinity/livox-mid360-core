@@ -204,6 +204,8 @@ class Poller {
     int fd;
     std::uint64_t tag;
   };
+  void close_wake_fds() noexcept;
+
   std::vector<Entry> entries_;
   std::vector<ReadyEvent> ready_;
   int wake_read_fd_ = -1;
