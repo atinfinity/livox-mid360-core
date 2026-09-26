@@ -87,6 +87,8 @@ using PacketCallback = std::function<void(const DataPacketView &, const ReceiveI
 using FrameCallback = std::function<void(Frame &&)>;
 using ImuCallback = std::function<void(const ImuData &)>;
 using EventCallback = std::function<void(const Event &)>;
+/// Every successfully parsed 0x0102 push, as the snapshot pushed_status() now returns (#56).
+using PushCallback = std::function<void(const LidarStatus &)>;
 
 /// Result of Device::set<K>() / set_many<>(): the LiDAR accepted the values.
 struct SetResult
@@ -119,6 +121,9 @@ public:
   std::expected<void, DeviceError> on_frame(FrameCallback cb);
   std::expected<void, DeviceError> on_imu(ImuCallback cb);
   std::expected<void, DeviceError> on_event(EventCallback cb);
+  /// Receive thread, once per parsed push, after the push's kStateChanged / kHms /
+  /// kDiagChanged events; the argument is the merged snapshot (missing keys carried over).
+  std::expected<void, DeviceError> on_push(PushCallback cb);
 
   // --- commands (caller's thread, serialised, blocking; see Session for the semantics)
   /// work_tgt_mode = SAMPLING, then wait for cur_work_state (host_setup.wait_timeout).
@@ -188,6 +193,10 @@ public:
   std::expected<SetResult, DeviceError> set_detect_mode(
     DetectMode mode, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<DetectMode, DeviceError> detect_mode(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x800E by inquire (#55); the pushed value is pushed_status()->lidar_diag_status
+  /// and changes raise Event::kDiagChanged.
+  std::expected<DiagStatus, DeviceError> diag_status(
     std::optional<RequestOptions> opts = std::nullopt);
   std::expected<SetResult, DeviceError> set_imu_enabled(
     bool on, std::optional<RequestOptions> opts = std::nullopt);
@@ -287,8 +296,9 @@ public:
   // --- observation (thread-safe snapshots)
   /// Discovery record; `ip` / `cmd_port` / `from` follow a reconnect to a new address.
   [[nodiscard]] DiscoveredDevice info() const;
-  /// decode_status() of the last 0x0102 push; nullopt before the first push. Fields the
-  /// push does not carry stay empty.
+  /// The latest value of every status key seen in a 0x0102 push, `time_ns` = receive time
+  /// of the last push; nullopt before the first push. A key a push omits keeps the value an
+  /// earlier push carried, so a field is empty only if no push has carried it yet (#56).
   [[nodiscard]] std::optional<LidarStatus> pushed_status() const;
   /// cur_work_state from pushed_status(); nullopt before the first push.
   [[nodiscard]] std::optional<WorkState> work_state() const;

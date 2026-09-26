@@ -45,9 +45,12 @@ implementation that computes it anyway is compatible.)
 `seq_num` is a free-running 32-bit counter per host; ACKs echo it. Wrap-around is not special.
 The LiDAR-originated `0x0102` push is a REQ with `sender_type = 1` and, per the sequence
 diagram, is not acknowledged by the host. The wiki does not enumerate the keys it carries
-[unverified: the simulator pushes every read-only key `0x8000`–`0x8011`; the SDK reads
-`cur_work_state` / `hms_code` and keeps the rest as `Device::pushed_status()`, tolerating any
-missing key] (#11).
+[unverified: the simulator pushes every read-only key `0x8000`–`0x8011`; the SDK merges every
+status key (0x8006–0x8011) into `Device::pushed_status()`, tolerating any missing key] (#11).
+Key `0x800E` `lidar_diag_status` is read as four 2-bit-wide nibbles (system, scan, ranging,
+communication; 0 normal, 1 warning, 2 error, 3 safety error) [unverified, #11]. Whether
+`0x8007` `core_temp` and the time-sync keys `0x8009`–`0x800C` are refreshed in every push or
+only on change is likewise unverified; the SDK carries the last value over either way.
 
 ## Working state
 

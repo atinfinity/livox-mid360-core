@@ -201,6 +201,9 @@ class DeviceModel:
     time_sync_type: int = 0
     powerup_cnt: int = 1
     diag_status: int = 0
+    core_temp: int = 3500  # 0.01 degC
+    last_sync_time_ns: int = 0
+    push_omit: set[int] = field(default_factory=set)  # keys left out of the push (tests)
     state_deadline: float = 0.0  # monotonic time at which the timed state completes
     on_state: Callable[[int, int], None] | None = None
 
@@ -344,10 +347,10 @@ class DeviceModel:
             KEY_VERSION_HW: bytes(self.version_hardware),
             KEY_MAC: bytes([2, 0, 0, 0, 0, 1]),
             KEY_CUR_WORK_STATE: bytes([self.work_state]),
-            KEY_CORE_TEMP: struct.pack('<i', 3500),
+            KEY_CORE_TEMP: struct.pack('<i', self.core_temp),
             KEY_POWERUP_CNT: struct.pack('<I', self.powerup_cnt),
             KEY_LOCAL_TIME: struct.pack('<Q', now_ns),
-            KEY_LAST_SYNC_TIME: struct.pack('<Q', 0),
+            KEY_LAST_SYNC_TIME: struct.pack('<Q', self.last_sync_time_ns),
             KEY_TIME_OFFSET: struct.pack('<q', self.time_offset_ns),
             KEY_TIME_SYNC_TYPE: bytes([self.time_sync_type]),
             KEY_DIAG_STATUS: struct.pack('<H', self.diag_status),
@@ -376,12 +379,37 @@ class DeviceModel:
             KEY_FW_TYPE,
             KEY_HMS,
         ]
-        kvs = [(k, self.read_key(k, now_ns)) for k in keys]
+        kvs = [(k, self.read_key(k, now_ns)) for k in keys if k not in self.push_omit]
         return struct.pack('<HH', len(kvs), 0) + proto.encode_kv_list(kvs)
 
     def set_gps_time(self, ns: int, now_ns: int) -> None:
         self.time_offset_ns = ns - now_ns
         self.time_sync_type = 2
+        self.last_sync_time_ns = now_ns
+
+    # Control command `set_status`: any subset of the read-only status fields.
+    STATUS_FIELDS = {
+        'diag': 'diag_status',
+        'core_temp': 'core_temp',
+        'time_sync_type': 'time_sync_type',
+        'time_offset_ns': 'time_offset_ns',
+        'last_sync_time': 'last_sync_time_ns',
+        'powerup_cnt': 'powerup_cnt',
+    }
+
+    def set_status(self, fields: dict) -> list[str]:
+        """Apply the known fields and return the names of the unknown ones."""
+        unknown = []
+        for name, value in fields.items():
+            if name == 'omit_keys':
+                self.push_omit = {int(k) for k in value}
+                continue
+            attr = self.STATUS_FIELDS.get(name)
+            if attr is None:
+                unknown.append(name)
+            else:
+                setattr(self, attr, int(value))
+        return unknown
 
     def host(self, key: int) -> tuple[str, int, int] | None:
         return parse_host_ipcfg(self.settings[key])
@@ -646,6 +674,11 @@ class Simulator:
         elif cmd == 'hms':
             codes = [int(c) for c in req.get('codes', [])][:8]
             self.model.hms = (codes + [0] * 8)[:8]
+        elif cmd == 'set_status':
+            unknown = self.model.set_status({k: v for k, v in req.items() if k != 'cmd'})
+            if unknown:
+                self.emit(event='error', error=f'unknown status fields: {unknown}')
+                return
         elif cmd == 'drop_ack':
             self.drop_ack += int(req.get('count', 1))
         elif cmd == 'reboot':

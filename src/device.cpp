@@ -113,6 +113,7 @@ struct Device::Impl : detail::Receiver
   FrameCallback frame_cb;
   ImuCallback imu_cb;
   EventCallback event_cb;
+  PushCallback push_cb;
   std::atomic<std::uint64_t> cb_generation{1};
 
   // --- receive-thread state --------------------------------------------------
@@ -121,6 +122,7 @@ struct Device::Impl : detail::Receiver
   FrameCallback rx_frame_cb;
   ImuCallback rx_imu_cb;
   EventCallback rx_event_cb;
+  PushCallback rx_push_cb;
   detail::FrameAssembler assembler;
   detail::DropCounter imu_drops;
   std::uint64_t imu_dropped = 0;
@@ -148,6 +150,7 @@ struct Device::Impl : detail::Receiver
   mutable std::mutex push_mutex;
   std::optional<LidarStatus> pushed_status;
   std::array<std::uint32_t, 8> hms_sorted{};  ///< raw codes, sorted, for change detection
+  DiagStatus diag_seen;                       ///< last 0x800E value, all normal at first
 
   [[nodiscard]] DeviceStats snapshot() const
   {
@@ -172,6 +175,26 @@ struct Device::Impl : detail::Receiver
     };
   }
 
+  /// Every field `next` lacks takes the value of `prev` (issue #56).
+  static void carry_over(LidarStatus & next, const LidarStatus & prev)
+  {
+    const auto keep = [](auto & dst, const auto & src) {
+      if (!dst) {
+        dst = src;
+      }
+    };
+    keep(next.cur_work_state, prev.cur_work_state);
+    keep(next.core_temp, prev.core_temp);
+    keep(next.powerup_cnt, prev.powerup_cnt);
+    keep(next.local_time_now, prev.local_time_now);
+    keep(next.last_sync_time, prev.last_sync_time);
+    keep(next.time_offset, prev.time_offset);
+    keep(next.time_sync_type, prev.time_sync_type);
+    keep(next.lidar_diag_status, prev.lidar_diag_status);
+    keep(next.fw_type, prev.fw_type);
+    keep(next.hms_code, prev.hms_code);
+  }
+
   void refresh_callbacks()
   {
     const auto gen = cb_generation.load(std::memory_order_acquire);
@@ -183,6 +206,7 @@ struct Device::Impl : detail::Receiver
     rx_frame_cb = frame_cb;
     rx_imu_cb = imu_cb;
     rx_event_cb = event_cb;
+    rx_push_cb = push_cb;
     cb_seen = cb_generation.load(std::memory_order_acquire);
   }
 
@@ -209,10 +233,12 @@ struct Device::Impl : detail::Receiver
     }
   }
 
-  // 0x0102: the payload is kept as a LidarStatus (issue #41); cur_work_state and hms_code
-  // additionally raise events (issue #7). The first push records the state without a
-  // kStateChanged; the HMS baseline is all-zero, so active codes in the first push do raise
-  // kHms. Slot order is ignored for change detection.
+  // 0x0102: the payload is merged into a LidarStatus (issues #41 / #56): a key this push
+  // lacks keeps the value an earlier push carried. cur_work_state, hms_code and
+  // lidar_diag_status additionally raise events (issues #7 / #55). The first push records
+  // the state without a kStateChanged; the HMS and diag baselines are all-zero / all-normal,
+  // so an abnormal first push does raise kHms / kDiagChanged. HMS slot order is ignored for
+  // change detection. Events go out before on_push, which sees the settled snapshot.
   void on_push(const Datagram & d)
   {
     const auto frame = parse_command_frame(d.data);
@@ -231,17 +257,14 @@ struct Device::Impl : detail::Receiver
 
     std::optional<Event> state_event;
     std::optional<Event> hms_event;
+    std::optional<Event> diag_event;
+    LidarStatus delivered;
     {
       const std::lock_guard lock(push_mutex);
       LidarStatus next = decode_status(push->values);
+      next.time_ns = d.recv_time_ns;
       if (pushed_status) {
-        // Keep what an earlier push carried when this one lacks the key.
-        if (!next.cur_work_state) {
-          next.cur_work_state = pushed_status->cur_work_state;
-        }
-        if (!next.hms_code) {
-          next.hms_code = pushed_status->hms_code;
-        }
+        carry_over(next, *pushed_status);
       }
       if (next.cur_work_state) {
         const auto old = pushed_status ? pushed_status->cur_work_state : std::nullopt;
@@ -277,7 +300,19 @@ struct Device::Impl : detail::Receiver
           hms_event = ev;
         }
       }
+      if (next.lidar_diag_status && *next.lidar_diag_status != diag_seen) {
+        Event ev;
+        ev.kind = Event::Kind::kDiagChanged;
+        ev.time_ns = d.recv_time_ns;
+        ev.diag_old = diag_seen;
+        ev.diag_new = *next.lidar_diag_status;
+        diag_event = ev;
+        diag_seen = *next.lidar_diag_status;
+        LIVOX_LOG(
+          LogLevel::kInfo, serial, "diag {} -> {}", to_string(ev.diag_old), to_string(ev.diag_new));
+      }
       pushed_status = next;
+      delivered = next;
     }
     if (rx_event_cb) {
       if (state_event) {
@@ -286,6 +321,12 @@ struct Device::Impl : detail::Receiver
       if (hms_event) {
         rx_event_cb(*hms_event);
       }
+      if (diag_event) {
+        rx_event_cb(*diag_event);
+      }
+    }
+    if (rx_push_cb) {
+      rx_push_cb(delivered);
     }
     // Counted last, with release: a reader that sees the new count (acquire, snapshot())
     // also sees the state this push established and the effects of its callbacks.
@@ -789,6 +830,10 @@ std::expected<void, DeviceError> Device::on_event(EventCallback cb)
 {
   return impl_->set_callback(impl_->event_cb, std::move(cb));
 }
+std::expected<void, DeviceError> Device::on_push(PushCallback cb)
+{
+  return impl_->set_callback(impl_->push_cb, std::move(cb));
+}
 
 std::expected<void, DeviceError> Device::start_sampling(std::optional<RequestOptions> opts)
 {
@@ -891,7 +936,9 @@ std::expected<LidarStatus, DeviceError> Device::status(std::optional<RequestOpti
   if (!r) {
     return std::unexpected(r.error());
   }
-  return decode_status(r->values);
+  LidarStatus s = decode_status(r->values);
+  s.time_ns = realtime_now_ns();
+  return s;
 }
 
 std::expected<SetResult, DeviceError> Device::set_point_format(
@@ -955,6 +1002,11 @@ std::expected<SetResult, DeviceError> Device::set_detect_mode(
 std::expected<DetectMode, DeviceError> Device::detect_mode(std::optional<RequestOptions> opts)
 {
   return get<Key::kDetectMode>(opts);
+}
+
+std::expected<DiagStatus, DeviceError> Device::diag_status(std::optional<RequestOptions> opts)
+{
+  return get<Key::kLidarDiagStatus>(opts);
 }
 
 std::expected<SetResult, DeviceError> Device::set_imu_enabled(

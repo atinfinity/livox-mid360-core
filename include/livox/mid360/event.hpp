@@ -68,6 +68,7 @@ struct Event
   {
     kStateChanged,  ///< `old_state` -> `new_state` seen in a 0x0102 push
     kHms,           ///< the set of active `hms` codes changed; see `hms_level`
+    kDiagChanged,   ///< key 0x800E changed: `diag_old` -> `diag_new` (#55)
     kDisconnected,  ///< see `reason` (#8); commands fail with kDisconnected until kReconnected
     kReconnected,   ///< session, host setup and sampling re-established after `attempts`
     kStats,         ///< periodic `stats` snapshot (#6)
@@ -80,6 +81,8 @@ struct Event
   WorkState new_state = WorkState::kIdle;  ///< kStateChanged
   std::array<HmsCode, 8> hms{};            ///< kHms: key 0x8011 slots, inactive ones raw == 0
   HmsLevel hms_level = HmsLevel::kNone;    ///< kHms: highest level among the active slots
+  DiagStatus diag_old;                     ///< kDiagChanged (all normal before the first push)
+  DiagStatus diag_new;                     ///< kDiagChanged
   DeviceStats stats;                       ///< kStats
 };
 
