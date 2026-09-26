@@ -29,8 +29,8 @@ AMENT_CPPCHECK=${AMENT_CPPCHECK:-ament_cppcheck}
 AMENT_LINT_CMAKE=${AMENT_LINT_CMAKE:-ament_lint_cmake}
 TIDY_BUILD_DIR=${TIDY_BUILD_DIR:-build-tidy}
 
-cxx_files=$(git ls-files 'include/*.hpp' 'src/*.cpp' 'src/*.hpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/')
-tidy_files=$(git ls-files 'src/*.cpp' 'tests/test_*.cpp')
+cxx_files=$(git ls-files 'include/*.hpp' 'src/*.cpp' 'src/*.hpp' 'tests/*.cpp' 'tests/*.hpp' 'examples/*.cpp' | grep -v '^tests/generated/')
+tidy_files=$(git ls-files 'src/*.cpp' 'tests/test_*.cpp' 'examples/*.cpp')
 cmake_files=$(git ls-files 'CMakeLists.txt' '*/CMakeLists.txt' 'cmake/*.cmake' 'cmake/*.cmake.in')
 
 run_ament() {
@@ -38,7 +38,7 @@ run_ament() {
   echo "== ament_cppcheck ($(cppcheck --version))"
   # shellcheck disable=SC2086
   AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1 "$AMENT_CPPCHECK" --language c++ --include_dirs include -- \
-    include src $(git ls-files 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/')
+    include src examples $(git ls-files 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/')
   echo "== ament_lint_cmake"
   # shellcheck disable=SC2086
   "$AMENT_LINT_CMAKE" $cmake_files
