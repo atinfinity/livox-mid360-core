@@ -263,7 +263,10 @@ std::expected<UdpSocket, TransportError> UdpSocket::open(
   if (!set_nonblocking(fd)) {
     return std::unexpected(from_errno(TransportErrorCode::kSetOption, errno));
   }
-  if (options.reuse_address && !set_option(fd, SOL_SOCKET, SO_REUSEADDR, 1)) {
+  // Only for an explicit port. Linux's ephemeral-port search treats a port held by another
+  // SO_REUSEADDR socket of the same user as free, so a bind to port 0 with the option set can
+  // land on a port that is already in use and silently take over its unicast traffic.
+  if (options.reuse_address && bind_to.port != 0 && !set_option(fd, SOL_SOCKET, SO_REUSEADDR, 1)) {
     return std::unexpected(from_errno(TransportErrorCode::kSetOption, errno));
   }
   if (options.broadcast && !set_option(fd, SOL_SOCKET, SO_BROADCAST, 1)) {

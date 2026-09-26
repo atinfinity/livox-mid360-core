@@ -89,7 +89,7 @@ subtracted directly. On Linux it is the kernel timestamp taken at packet arrival
 
 | Field | Default | Effect |
 |---|---|---|
-| `reuse_address` | `true` | `SO_REUSEADDR` |
+| `reuse_address` | `true` | `SO_REUSEADDR`, only when binding to an explicit port. A bind to port 0 never sets it: on Linux the ephemeral-port search would otherwise treat a port held by another `SO_REUSEADDR` socket of the same user as free, and the newer socket would silently take over its unicast traffic |
 | `broadcast` | `false` | `SO_BROADCAST`; required to send to 255.255.255.255 (discovery) |
 | `recv_buffer_bytes` | `0` | `SO_RCVBUF` request; `0` leaves the OS default. The kernel may clamp the value (and Linux doubles it); read back with `recv_buffer_bytes()` |
 | `multicast_group` | empty | **reserved**, rejected with `kInvalidArgument` |

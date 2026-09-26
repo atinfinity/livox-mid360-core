@@ -33,11 +33,14 @@ struct DeviceStats
   std::uint64_t queue_drops = 0;          ///< reserved for internal queues
   std::uint64_t frame_cnt_fallback = 0;   ///< times frame_cnt mode fell back to the time window
   std::uint64_t last_packet_time_ns = 0;  ///< host receive time of the last packet, 0 = none
-  std::uint64_t pushes = 0;               ///< 0x0102 pushes accepted
-  std::uint64_t last_push_time_ns = 0;    ///< host receive time of the last push, 0 = none
-  std::uint64_t disconnects = 0;          ///< kDisconnected events raised
-  std::uint64_t reconnects = 0;           ///< kReconnected events raised
-  std::int64_t time_offset_ns = 0;        ///< kHostOffsetOnce: host - LiDAR, once measured
+  /// 0x0102 pushes accepted. A push is counted once it has been applied: whoever reads
+  /// the new count also sees the work_state() / pushed_status() it established and the
+  /// effects of the callbacks it ran.
+  std::uint64_t pushes = 0;
+  std::uint64_t last_push_time_ns = 0;  ///< host receive time of the last push, 0 = none
+  std::uint64_t disconnects = 0;        ///< kDisconnected events raised
+  std::uint64_t reconnects = 0;         ///< kReconnected events raised
+  std::int64_t time_offset_ns = 0;      ///< kHostOffsetOnce: host - LiDAR, once measured
   bool time_offset_valid = false;
 };
 
