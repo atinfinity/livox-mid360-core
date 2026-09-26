@@ -5,7 +5,8 @@
 
 using namespace livox::mid360;
 
-TEST_CASE("hms decode example from the wiki", "[hms]") {
+TEST_CASE("hms decode example from the wiki", "[hms]")
+{
   constexpr auto c = decode_hms(0x01020002);
   STATIC_CHECK(c.abnormal_id == 0x0102);
   STATIC_CHECK(c.level == HmsLevel::kWarning);
@@ -15,7 +16,8 @@ TEST_CASE("hms decode example from the wiki", "[hms]") {
   CHECK(to_string(c.level) == "warning");
 }
 
-TEST_CASE("hms table ranges and unknowns", "[hms]") {
+TEST_CASE("hms table ranges and unknowns", "[hms]")
+{
   CHECK_FALSE(decode_hms(0).active());
   CHECK(hms_description(0x0215).starts_with("Scan module is abnormal"));
   CHECK(hms_description(0x0219).starts_with("Scan module is abnormal"));

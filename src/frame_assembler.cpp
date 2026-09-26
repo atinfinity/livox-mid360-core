@@ -7,12 +7,14 @@
 #include <numbers>
 #include <utility>
 
-namespace livox::mid360::detail {
+namespace livox::mid360::detail
+{
 
 // ---------------------------------------------------------------------------
 // DropCounter
 // ---------------------------------------------------------------------------
-DropCounter::Result DropCounter::observe(std::uint16_t udp_cnt, bool frame_changed) noexcept {
+DropCounter::Result DropCounter::observe(std::uint16_t udp_cnt, bool frame_changed) noexcept
+{
   Result r;
   if (!have_) {
     have_ = true;
@@ -36,7 +38,8 @@ DropCounter::Result DropCounter::observe(std::uint16_t udp_cnt, bool frame_chang
 // ---------------------------------------------------------------------------
 // TimeMapper
 // ---------------------------------------------------------------------------
-std::uint64_t TimeMapper::map(const DataPacketHeader& h, std::uint64_t recv_time_ns) noexcept {
+std::uint64_t TimeMapper::map(const DataPacketHeader & h, std::uint64_t recv_time_ns) noexcept
+{
   switch (policy_) {
     case TimestampPolicy::kLidar:
       return h.timestamp_ns;
@@ -45,7 +48,9 @@ std::uint64_t TimeMapper::map(const DataPacketHeader& h, std::uint64_t recv_time
     case TimestampPolicy::kHostOffsetOnce:
       break;
   }
-  if (h.time_type != TimeType::kNoSync) return h.timestamp_ns;  // synchronised: trust it
+  if (h.time_type != TimeType::kNoSync) {
+    return h.timestamp_ns;  // synchronised: trust it
+  }
   if (!offset_) {
     offset_ = static_cast<std::int64_t>(recv_time_ns) - static_cast<std::int64_t>(h.timestamp_ns);
   }
@@ -55,7 +60,8 @@ std::uint64_t TimeMapper::map(const DataPacketHeader& h, std::uint64_t recv_time
 // ---------------------------------------------------------------------------
 // Point conversion
 // ---------------------------------------------------------------------------
-void convert_point(const DataPacketView& pkt, std::size_t i, Point& out) noexcept {
+void convert_point(const DataPacketView & pkt, std::size_t i, Point & out) noexcept
+{
   switch (pkt.header.data_type) {
     case DataType::kCartesian32: {
       const auto p = decode_cartesian32(pkt, i);
@@ -100,13 +106,17 @@ void convert_point(const DataPacketView& pkt, std::size_t i, Point& out) noexcep
 // FrameAssembler
 // ---------------------------------------------------------------------------
 FrameAssembler::FrameAssembler(FramePolicy policy, TimestampPolicy timestamps)
-    : policy_(policy), time_(timestamps) {}
+: policy_(policy), time_(timestamps)
+{
+}
 
-bool FrameAssembler::time_window_active() const noexcept {
+bool FrameAssembler::time_window_active() const noexcept
+{
   return policy_.mode == FramePolicy::Mode::kTimeWindow || fallback_;
 }
 
-Frame FrameAssembler::take_frame() {
+Frame FrameAssembler::take_frame()
+{
   Frame out = std::move(cur_);
   out.index = next_index_++;
   ++counters_.frames;
@@ -115,21 +125,28 @@ Frame FrameAssembler::take_frame() {
   return out;
 }
 
-void FrameAssembler::discard() noexcept {
+void FrameAssembler::discard() noexcept
+{
   counters_.points -= cur_.points.size();
   cur_.points.clear();
   cur_.packets = 0;
   cur_.dropped_packets = 0;
 }
 
-std::optional<Frame> FrameAssembler::flush() {
-  if (cur_.points.empty()) return std::nullopt;
+std::optional<Frame> FrameAssembler::flush()
+{
+  if (cur_.points.empty()) {
+    return std::nullopt;
+  }
   return take_frame();
 }
 
-std::optional<Frame> FrameAssembler::push(const DataPacketView& pkt, std::uint64_t recv_time_ns) {
-  const DataPacketHeader& h = pkt.header;
-  if (h.data_type == DataType::kImu || h.dot_num == 0) return std::nullopt;
+std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint64_t recv_time_ns)
+{
+  const DataPacketHeader & h = pkt.header;
+  if (h.data_type == DataType::kImu || h.dot_num == 0) {
+    return std::nullopt;
+  }
 
   const std::uint64_t t0 = time_.map(h, recv_time_ns);
   const bool frame_changed = have_prev_ && h.frame_cnt != prev_frame_cnt_;
@@ -138,7 +155,9 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView& pkt, std::uint64
   counters_.reordered += drop.reordered ? 1u : 0u;
 
   const auto window = static_cast<std::uint64_t>(std::max<std::int64_t>(policy_.window.count(), 1));
-  if (!first_time_) first_time_ = t0;
+  if (!first_time_) {
+    first_time_ = t0;
+  }
   if (policy_.mode == FramePolicy::Mode::kFrameCounter && !fallback_) {
     if (frame_changed) {
       frame_cnt_changed_ever_ = true;
@@ -152,11 +171,14 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView& pkt, std::uint64
   if (!cur_.points.empty()) {
     bool close = time_window_active() ? t0 >= cur_.base_time_ns + window : frame_changed;
     const std::uint64_t span_ns = static_cast<std::uint64_t>(h.time_interval) * 100u;
-    if (t0 >= cur_.base_time_ns &&
-        t0 - cur_.base_time_ns + span_ns > std::numeric_limits<std::uint32_t>::max()) {
+    if (
+      t0 >= cur_.base_time_ns &&
+      t0 - cur_.base_time_ns + span_ns > std::numeric_limits<std::uint32_t>::max()) {
       close = true;  // Point::offset_ns would overflow
     }
-    if (close) out = take_frame();
+    if (close) {
+      out = take_frame();
+    }
   }
   if (cur_.points.empty()) {
     cur_.base_time_ns = t0;
@@ -175,13 +197,14 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView& pkt, std::uint64
   return out;
 }
 
-void FrameAssembler::append(const DataPacketView& pkt, std::uint64_t t0) {
-  const DataPacketHeader& h = pkt.header;
+void FrameAssembler::append(const DataPacketView & pkt, std::uint64_t t0)
+{
+  const DataPacketHeader & h = pkt.header;
   const std::size_t n = h.dot_num;
   const std::size_t first = cur_.points.size();
   cur_.points.resize(first + n);
   for (std::size_t i = 0; i < n; ++i) {
-    Point& p = cur_.points[first + i];
+    Point & p = cur_.points[first + i];
     convert_point(pkt, i, p);
     const std::uint64_t ts = t0 + (sample_timestamp_ns(h, i) - h.timestamp_ns);
     // A reordered packet may precede the frame base; clamp rather than wrap.

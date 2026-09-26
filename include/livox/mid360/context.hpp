@@ -18,9 +18,11 @@
 #include "livox/mid360/transport.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-struct ContextOptions {
+struct ContextOptions
+{
   Ipv4 bind_address{0, 0, 0, 0};                   ///< interface for the three receive sockets
   std::uint16_t push_port = kDefaultHostPushPort;  ///< 0 = ephemeral (tests)
   std::uint16_t point_port = kDefaultHostPointCloudPort;  ///< 0 = ephemeral
@@ -34,29 +36,30 @@ class Device;
 /// Owns the receive sockets and the receive thread. The thread starts in create() and is
 /// joined by the destructor. Every Device opened on a Context must be destroyed before it
 /// (asserted in debug builds). Non-copyable, non-movable: Devices hold a reference.
-class Context {
- public:
+class Context
+{
+public:
   [[nodiscard]] static std::expected<std::unique_ptr<Context>, DeviceError> create(
-      const ContextOptions& opts = {});
+    const ContextOptions & opts = {});
 
   ~Context();
-  Context(const Context&) = delete;
-  Context& operator=(const Context&) = delete;
-  Context(Context&&) = delete;
-  Context& operator=(Context&&) = delete;
+  Context(const Context &) = delete;
+  Context & operator=(const Context &) = delete;
+  Context(Context &&) = delete;
+  Context & operator=(Context &&) = delete;
 
   /// Effective options: ports requested as 0 are replaced by the bound ones.
-  [[nodiscard]] const ContextOptions& options() const noexcept;
+  [[nodiscard]] const ContextOptions & options() const noexcept;
   [[nodiscard]] ContextStats stats() const;
 
   // --- multi-device (issue #8): the Devices open on this Context, keyed by serial number.
   // Non-owning: the caller keeps the unique_ptr and destroys it before the Context.
   /// The open Device with this serial number, or nullptr.
-  [[nodiscard]] Device* find(std::string_view serial_number) const;
+  [[nodiscard]] Device * find(std::string_view serial_number) const;
   /// Every open Device, in registration order.
-  [[nodiscard]] std::vector<Device*> devices() const;
+  [[nodiscard]] std::vector<Device *> devices() const;
 
- private:
+private:
   friend class Device;
   struct Impl;
   explicit Context(std::unique_ptr<Impl> impl);

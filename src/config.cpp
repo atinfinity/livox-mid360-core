@@ -4,10 +4,13 @@
 #include <array>
 #include <cstring>
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-namespace {
-SessionError invalid_argument(std::uint16_t error_key) {
+namespace
+{
+SessionError invalid_argument(std::uint16_t error_key)
+{
   SessionError err;
   err.kind = SessionErrorKind::kInvalidArgument;
   err.cmd_id = static_cast<std::uint16_t>(CmdId::kParamConfig);
@@ -15,12 +18,14 @@ SessionError invalid_argument(std::uint16_t error_key) {
   return err;
 }
 
-bool is_requestable(WorkState s) {
+bool is_requestable(WorkState s)
+{
   return s == WorkState::kSampling || s == WorkState::kIdle || s == WorkState::kReady;
 }
 }  // namespace
 
-HostSetupKeyValues host_setup_key_values(const HostSetup& setup, const Ipv4& host_ip) {
+HostSetupKeyValues host_setup_key_values(const HostSetup & setup, const Ipv4 & host_ip)
+{
   HostSetupKeyValues out;
   out.storage.reserve(8 * 3 + 2);
   const auto put = [&out](Key key, std::span<const std::byte> bytes) {
@@ -28,8 +33,8 @@ HostSetupKeyValues host_setup_key_values(const HostSetup& setup, const Ipv4& hos
     out.values.push_back({static_cast<std::uint16_t>(key), {}});
   };
   put(Key::kStateInfoHostIpCfg, encode_host_ip_config({host_ip, setup.push_port, kPushPort}));
-  put(Key::kPointCloudHostIpCfg,
-      encode_host_ip_config({host_ip, setup.point_port, kPointCloudPort}));
+  put(
+    Key::kPointCloudHostIpCfg, encode_host_ip_config({host_ip, setup.point_port, kPointCloudPort}));
   put(Key::kImuHostIpCfg, encode_host_ip_config({host_ip, setup.imu_port, kImuPort}));
   put(Key::kPclDataType, encode_u8(static_cast<std::uint8_t>(setup.pcl_data_type)));
   put(Key::kImuDataEn, encode_u8(setup.imu_enable ? 1 : 0));
@@ -43,9 +48,9 @@ HostSetupKeyValues host_setup_key_values(const HostSetup& setup, const Ipv4& hos
   return out;
 }
 
-std::expected<HostSetupResult, SessionError> apply_host_setup(Session& session,
-                                                              const HostSetup& setup,
-                                                              std::optional<RequestOptions> opts) {
+std::expected<HostSetupResult, SessionError> apply_host_setup(
+  Session & session, const HostSetup & setup, std::optional<RequestOptions> opts)
+{
   Ipv4 ip = setup.ip.value_or(session.local_endpoint().ip);
   if (ip == Ipv4{0, 0, 0, 0}) {
     return std::unexpected(invalid_argument(static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg)));
@@ -57,19 +62,25 @@ std::expected<HostSetupResult, SessionError> apply_host_setup(Session& session,
   HostSetupResult result;
   const auto kvs = host_setup_key_values(setup, ip);
   const auto ack = session.configure(kvs.values, opts);
-  if (!ack) return std::unexpected(ack.error());
+  if (!ack) {
+    return std::unexpected(ack.error());
+  }
   result.reboot_required = ack->ret_code == RetCode::kParamRebootEffect;
 
   if (setup.work_tgt_mode) {
     const auto mode = encode_u8(static_cast<std::uint8_t>(*setup.work_tgt_mode));
     const KeyValue kv{static_cast<std::uint16_t>(Key::kWorkTgtMode), mode};
     const auto ack2 = session.configure(std::span<const KeyValue>(&kv, 1), opts);
-    if (!ack2) return std::unexpected(ack2.error());
+    if (!ack2) {
+      return std::unexpected(ack2.error());
+    }
     result.reboot_required =
-        result.reboot_required || ack2->ret_code == RetCode::kParamRebootEffect;
+      result.reboot_required || ack2->ret_code == RetCode::kParamRebootEffect;
     if (setup.wait_timeout.count() > 0) {
       const auto w = session.wait_for_state(*setup.work_tgt_mode, setup.wait_timeout);
-      if (!w) return std::unexpected(w.error());
+      if (!w) {
+        return std::unexpected(w.error());
+      }
       result.final_state = setup.work_tgt_mode;
     }
   }

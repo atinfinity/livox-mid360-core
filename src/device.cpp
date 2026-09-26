@@ -20,47 +20,55 @@
 #include "context_impl.hpp"
 #include "frame_assembler.hpp"
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-namespace {
+namespace
+{
 
 using Clock = std::chrono::steady_clock;
 
-std::uint64_t realtime_now_ns() noexcept {
+std::uint64_t realtime_now_ns() noexcept
+{
   timespec ts{};
   ::clock_gettime(CLOCK_REALTIME, &ts);
   return static_cast<std::uint64_t>(ts.tv_sec) * 1'000'000'000ull +
          static_cast<std::uint64_t>(ts.tv_nsec);
 }
 
-DeviceError wrap(const SessionError& err) {
+DeviceError wrap(const SessionError & err)
+{
   return DeviceError{.kind = DeviceError::Kind::kSession, .session = err};
 }
 
-DeviceError error(DeviceError::Kind kind) {
+DeviceError error(DeviceError::Kind kind)
+{
   return DeviceError{.kind = kind, .session = std::nullopt};
 }
 
 }  // namespace
 
-struct Device::Impl : detail::Receiver {
-  Impl(Context::Impl& ctx, DiscoveredDevice dev, const DeviceOptions& o, HostSetup setup,
-       SessionOptions sopts, std::stop_source stop_source, Session s)
-      : context(ctx),
-        options(o),
-        host_setup(setup),
-        session_options(std::move(sopts)),
-        stop(std::move(stop_source)),
-        session(std::move(s)),
-        info_(std::move(dev)),
-        assembler(o.frame_policy, o.timestamp_policy),
-        idle_window(std::chrono::duration_cast<Clock::duration>(o.frame_policy.window)),
-        next_stats(Clock::now() + o.stats_interval) {
+struct Device::Impl : detail::Receiver
+{
+  Impl(
+    Context::Impl & ctx, DiscoveredDevice dev, const DeviceOptions & o, HostSetup setup,
+    SessionOptions sopts, std::stop_source stop_source, Session s)
+  : context(ctx),
+    options(o),
+    host_setup(setup),
+    session_options(std::move(sopts)),
+    stop(std::move(stop_source)),
+    session(std::move(s)),
+    info_(std::move(dev)),
+    assembler(o.frame_policy, o.timestamp_policy),
+    idle_window(std::chrono::duration_cast<Clock::duration>(o.frame_policy.window)),
+    next_stats(Clock::now() + o.stats_interval)
+  {
     last_push_steady_ns.store(Clock::now().time_since_epoch().count());
   }
 
   // --- fixed after open ---------------------------------------------------
-  Context::Impl& context;
+  Context::Impl & context;
   const DeviceOptions options;
   const HostSetup host_setup;            ///< as applied at open(); replayed on reconnect
   const SessionOptions session_options;  ///< with `stop` and verify_serial for reconnects
@@ -130,31 +138,35 @@ struct Device::Impl : detail::Receiver {
   std::array<HmsCode, 8> pushed_hms{};
   std::array<std::uint32_t, 8> hms_sorted{};  ///< raw codes, sorted, for change detection
 
-  [[nodiscard]] DeviceStats snapshot() const {
+  [[nodiscard]] DeviceStats snapshot() const
+  {
     constexpr auto kRelaxed = std::memory_order_relaxed;
     return DeviceStats{
-        .packets = packets.load(kRelaxed),
-        .points = points.load(kRelaxed),
-        .frames = frames.load(kRelaxed),
-        .imu_samples = imu_samples.load(kRelaxed),
-        .bad_packets = bad_packets.load(kRelaxed),
-        .dropped_packets = dropped_packets.load(kRelaxed),
-        .reordered = reordered.load(kRelaxed),
-        .queue_drops = 0,
-        .frame_cnt_fallback = frame_cnt_fallback.load(kRelaxed),
-        .last_packet_time_ns = last_packet_time_ns.load(kRelaxed),
-        .pushes = pushes.load(kRelaxed),
-        .last_push_time_ns = last_push_time_ns.load(kRelaxed),
-        .disconnects = disconnects.load(kRelaxed),
-        .reconnects = reconnects.load(kRelaxed),
-        .time_offset_ns = time_offset_ns.load(kRelaxed),
-        .time_offset_valid = time_offset_valid.load(kRelaxed),
+      .packets = packets.load(kRelaxed),
+      .points = points.load(kRelaxed),
+      .frames = frames.load(kRelaxed),
+      .imu_samples = imu_samples.load(kRelaxed),
+      .bad_packets = bad_packets.load(kRelaxed),
+      .dropped_packets = dropped_packets.load(kRelaxed),
+      .reordered = reordered.load(kRelaxed),
+      .queue_drops = 0,
+      .frame_cnt_fallback = frame_cnt_fallback.load(kRelaxed),
+      .last_packet_time_ns = last_packet_time_ns.load(kRelaxed),
+      .pushes = pushes.load(kRelaxed),
+      .last_push_time_ns = last_push_time_ns.load(kRelaxed),
+      .disconnects = disconnects.load(kRelaxed),
+      .reconnects = reconnects.load(kRelaxed),
+      .time_offset_ns = time_offset_ns.load(kRelaxed),
+      .time_offset_valid = time_offset_valid.load(kRelaxed),
     };
   }
 
-  void refresh_callbacks() {
+  void refresh_callbacks()
+  {
     const auto gen = cb_generation.load(std::memory_order_acquire);
-    if (gen == cb_seen) return;
+    if (gen == cb_seen) {
+      return;
+    }
     const std::lock_guard lock(cb_mutex);
     rx_packet_cb = packet_cb;
     rx_frame_cb = frame_cb;
@@ -163,9 +175,10 @@ struct Device::Impl : detail::Receiver {
     cb_seen = cb_generation.load(std::memory_order_acquire);
   }
 
-  void publish_assembler_counters() {
+  void publish_assembler_counters()
+  {
     constexpr auto kRelaxed = std::memory_order_relaxed;
-    const auto& c = assembler.counters();
+    const auto & c = assembler.counters();
     points.store(c.points, kRelaxed);
     frames.store(c.frames, kRelaxed);
     dropped_packets.store(c.dropped_packets + imu_dropped, kRelaxed);
@@ -177,15 +190,19 @@ struct Device::Impl : detail::Receiver {
     }
   }
 
-  void deliver(std::optional<Frame> frame) {
+  void deliver(std::optional<Frame> frame)
+  {
     publish_assembler_counters();
-    if (frame && rx_frame_cb) rx_frame_cb(std::move(*frame));
+    if (frame && rx_frame_cb) {
+      rx_frame_cb(std::move(*frame));
+    }
   }
 
   // 0x0102: only cur_work_state and hms_code are consumed (issue #7). The first push
   // records the state without a kStateChanged; the HMS baseline is all-zero, so active
   // codes in the first push do raise kHms. Slot order is ignored for change detection.
-  void on_push(const Datagram& d) {
+  void on_push(const Datagram & d)
+  {
     const auto frame = parse_command_frame(d.data);
     if (!frame || frame->header.cmd_id != static_cast<std::uint16_t>(CmdId::kInfoPush)) {
       bad_packets.fetch_add(1, std::memory_order_relaxed);
@@ -220,7 +237,9 @@ struct Device::Impl : detail::Receiver {
       }
       if (const auto v = find_key(push->values, Key::kHmsCode)) {
         if (const auto raw = decode_hms_codes(*v)) {
-          for (std::size_t i = 0; i < raw->size(); ++i) pushed_hms[i] = decode_hms((*raw)[i]);
+          for (std::size_t i = 0; i < raw->size(); ++i) {
+            pushed_hms[i] = decode_hms((*raw)[i]);
+          }
           std::array<std::uint32_t, 8> sorted = *raw;
           std::ranges::sort(sorted);
           if (sorted != hms_sorted) {
@@ -229,8 +248,10 @@ struct Device::Impl : detail::Receiver {
             ev.kind = Event::Kind::kHms;
             ev.time_ns = d.recv_time_ns;
             ev.hms = pushed_hms;
-            for (const HmsCode& c : pushed_hms) {
-              if (c.active() && c.level > ev.hms_level) ev.hms_level = c.level;
+            for (const HmsCode & c : pushed_hms) {
+              if (c.active() && c.level > ev.hms_level) {
+                ev.hms_level = c.level;
+              }
             }
             hms_event = ev;
           }
@@ -238,12 +259,17 @@ struct Device::Impl : detail::Receiver {
       }
     }
     if (rx_event_cb) {
-      if (state_event) rx_event_cb(*state_event);
-      if (hms_event) rx_event_cb(*hms_event);
+      if (state_event) {
+        rx_event_cb(*state_event);
+      }
+      if (hms_event) {
+        rx_event_cb(*hms_event);
+      }
     }
   }
 
-  void on_datagram(detail::DataPort port, const Datagram& d) override {
+  void on_datagram(detail::DataPort port, const Datagram & d) override
+  {
     if (port == detail::DataPort::kPush) {
       on_push(d);
       return;
@@ -260,20 +286,22 @@ struct Device::Impl : detail::Receiver {
     if (rx_packet_cb) {
       rx_packet_cb(*pkt, ReceiveInfo{.host_time_ns = d.recv_time_ns, .source = d.from});
     }
-    const DataPacketHeader& h = pkt->header;
+    const DataPacketHeader & h = pkt->header;
     if (h.data_type == DataType::kImu) {
       const auto drop = imu_drops.observe(h.udp_cnt, false);
       imu_dropped += drop.dropped;
       imu_reordered += drop.reordered ? 1u : 0u;
       // kHostOffsetOnce measures its offset at the first point-cloud packet; an IMU packet
       // that arrives before it is stamped with the receive time instead.
-      detail::TimeMapper& tm = assembler.time_mapper();
+      detail::TimeMapper & tm = assembler.time_mapper();
       const bool pending_offset = options.timestamp_policy == TimestampPolicy::kHostOffsetOnce &&
                                   !tm.offset_ns() && h.time_type == TimeType::kNoSync;
       const std::uint64_t t0 = pending_offset ? d.recv_time_ns : tm.map(h, d.recv_time_ns);
       for (std::size_t i = 0; i < h.dot_num; ++i) {
         const std::uint64_t t = t0 + (sample_timestamp_ns(h, i) - h.timestamp_ns);
-        if (rx_imu_cb) rx_imu_cb(ImuData{.time_ns = t, .sample = decode_imu(*pkt, i)});
+        if (rx_imu_cb) {
+          rx_imu_cb(ImuData{.time_ns = t, .sample = decode_imu(*pkt, i)});
+        }
       }
       imu_samples.fetch_add(h.dot_num, std::memory_order_relaxed);
       publish_assembler_counters();
@@ -283,8 +311,11 @@ struct Device::Impl : detail::Receiver {
     deliver(assembler.push(*pkt, d.recv_time_ns));
   }
 
-  void consume_requests() {
-    if (discard_requested.exchange(false, std::memory_order_acq_rel)) assembler.discard();
+  void consume_requests()
+  {
+    if (discard_requested.exchange(false, std::memory_order_acq_rel)) {
+      assembler.discard();
+    }
     if (rebase_requested.exchange(false, std::memory_order_acq_rel)) {
       assembler.time_mapper().reset();
       imu_drops.reset();
@@ -293,15 +324,19 @@ struct Device::Impl : detail::Receiver {
 
   // --- connection state machine (issue #8) ------------------------------------
 
-  [[nodiscard]] Clock::time_point last_push_steady() const noexcept {
+  [[nodiscard]] Clock::time_point last_push_steady() const noexcept
+  {
     return Clock::time_point(Clock::duration(last_push_steady_ns.load(std::memory_order_relaxed)));
   }
 
   /// connected → disconnected. Any thread. Queues kDisconnected for the receive thread and
   /// wakes the worker. Returns false when already disconnected.
-  bool declare_disconnected(DisconnectReason reason) {
+  bool declare_disconnected(DisconnectReason reason)
+  {
     bool was = true;
-    if (!connected.compare_exchange_strong(was, false, std::memory_order_acq_rel)) return false;
+    if (!connected.compare_exchange_strong(was, false, std::memory_order_acq_rel)) {
+      return false;
+    }
     disconnects.fetch_add(1, std::memory_order_relaxed);
     attempts.store(0, std::memory_order_relaxed);
     discard_requested.store(true, std::memory_order_release);
@@ -323,25 +358,33 @@ struct Device::Impl : detail::Receiver {
   }
 
   /// A command timed out: a disconnect only when the push is stale too (one nominal period).
-  void note_command_error(const SessionError& err) {
-    if (err.kind != SessionErrorKind::kTimeout) return;
+  void note_command_error(const SessionError & err)
+  {
+    if (err.kind != SessionErrorKind::kTimeout) {
+      return;
+    }
     if (Clock::now() - last_push_steady() > options.reconnect.push_timeout / 3) {
       declare_disconnected(DisconnectReason::kCommandTimeout);
     }
   }
 
   /// One recovery attempt; shared by the worker and Device::reconnect(). Holds cmd_mutex.
-  std::expected<void, DeviceError> attempt() {
+  std::expected<void, DeviceError> attempt()
+  {
     assert(!context.on_receive_thread() && "Device::reconnect() called from a callback");
     const std::lock_guard lock(cmd_mutex);
-    if (connected.load(std::memory_order_acquire)) return {};
+    if (connected.load(std::memory_order_acquire)) {
+      return {};
+    }
     const std::uint32_t n = attempts.fetch_add(1, std::memory_order_relaxed) + 1;
     DiscoveredDevice target = snapshot_info();
 
     // 1. The last known endpoint (a cable pull keeps the address), serial verified.
     auto s = Session::connect(target, session_options);
     if (!s) {
-      if (stop.stop_requested()) return std::unexpected(wrap(s.error()));
+      if (stop.stop_requested()) {
+        return std::unexpected(wrap(s.error()));
+      }
       // 2. Discovery, filtered by serial (a reboot or DHCP may have moved the LiDAR).
       DiscoveryOptions d;
       d.targets = options.reconnect.discovery_targets;
@@ -349,14 +392,20 @@ struct Device::Impl : detail::Receiver {
       d.bind_address = session_options.bind_address;
       d.stop = stop.get_token();
       auto found = discover(d);
-      if (!found) return std::unexpected(wrap(found.error()));
-      const auto it = std::ranges::find_if(*found, [&](const DiscoveredDevice& f) {
+      if (!found) {
+        return std::unexpected(wrap(found.error()));
+      }
+      const auto it = std::ranges::find_if(*found, [&](const DiscoveredDevice & f) {
         return f.serial_number == target.serial_number;
       });
-      if (it == found->end()) return std::unexpected(wrap(s.error()));
+      if (it == found->end()) {
+        return std::unexpected(wrap(s.error()));
+      }
       target = *it;
       s = Session::connect(target, session_options);
-      if (!s) return std::unexpected(wrap(s.error()));
+      if (!s) {
+        return std::unexpected(wrap(s.error()));
+      }
     }
     if (!context.rekey(this, target.ip)) {
       return std::unexpected(error(DeviceError::Kind::kAlreadyRegistered));
@@ -366,9 +415,13 @@ struct Device::Impl : detail::Receiver {
       info_ = target;
       session = std::move(*s);
     }
-    if (auto r = apply_host_setup(session, host_setup); !r) return std::unexpected(wrap(r.error()));
+    if (auto r = apply_host_setup(session, host_setup); !r) {
+      return std::unexpected(wrap(r.error()));
+    }
     if (sampling_requested.load(std::memory_order_acquire)) {
-      if (auto r = set_mode_locked(WorkState::kSampling, std::nullopt); !r) return r;
+      if (auto r = set_mode_locked(WorkState::kSampling, std::nullopt); !r) {
+        return r;
+      }
     }
     rebase_requested.store(true, std::memory_order_release);
     last_push_steady_ns.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
@@ -387,32 +440,39 @@ struct Device::Impl : detail::Receiver {
     return {};
   }
 
-  void run_worker() {
+  void run_worker()
+  {
     std::unique_lock lock(conn_mutex);
     const auto stopping = [&] { return stop.stop_requested(); };
     while (!stopping()) {
       conn_cv.wait(lock, [&] { return stopping() || !connected.load(std::memory_order_acquire); });
-      if (stopping()) break;
+      if (stopping()) {
+        break;
+      }
       auto backoff = options.reconnect.initial_backoff;
       while (!stopping() && !connected.load(std::memory_order_acquire)) {
         lock.unlock();
         const auto r = attempt();
         lock.lock();
-        if (r) break;
-        conn_cv.wait_for(lock, backoff,
-                         [&] { return stopping() || connected.load(std::memory_order_acquire); });
+        if (r) {
+          break;
+        }
+        conn_cv.wait_for(
+          lock, backoff, [&] { return stopping() || connected.load(std::memory_order_acquire); });
         backoff = std::min(backoff * 2, options.reconnect.max_backoff);
       }
     }
   }
 
-  [[nodiscard]] DiscoveredDevice snapshot_info() const {
+  [[nodiscard]] DiscoveredDevice snapshot_info() const
+  {
     const std::lock_guard lock(conn_mutex);
     return info_;
   }
 
   /// Receive thread: push-timeout detection and delivery of queued connection events.
-  std::optional<Clock::time_point> connection_tick(Clock::time_point now) {
+  std::optional<Clock::time_point> connection_tick(Clock::time_point now)
+  {
     std::optional<Clock::time_point> next;
     if (connected.load(std::memory_order_acquire)) {
       const auto deadline = last_push_steady() + options.reconnect.push_timeout;
@@ -428,12 +488,15 @@ struct Device::Impl : detail::Receiver {
       events.swap(pending);
     }
     if (rx_event_cb) {
-      for (const Event& ev : events) rx_event_cb(ev);
+      for (const Event & ev : events) {
+        rx_event_cb(ev);
+      }
     }
     return next;
   }
 
-  std::optional<Clock::time_point> tick(Clock::time_point now) override {
+  std::optional<Clock::time_point> tick(Clock::time_point now) override
+  {
     refresh_callbacks();
     std::optional<Clock::time_point> next = connection_tick(now);
     consume_requests();
@@ -448,7 +511,9 @@ struct Device::Impl : detail::Receiver {
     if (options.stats_interval.count() > 0) {
       if (now >= next_stats) {
         // Skip missed periods rather than bursting.
-        while (next_stats <= now) next_stats += options.stats_interval;
+        while (next_stats <= now) {
+          next_stats += options.stats_interval;
+        }
         if (rx_event_cb) {
           Event ev;
           ev.kind = Event::Kind::kStats;
@@ -463,7 +528,8 @@ struct Device::Impl : detail::Receiver {
   }
 
   template <class F>
-  std::expected<void, DeviceError> set_callback(F& slot, F cb) {
+  std::expected<void, DeviceError> set_callback(F & slot, F cb)
+  {
     if (sampling_requested.load(std::memory_order_acquire)) {
       return std::unexpected(error(DeviceError::Kind::kInvalidState));
     }
@@ -474,21 +540,27 @@ struct Device::Impl : detail::Receiver {
   }
 
   /// Commands refuse to touch the LiDAR while disconnected (fail fast, issue #8).
-  [[nodiscard]] std::expected<void, DeviceError> check_connected() const {
+  [[nodiscard]] std::expected<void, DeviceError> check_connected() const
+  {
     if (!connected.load(std::memory_order_acquire)) {
       return std::unexpected(error(DeviceError::Kind::kDisconnected));
     }
     return {};
   }
 
-  std::expected<void, DeviceError> set_mode_locked(WorkState target,
-                                                   std::optional<RequestOptions> opts) {
+  std::expected<void, DeviceError> set_mode_locked(
+    WorkState target, std::optional<RequestOptions> opts)
+  {
     const auto value = encode_u8(static_cast<std::uint8_t>(target));
     const KeyValue kv[] = {{static_cast<std::uint16_t>(Key::kWorkTgtMode), value}};
-    if (auto r = session.configure(kv, opts); !r) return std::unexpected(wrap(r.error()));
+    if (auto r = session.configure(kv, opts); !r) {
+      return std::unexpected(wrap(r.error()));
+    }
     // Frozen callbacks from the moment the LiDAR acknowledged SAMPLING; released again
     // only by a successful stop_sampling().
-    if (target == WorkState::kSampling) sampling_requested.store(true, std::memory_order_release);
+    if (target == WorkState::kSampling) {
+      sampling_requested.store(true, std::memory_order_release);
+    }
     if (options.host_setup.wait_timeout.count() > 0) {
       if (auto r = session.wait_for_state(target, options.host_setup.wait_timeout); !r) {
         return std::unexpected(wrap(r.error()));
@@ -497,35 +569,47 @@ struct Device::Impl : detail::Receiver {
     return {};
   }
 
-  std::expected<void, DeviceError> set_mode(WorkState target, std::optional<RequestOptions> opts) {
+  std::expected<void, DeviceError> set_mode(WorkState target, std::optional<RequestOptions> opts)
+  {
     assert(!context.on_receive_thread() && "Device command called from a callback");
-    if (auto c = check_connected(); !c) return c;
+    if (auto c = check_connected(); !c) {
+      return c;
+    }
     const std::lock_guard lock(cmd_mutex);
-    if (auto c = check_connected(); !c) return c;
+    if (auto c = check_connected(); !c) {
+      return c;
+    }
     auto r = set_mode_locked(target, opts);
     if (!r) {
-      if (const auto& s = r.error().session) note_command_error(*s);
+      if (const auto & s = r.error().session) {
+        note_command_error(*s);
+      }
     }
     return r;
   }
 };
 
-std::expected<std::unique_ptr<Device>, DeviceError> Device::open(Context& context,
-                                                                 const DiscoveredDevice& device,
-                                                                 const DeviceOptions& opts) {
-  Context::Impl& ctx = *context.impl_;
-  const ReconnectOptions& rc = opts.reconnect;
-  if (opts.frame_policy.window.count() <= 0 || opts.stats_interval.count() < 0 ||
-      rc.push_timeout.count() <= 0 || rc.initial_backoff.count() <= 0 ||
-      rc.max_backoff < rc.initial_backoff || rc.discovery_timeout.count() <= 0) {
+std::expected<std::unique_ptr<Device>, DeviceError> Device::open(
+  Context & context, const DiscoveredDevice & device, const DeviceOptions & opts)
+{
+  Context::Impl & ctx = *context.impl_;
+  const ReconnectOptions & rc = opts.reconnect;
+  if (
+    opts.frame_policy.window.count() <= 0 || opts.stats_interval.count() < 0 ||
+    rc.push_timeout.count() <= 0 || rc.initial_backoff.count() <= 0 ||
+    rc.max_backoff < rc.initial_backoff || rc.discovery_timeout.count() <= 0) {
     return std::unexpected(error(DeviceError::Kind::kInvalidArgument));
   }
   std::stop_source stop;
   SessionOptions sopts = opts.session;
-  if (sopts.bind_address == Ipv4{0, 0, 0, 0}) sopts.bind_address = ctx.options.bind_address;
+  if (sopts.bind_address == Ipv4{0, 0, 0, 0}) {
+    sopts.bind_address = ctx.options.bind_address;
+  }
   sopts.stop = stop.get_token();
   auto session = Session::connect(device, sopts);
-  if (!session) return std::unexpected(wrap(session.error()));
+  if (!session) {
+    return std::unexpected(wrap(session.error()));
+  }
   // Reconnects always verify the serial number: that is what identifies the LiDAR.
   sopts.verify_serial = true;
 
@@ -536,8 +620,8 @@ std::expected<std::unique_ptr<Device>, DeviceError> Device::open(Context& contex
   setup.work_tgt_mode.reset();
 
   // Register before the host setup so that the first packets are not counted as unknown.
-  auto impl = std::make_unique<Impl>(ctx, device, opts, setup, std::move(sopts), std::move(stop),
-                                     std::move(*session));
+  auto impl = std::make_unique<Impl>(
+    ctx, device, opts, setup, std::move(sopts), std::move(stop), std::move(*session));
   if (ctx.add(device.ip, device.serial_number, impl.get()) != Context::Impl::AddResult::kOk) {
     return std::unexpected(error(DeviceError::Kind::kAlreadyRegistered));
   }
@@ -545,8 +629,8 @@ std::expected<std::unique_ptr<Device>, DeviceError> Device::open(Context& contex
     ctx.remove(impl.get());
     return std::unexpected(wrap(r.error()));
   }
-  impl->last_push_steady_ns.store(Clock::now().time_since_epoch().count(),
-                                  std::memory_order_relaxed);
+  impl->last_push_steady_ns.store(
+    Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
   auto dev = std::unique_ptr<Device>(new Device(std::move(impl)));
   ctx.bind(dev->impl_.get(), dev.get());
   return dev;
@@ -554,7 +638,8 @@ std::expected<std::unique_ptr<Device>, DeviceError> Device::open(Context& contex
 
 Device::Device(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
-Device::~Device() {
+Device::~Device()
+{
   // Stop the worker first: it must not touch the Context after remove().
   impl_->stop.request_stop();
   impl_->conn_cv.notify_all();
@@ -564,29 +649,37 @@ Device::~Device() {
       const std::lock_guard lock(impl_->conn_mutex);
       worker = std::move(impl_->worker);
     }
-    if (worker.joinable()) worker.join();
+    if (worker.joinable()) {
+      worker.join();
+    }
   }
   impl_->context.remove(impl_.get());
 }
 
-std::expected<void, DeviceError> Device::on_packet(PacketCallback cb) {
+std::expected<void, DeviceError> Device::on_packet(PacketCallback cb)
+{
   return impl_->set_callback(impl_->packet_cb, std::move(cb));
 }
-std::expected<void, DeviceError> Device::on_frame(FrameCallback cb) {
+std::expected<void, DeviceError> Device::on_frame(FrameCallback cb)
+{
   return impl_->set_callback(impl_->frame_cb, std::move(cb));
 }
-std::expected<void, DeviceError> Device::on_imu(ImuCallback cb) {
+std::expected<void, DeviceError> Device::on_imu(ImuCallback cb)
+{
   return impl_->set_callback(impl_->imu_cb, std::move(cb));
 }
-std::expected<void, DeviceError> Device::on_event(EventCallback cb) {
+std::expected<void, DeviceError> Device::on_event(EventCallback cb)
+{
   return impl_->set_callback(impl_->event_cb, std::move(cb));
 }
 
-std::expected<void, DeviceError> Device::start_sampling(std::optional<RequestOptions> opts) {
+std::expected<void, DeviceError> Device::start_sampling(std::optional<RequestOptions> opts)
+{
   return impl_->set_mode(WorkState::kSampling, opts);
 }
 
-std::expected<void, DeviceError> Device::stop_sampling(std::optional<RequestOptions> opts) {
+std::expected<void, DeviceError> Device::stop_sampling(std::optional<RequestOptions> opts)
+{
   auto r = impl_->set_mode(WorkState::kIdle, opts);
   if (r) {
     impl_->sampling_requested.store(false, std::memory_order_release);
@@ -595,12 +688,17 @@ std::expected<void, DeviceError> Device::stop_sampling(std::optional<RequestOpti
   return r;
 }
 
-std::expected<ParamConfigAck, DeviceError> Device::configure(std::span<const KeyValue> values,
-                                                             std::optional<RequestOptions> opts) {
+std::expected<ParamConfigAck, DeviceError> Device::configure(
+  std::span<const KeyValue> values, std::optional<RequestOptions> opts)
+{
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
-  if (auto c = impl_->check_connected(); !c) return std::unexpected(c.error());
+  if (auto c = impl_->check_connected(); !c) {
+    return std::unexpected(c.error());
+  }
   const std::lock_guard lock(impl_->cmd_mutex);
-  if (auto c = impl_->check_connected(); !c) return std::unexpected(c.error());
+  if (auto c = impl_->check_connected(); !c) {
+    return std::unexpected(c.error());
+  }
   auto r = impl_->session.configure(values, opts);
   if (!r) {
     impl_->note_command_error(r.error());
@@ -609,12 +707,17 @@ std::expected<ParamConfigAck, DeviceError> Device::configure(std::span<const Key
   return *r;
 }
 
-std::expected<InquireResult, DeviceError> Device::inquire(std::span<const std::uint16_t> keys,
-                                                          std::optional<RequestOptions> opts) {
+std::expected<InquireResult, DeviceError> Device::inquire(
+  std::span<const std::uint16_t> keys, std::optional<RequestOptions> opts)
+{
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
-  if (auto c = impl_->check_connected(); !c) return std::unexpected(c.error());
+  if (auto c = impl_->check_connected(); !c) {
+    return std::unexpected(c.error());
+  }
   const std::lock_guard lock(impl_->cmd_mutex);
-  if (auto c = impl_->check_connected(); !c) return std::unexpected(c.error());
+  if (auto c = impl_->check_connected(); !c) {
+    return std::unexpected(c.error());
+  }
   auto r = impl_->session.inquire(keys, opts);
   if (!r) {
     impl_->note_command_error(r.error());
@@ -623,11 +726,16 @@ std::expected<InquireResult, DeviceError> Device::inquire(std::span<const std::u
   return std::move(*r);
 }
 
-std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts) {
+std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts)
+{
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
-  if (auto c = impl_->check_connected(); !c) return c;
+  if (auto c = impl_->check_connected(); !c) {
+    return c;
+  }
   const std::lock_guard lock(impl_->cmd_mutex);
-  if (auto c = impl_->check_connected(); !c) return c;
+  if (auto c = impl_->check_connected(); !c) {
+    return c;
+  }
   if (auto r = impl_->session.reboot(100, opts); !r) {
     impl_->note_command_error(r.error());
     return std::unexpected(wrap(r.error()));
@@ -637,42 +745,36 @@ std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> op
   return {};
 }
 
-void Device::cancel() noexcept {
+void Device::cancel() noexcept
+{
   const std::lock_guard lock(impl_->conn_mutex);
   impl_->session.cancel();
 }
 
-bool Device::connected() const noexcept {
-  return impl_->connected.load(std::memory_order_acquire);
-}
+bool Device::connected() const noexcept { return impl_->connected.load(std::memory_order_acquire); }
 
-std::expected<void, DeviceError> Device::reconnect() {
-  return impl_->attempt();
-}
+std::expected<void, DeviceError> Device::reconnect() { return impl_->attempt(); }
 
-void Device::disconnect() {
-  impl_->declare_disconnected(DisconnectReason::kUser);
-}
+void Device::disconnect() { impl_->declare_disconnected(DisconnectReason::kUser); }
 
-DiscoveredDevice Device::info() const {
-  return impl_->snapshot_info();
-}
+DiscoveredDevice Device::info() const { return impl_->snapshot_info(); }
 
-std::optional<WorkState> Device::work_state() const {
+std::optional<WorkState> Device::work_state() const
+{
   const std::lock_guard lock(impl_->push_mutex);
   return impl_->pushed_state;
 }
 
-std::array<HmsCode, 8> Device::hms() const {
+std::array<HmsCode, 8> Device::hms() const
+{
   const std::lock_guard lock(impl_->push_mutex);
   return impl_->pushed_hms;
 }
 
-DeviceStats Device::stats() const {
-  return impl_->snapshot();
-}
+DeviceStats Device::stats() const { return impl_->snapshot(); }
 
-SessionStats Device::session_stats() const {
+SessionStats Device::session_stats() const
+{
   const std::lock_guard lock(impl_->cmd_mutex);
   return impl_->session.stats();
 }

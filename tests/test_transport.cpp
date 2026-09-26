@@ -11,15 +11,18 @@
 using namespace livox::mid360;
 using namespace std::chrono_literals;
 
-namespace {
+namespace
+{
 
-std::vector<std::byte> bytes_of(const char* text) {
+std::vector<std::byte> bytes_of(const char * text)
+{
   std::vector<std::byte> out(std::strlen(text));
   std::memcpy(out.data(), text, out.size());
   return out;
 }
 
-UdpSocket open_loopback(const SocketOptions& opts = {}) {
+UdpSocket open_loopback(const SocketOptions & opts = {})
+{
   auto s = UdpSocket::open(Endpoint::loopback(0), opts);
   REQUIRE(s.has_value());
   REQUIRE(s->is_open());
@@ -29,7 +32,8 @@ UdpSocket open_loopback(const SocketOptions& opts = {}) {
 
 /// Wait until `sock` becomes readable (bounded) so that loopback delivery latency does
 /// not make the tests flaky.
-bool wait_readable(const UdpSocket& sock, std::chrono::milliseconds timeout = 2000ms) {
+bool wait_readable(const UdpSocket & sock, std::chrono::milliseconds timeout = 2000ms)
+{
   auto p = Poller::create();
   REQUIRE(p.has_value());
   REQUIRE(p->add(sock, 1).has_value());
@@ -40,7 +44,8 @@ bool wait_readable(const UdpSocket& sock, std::chrono::milliseconds timeout = 20
 
 }  // namespace
 
-TEST_CASE("Endpoint parse/format round trip", "[transport][endpoint]") {
+TEST_CASE("Endpoint parse/format round trip", "[transport][endpoint]")
+{
   const auto ep = parse_endpoint("192.168.1.50:56101");
   REQUIRE(ep.has_value());
   CHECK(ep->ip == std::array<std::uint8_t, 4>{192, 168, 1, 50});
@@ -62,7 +67,8 @@ TEST_CASE("Endpoint parse/format round trip", "[transport][endpoint]") {
   CHECK(Endpoint::broadcast(56000) == Endpoint{{255, 255, 255, 255}, 56000});
 }
 
-TEST_CASE("TransportError to_string", "[transport][error]") {
+TEST_CASE("TransportError to_string", "[transport][error]")
+{
   CHECK(to_string(TransportErrorCode::kAddressInUse) == "address_in_use");
   const TransportError e{TransportErrorCode::kTimeout, 0};
   CHECK(to_string(e) == "timeout");
@@ -70,7 +76,8 @@ TEST_CASE("TransportError to_string", "[transport][error]") {
   CHECK(to_string(with_errno).starts_with("bind ("));
 }
 
-TEST_CASE("Loopback send and receive one datagram", "[transport][socket]") {
+TEST_CASE("Loopback send and receive one datagram", "[transport][socket]")
+{
   const UdpSocket a = open_loopback();
   const UdpSocket b = open_loopback();
 
@@ -93,7 +100,8 @@ TEST_CASE("Loopback send and receive one datagram", "[transport][socket]") {
   CHECK(empty.error().code == TransportErrorCode::kWouldBlock);
 }
 
-TEST_CASE("recv_batch drains several datagrams", "[transport][socket]") {
+TEST_CASE("recv_batch drains several datagrams", "[transport][socket]")
+{
   const UdpSocket a = open_loopback();
   const UdpSocket b = open_loopback();
 
@@ -110,7 +118,9 @@ TEST_CASE("recv_batch drains several datagrams", "[transport][socket]") {
   std::vector<int> seen;
   while (total < kCount && std::chrono::steady_clock::now() < deadline) {
     REQUIRE(wait_readable(b));
-    for (std::size_t i = 0; i < dg.size(); ++i) dg[i].data = storage[i];
+    for (std::size_t i = 0; i < dg.size(); ++i) {
+      dg[i].data = storage[i];
+    }
     const auto n = b.recv_batch(dg);
     REQUIRE(n.has_value());
     for (std::size_t i = 0; i < *n; ++i) {
@@ -124,7 +134,8 @@ TEST_CASE("recv_batch drains several datagrams", "[transport][socket]") {
   CHECK(seen.size() == kCount);
 }
 
-TEST_CASE("Datagram larger than buffer is truncated to buffer size", "[transport][socket]") {
+TEST_CASE("Datagram larger than buffer is truncated to buffer size", "[transport][socket]")
+{
   const UdpSocket a = open_loopback();
   const UdpSocket b = open_loopback();
   const std::vector<std::byte> big(200, std::byte{0xAB});
@@ -136,7 +147,8 @@ TEST_CASE("Datagram larger than buffer is truncated to buffer size", "[transport
   CHECK(d->data.size() == 16);
 }
 
-TEST_CASE("Binding the same port twice reports kAddressInUse", "[transport][socket]") {
+TEST_CASE("Binding the same port twice reports kAddressInUse", "[transport][socket]")
+{
   SocketOptions opts;
   opts.reuse_address = false;
   const UdpSocket a = open_loopback(opts);
@@ -146,7 +158,8 @@ TEST_CASE("Binding the same port twice reports kAddressInUse", "[transport][sock
   CHECK(b.error().errno_value == EADDRINUSE);
 }
 
-TEST_CASE("Reserved options are rejected", "[transport][socket]") {
+TEST_CASE("Reserved options are rejected", "[transport][socket]")
+{
   SocketOptions opts;
   opts.bind_to_device = "eth0";
   const auto s = UdpSocket::open(Endpoint::loopback(0), opts);
@@ -154,7 +167,8 @@ TEST_CASE("Reserved options are rejected", "[transport][socket]") {
   CHECK(s.error().code == TransportErrorCode::kInvalidArgument);
 }
 
-TEST_CASE("Receive buffer size can be requested and queried", "[transport][socket]") {
+TEST_CASE("Receive buffer size can be requested and queried", "[transport][socket]")
+{
   SocketOptions opts;
   opts.recv_buffer_bytes = std::size_t{512} * 1024;
   const UdpSocket s = open_loopback(opts);
@@ -163,7 +177,8 @@ TEST_CASE("Receive buffer size can be requested and queried", "[transport][socke
   CHECK(*eff > 0);  // kernel may clamp or double; only require sanity
 }
 
-TEST_CASE("Closed socket reports kClosed", "[transport][socket]") {
+TEST_CASE("Closed socket reports kClosed", "[transport][socket]")
+{
   UdpSocket s = open_loopback();
   s.close();
   CHECK_FALSE(s.is_open());
@@ -172,7 +187,8 @@ TEST_CASE("Closed socket reports kClosed", "[transport][socket]") {
   CHECK(s.recv_one(buf).error().code == TransportErrorCode::kClosed);
 }
 
-TEST_CASE("Move transfers ownership", "[transport][socket]") {
+TEST_CASE("Move transfers ownership", "[transport][socket]")
+{
   UdpSocket a = open_loopback();
   const int fd = a.native_handle();
   const Endpoint ep = a.local_endpoint();
@@ -182,7 +198,8 @@ TEST_CASE("Move transfers ownership", "[transport][socket]") {
   CHECK(b.local_endpoint() == ep);
 }
 
-TEST_CASE("Broadcast send with SO_BROADCAST", "[transport][socket][broadcast]") {
+TEST_CASE("Broadcast send with SO_BROADCAST", "[transport][socket][broadcast]")
+{
   SocketOptions opts;
   opts.broadcast = true;
   const auto sock = UdpSocket::open(Endpoint::any(0), opts);
@@ -198,7 +215,8 @@ TEST_CASE("Broadcast send with SO_BROADCAST", "[transport][socket][broadcast]") 
   }
 }
 
-TEST_CASE("Poller times out with no events", "[transport][poller]") {
+TEST_CASE("Poller times out with no events", "[transport][poller]")
+{
   const UdpSocket s = open_loopback();
   auto p = Poller::create();
   REQUIRE(p.has_value());
@@ -211,7 +229,8 @@ TEST_CASE("Poller times out with no events", "[transport][poller]") {
   CHECK(std::chrono::steady_clock::now() - t0 >= 40ms);
 }
 
-TEST_CASE("Poller reports the readable socket by tag", "[transport][poller]") {
+TEST_CASE("Poller reports the readable socket by tag", "[transport][poller]")
+{
   const UdpSocket a = open_loopback();
   const UdpSocket b = open_loopback();
   const UdpSocket c = open_loopback();
@@ -237,7 +256,8 @@ TEST_CASE("Poller reports the readable socket by tag", "[transport][poller]") {
   CHECK(p->size() == 1);
 }
 
-TEST_CASE("Poller wake interrupts wait from another thread", "[transport][poller]") {
+TEST_CASE("Poller wake interrupts wait from another thread", "[transport][poller]")
+{
   const UdpSocket s = open_loopback();
   auto p = Poller::create();
   REQUIRE(p.has_value());

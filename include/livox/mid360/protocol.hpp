@@ -17,7 +17,8 @@
 #include "livox/mid360/export.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -46,7 +47,8 @@ inline constexpr std::size_t kPointsPerPacket = 96;  ///< N for data_type 1, 2 a
 // ---------------------------------------------------------------------------
 // Enumerations
 // ---------------------------------------------------------------------------
-enum class CmdId : std::uint16_t {
+enum class CmdId : std::uint16_t
+{
   kDiscovery = 0x0000,
   kParamConfig = 0x0100,
   kParamInquire = 0x0101,
@@ -57,10 +59,19 @@ enum class CmdId : std::uint16_t {
   // 0x03xx (log) and 0x04xx (upgrade) are intentionally not modelled in v1.
 };
 
-enum class CmdType : std::uint8_t { kReq = 0x00, kAck = 0x01 };
-enum class SenderType : std::uint8_t { kHost = 0x00, kLidar = 0x01 };
+enum class CmdType : std::uint8_t
+{
+  kReq = 0x00,
+  kAck = 0x01
+};
+enum class SenderType : std::uint8_t
+{
+  kHost = 0x00,
+  kLidar = 0x01
+};
 
-enum class RetCode : std::uint8_t {
+enum class RetCode : std::uint8_t
+{
   kSuccess = 0x00,
   kFailure = 0x01,
   kNotPermitNow = 0x02,
@@ -79,7 +90,8 @@ enum class RetCode : std::uint8_t {
 
 /// LiDAR working state (key 0x8006 cur_work_state / 0x001A work_tgt_mode).
 /// Only kSampling, kIdle and kReady may be requested via work_tgt_mode.
-enum class WorkState : std::uint8_t {
+enum class WorkState : std::uint8_t
+{
   kSampling = 0x01,
   kIdle = 0x02,
   kError = 0x04,
@@ -89,20 +101,23 @@ enum class WorkState : std::uint8_t {
   kReady = 0x09,
 };
 
-enum class DataType : std::uint8_t {
+enum class DataType : std::uint8_t
+{
   kImu = 0,
   kCartesian32 = 1,  ///< int32 mm, 14 bytes/point, default
   kCartesian16 = 2,  ///< int16 10 mm, 8 bytes/point
   kSpherical = 3,    ///< depth mm + theta/phi 0.01 deg, 10 bytes/point
 };
 
-enum class TimeType : std::uint8_t {
+enum class TimeType : std::uint8_t
+{
   kNoSync = 0,  ///< timestamp counts from LiDAR power-on
   kPtp = 1,     ///< IEEE 1588v2.0 or gPTP master time
   kGps = 2,     ///< GPS (PPS + GPRMC)
 };
 
-enum class ParseError : std::uint8_t {
+enum class ParseError : std::uint8_t
+{
   kTooShort,         ///< buffer shorter than the minimal header
   kBadSof,           ///< command frame does not start with 0xAA
   kBadVersion,       ///< protocol version != 0
@@ -125,7 +140,8 @@ enum class ParseError : std::uint8_t {
 // ---------------------------------------------------------------------------
 // Control command frame (24-byte header + data, max 1400 bytes)
 // ---------------------------------------------------------------------------
-struct CommandHeader {
+struct CommandHeader
+{
   std::uint16_t length = 0;  ///< sof .. end of data
   std::uint32_t seq_num = 0;
   std::uint16_t cmd_id = 0;  ///< raw; compare against CmdId
@@ -137,16 +153,18 @@ struct CommandHeader {
 };
 
 /// A validated, non-owning view over a command frame.
-struct CommandFrameView {
+struct CommandFrameView
+{
   CommandHeader header;
   std::span<const std::byte> data;  ///< payload after the 24-byte header
 };
 
 /// Parses and fully validates (SOF, version, length, CRC16, CRC32) one command frame.
 [[nodiscard]] std::expected<CommandFrameView, ParseError> parse_command_frame(
-    std::span<const std::byte> frame) noexcept;
+  std::span<const std::byte> frame) noexcept;
 
-struct CommandFrameSpec {
+struct CommandFrameSpec
+{
   std::uint32_t seq_num = 0;
   std::uint16_t cmd_id = 0;
   CmdType cmd_type = CmdType::kReq;
@@ -155,28 +173,31 @@ struct CommandFrameSpec {
   std::span<const std::byte> data{};  // NOLINT(readability-redundant-member-init)
 };
 
-enum class EncodeError : std::uint8_t {
+enum class EncodeError : std::uint8_t
+{
   kDataTooLarge,    ///< data exceeds kCommandDataMaxSize
   kBufferTooSmall,  ///< output span cannot hold the frame
 };
 
 /// Total wire size of a frame carrying `data_size` payload bytes.
-[[nodiscard]] constexpr std::size_t command_frame_size(std::size_t data_size) noexcept {
+[[nodiscard]] constexpr std::size_t command_frame_size(std::size_t data_size) noexcept
+{
   return kCommandHeaderSize + data_size;
 }
 
 /// Serialises a frame into `out`, computing both CRCs. Returns bytes written.
 [[nodiscard]] std::expected<std::size_t, EncodeError> encode_command_frame(
-    std::span<std::byte> out, const CommandFrameSpec& spec) noexcept;
+  std::span<std::byte> out, const CommandFrameSpec & spec) noexcept;
 
 /// Convenience: allocate and serialise.
 [[nodiscard]] std::expected<std::vector<std::byte>, EncodeError> build_command_frame(
-    const CommandFrameSpec& spec);
+  const CommandFrameSpec & spec);
 
 // ---------------------------------------------------------------------------
 // Point cloud / IMU data packet (36-byte header + data)
 // ---------------------------------------------------------------------------
-struct DataPacketHeader {
+struct DataPacketHeader
+{
   std::uint8_t version = 0;
   std::uint16_t length = 0;         ///< whole UDP payload, from `version`
   std::uint16_t time_interval = 0;  ///< unit 0.1 us; last point time - first point time
@@ -186,12 +207,13 @@ struct DataPacketHeader {
   DataType data_type = DataType::kCartesian32;
   TimeType time_type = TimeType::kNoSync;
   std::array<std::uint8_t, 12>
-      reserved{};                  ///< wiki: "reserved"; diagram labels part of it pack_info
+    reserved{};                    ///< wiki: "reserved"; diagram labels part of it pack_info
   std::uint32_t crc32 = 0;         ///< over timestamp + data
   std::uint64_t timestamp_ns = 0;  ///< time of the first sample
 };
 
-struct DataPacketView {
+struct DataPacketView
+{
   DataPacketHeader header;
   std::span<const std::byte> data;  ///< payload after the 36-byte header
 };
@@ -199,10 +221,11 @@ struct DataPacketView {
 /// Parses and validates a data packet (version, length, CRC32, data_type/dot_num consistency).
 /// Set `verify_crc=false` to skip the CRC on hot paths after you have trusted the source.
 [[nodiscard]] std::expected<DataPacketView, ParseError> parse_data_packet(
-    std::span<const std::byte> packet, bool verify_crc = true) noexcept;
+  std::span<const std::byte> packet, bool verify_crc = true) noexcept;
 
 /// Bytes per sample for a data type (0 for unknown).
-[[nodiscard]] constexpr std::size_t sample_size(DataType t) noexcept {
+[[nodiscard]] constexpr std::size_t sample_size(DataType t) noexcept
+{
   switch (t) {
     case DataType::kImu:
       return 24;
@@ -216,19 +239,22 @@ struct DataPacketView {
   return 0;
 }
 
-struct CartesianPoint32 {
+struct CartesianPoint32
+{
   std::int32_t x_mm, y_mm, z_mm;
   std::uint8_t reflectivity;
   std::uint8_t tag;
 };
 
-struct CartesianPoint16 {
+struct CartesianPoint16
+{
   std::int16_t x_cm, y_cm, z_cm;  ///< unit 10 mm
   std::uint8_t reflectivity;
   std::uint8_t tag;
 };
 
-struct SphericalPoint {
+struct SphericalPoint
+{
   std::uint32_t depth_mm;
   std::uint16_t theta_centideg;  ///< zenith, [0, 18000], unit 0.01 deg
   std::uint16_t phi_centideg;    ///< azimuth, [0, 36000], unit 0.01 deg
@@ -236,61 +262,65 @@ struct SphericalPoint {
   std::uint8_t tag;
 };
 
-struct ImuSample {
+struct ImuSample
+{
   float gyro_x, gyro_y, gyro_z;  ///< rad/s
   float acc_x, acc_y, acc_z;     ///< g
 };
 
 /// Decodes the i-th sample. The caller guarantees `data_type` matches and `i < dot_num`.
-[[nodiscard]] CartesianPoint32 decode_cartesian32(const DataPacketView& p, std::size_t i) noexcept;
-[[nodiscard]] CartesianPoint16 decode_cartesian16(const DataPacketView& p, std::size_t i) noexcept;
-[[nodiscard]] SphericalPoint decode_spherical(const DataPacketView& p, std::size_t i) noexcept;
-[[nodiscard]] ImuSample decode_imu(const DataPacketView& p, std::size_t i) noexcept;
+[[nodiscard]] CartesianPoint32 decode_cartesian32(const DataPacketView & p, std::size_t i) noexcept;
+[[nodiscard]] CartesianPoint16 decode_cartesian16(const DataPacketView & p, std::size_t i) noexcept;
+[[nodiscard]] SphericalPoint decode_spherical(const DataPacketView & p, std::size_t i) noexcept;
+[[nodiscard]] ImuSample decode_imu(const DataPacketView & p, std::size_t i) noexcept;
 
 /// Whole-packet decoders (allocate).
-[[nodiscard]] std::vector<CartesianPoint32> decode_all_cartesian32(const DataPacketView& p);
-[[nodiscard]] std::vector<CartesianPoint16> decode_all_cartesian16(const DataPacketView& p);
-[[nodiscard]] std::vector<SphericalPoint> decode_all_spherical(const DataPacketView& p);
-[[nodiscard]] std::vector<ImuSample> decode_all_imu(const DataPacketView& p);
+[[nodiscard]] std::vector<CartesianPoint32> decode_all_cartesian32(const DataPacketView & p);
+[[nodiscard]] std::vector<CartesianPoint16> decode_all_cartesian16(const DataPacketView & p);
+[[nodiscard]] std::vector<SphericalPoint> decode_all_spherical(const DataPacketView & p);
+[[nodiscard]] std::vector<ImuSample> decode_all_imu(const DataPacketView & p);
 
 /// Timestamp of the i-th sample: timestamp + i * time_interval / (dot_num - 1), in ns.
 /// time_interval is in 0.1 us (= 100 ns) units. Returns `timestamp` when dot_num <= 1.
-[[nodiscard]] std::uint64_t sample_timestamp_ns(const DataPacketHeader& h, std::size_t i) noexcept;
+[[nodiscard]] std::uint64_t sample_timestamp_ns(const DataPacketHeader & h, std::size_t i) noexcept;
 
 /// Tag decoding (section "Tag Information"). Each 2-bit field: 0 high, 1 medium, 2 low, 3 reserved.
-struct TagInfo {
+struct TagInfo
+{
   std::uint8_t adjacent_glue;  ///< bit 0-1: glue points between adjacent objects
   std::uint8_t particles;      ///< bit 2-3: rain, fog, dust
   std::uint8_t other;          ///< bit 4-5: other properties
   std::uint8_t reserved;       ///< bit 6-7
 };
-[[nodiscard]] constexpr TagInfo decode_tag(std::uint8_t tag) noexcept {
-  return {static_cast<std::uint8_t>(tag & 0x3u), static_cast<std::uint8_t>((tag >> 2) & 0x3u),
-          static_cast<std::uint8_t>((tag >> 4) & 0x3u),
-          static_cast<std::uint8_t>((tag >> 6) & 0x3u)};
+[[nodiscard]] constexpr TagInfo decode_tag(std::uint8_t tag) noexcept
+{
+  return {
+    static_cast<std::uint8_t>(tag & 0x3u), static_cast<std::uint8_t>((tag >> 2) & 0x3u),
+    static_cast<std::uint8_t>((tag >> 4) & 0x3u), static_cast<std::uint8_t>((tag >> 6) & 0x3u)};
 }
 
 // ---------------------------------------------------------------------------
 // Key-value lists (0x0100 / 0x0101 / 0x0102 payloads)
 // ---------------------------------------------------------------------------
-struct KeyValue {
+struct KeyValue
+{
   std::uint16_t key;
   std::span<const std::byte> value;
 };
 
 /// Parses `key_num` consecutive {key u16, length u16, value[length]} entries.
 [[nodiscard]] std::expected<std::vector<KeyValue>, ParseError> parse_key_value_list(
-    std::span<const std::byte> in, std::size_t key_num) noexcept;
+  std::span<const std::byte> in, std::size_t key_num) noexcept;
 
 /// Encodes {key,length,value}* into `out` (appends).
-void append_key_value_list(std::vector<std::byte>& out, std::span<const KeyValue> kvs);
+void append_key_value_list(std::vector<std::byte> & out, std::span<const KeyValue> kvs);
 
 /// 0x0100 REQ data: key_num u16, rsvd u16, key_value_list.
 [[nodiscard]] std::vector<std::byte> encode_param_config_request(std::span<const KeyValue> kvs);
 
 /// 0x0101 REQ data: key_num u16, rsvd u16, key u16[key_num].
 [[nodiscard]] std::vector<std::byte> encode_param_inquire_request(
-    std::span<const std::uint16_t> keys);
+  std::span<const std::uint16_t> keys);
 
 /// 0x0200 REQ data: timeout u16 (ms).
 [[nodiscard]] std::vector<std::byte> encode_reboot_request(std::uint16_t timeout_ms);
@@ -301,7 +331,8 @@ void append_key_value_list(std::vector<std::byte>& out, std::span<const KeyValue
 /// 0x0202 REQ data: type u8 (2 = GPS), time_set u64 (ns of last PPS rising edge).
 [[nodiscard]] std::vector<std::byte> encode_set_gps_timestamp_request(std::uint64_t pps_time_ns);
 
-struct DiscoveryAck {
+struct DiscoveryAck
+{
   RetCode ret_code;
   std::uint8_t dev_type;
   std::array<char, 16> serial_number;  ///< NUL-padded
@@ -311,34 +342,38 @@ struct DiscoveryAck {
   [[nodiscard]] std::string_view serial_number_view() const noexcept;
 };
 
-struct ParamConfigAck {
+struct ParamConfigAck
+{
   RetCode ret_code;
   std::uint16_t error_key;  ///< only meaningful when ret_code != kSuccess
 };
 
-struct ParamInquireAck {
+struct ParamInquireAck
+{
   RetCode ret_code = RetCode::kSuccess;
   std::vector<KeyValue> values;  ///< spans point into the input buffer
 };
 
-struct InfoPush {
+struct InfoPush
+{
   std::vector<KeyValue> values;  ///< spans point into the input buffer
 };
 
-struct SimpleAck {
+struct SimpleAck
+{
   RetCode ret_code;
 };
 
 [[nodiscard]] std::expected<DiscoveryAck, ParseError> parse_discovery_ack(
-    std::span<const std::byte> data) noexcept;
+  std::span<const std::byte> data) noexcept;
 [[nodiscard]] std::expected<ParamConfigAck, ParseError> parse_param_config_ack(
-    std::span<const std::byte> data) noexcept;
+  std::span<const std::byte> data) noexcept;
 [[nodiscard]] std::expected<ParamInquireAck, ParseError> parse_param_inquire_ack(
-    std::span<const std::byte> data) noexcept;
+  std::span<const std::byte> data) noexcept;
 [[nodiscard]] std::expected<InfoPush, ParseError> parse_info_push(
-    std::span<const std::byte> data) noexcept;
+  std::span<const std::byte> data) noexcept;
 [[nodiscard]] std::expected<SimpleAck, ParseError> parse_simple_ack(
-    std::span<const std::byte> data) noexcept;
+  std::span<const std::byte> data) noexcept;
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END

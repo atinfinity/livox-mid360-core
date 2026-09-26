@@ -19,58 +19,76 @@
 #include <string_view>
 #include <vector>
 
-extern char** environ;  // NOLINT(readability-redundant-declaration)
+extern char ** environ;  // NOLINT(readability-redundant-declaration)
 
 #ifndef LIVOX_MID360_SIM_SCRIPT
 #error "LIVOX_MID360_SIM_SCRIPT must be defined by CMake"
 #endif
 
 /// Minimal extractor for the flat "ready" JSON line; avoids a JSON dependency.
-inline std::optional<long> json_int(std::string_view line, std::string_view key) {
+inline std::optional<long> json_int(std::string_view line, std::string_view key)
+{
   const std::string needle = "\"" + std::string(key) + "\":";
   const auto pos = line.find(needle);
-  if (pos == std::string_view::npos) return std::nullopt;
-  const char* start = line.data() + pos + needle.size();
-  char* end = nullptr;
+  if (pos == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const char * start = line.data() + pos + needle.size();
+  char * end = nullptr;
   const long v = std::strtol(start, &end, 10);
-  if (end == start) return std::nullopt;
+  if (end == start) {
+    return std::nullopt;
+  }
   return v;
 }
 
-inline std::optional<std::string> json_str(std::string_view line, std::string_view key) {
+inline std::optional<std::string> json_str(std::string_view line, std::string_view key)
+{
   const std::string needle = "\"" + std::string(key) + "\":\"";
   const auto pos = line.find(needle);
-  if (pos == std::string_view::npos) return std::nullopt;
+  if (pos == std::string_view::npos) {
+    return std::nullopt;
+  }
   const auto begin = pos + needle.size();
   const auto end = line.find('"', begin);
-  if (end == std::string_view::npos) return std::nullopt;
+  if (end == std::string_view::npos) {
+    return std::nullopt;
+  }
   return std::string(line.substr(begin, end - begin));
 }
 
-class SimProcess {
- public:
-  struct Ports {
+class SimProcess
+{
+public:
+  struct Ports
+  {
     std::uint16_t discovery = 0, cmd = 0, push = 0, pcl = 0, imu = 0;
   };
 
   /// Python interpreter from LIVOX_MID360_PYTHON (CMake) or PATH; nullopt if none.
-  static std::optional<std::string> python() {
+  static std::optional<std::string> python()
+  {
 #ifdef LIVOX_MID360_PYTHON
-    if (::access(LIVOX_MID360_PYTHON, X_OK) == 0) return std::string(LIVOX_MID360_PYTHON);
+    if (::access(LIVOX_MID360_PYTHON, X_OK) == 0) {
+      return std::string(LIVOX_MID360_PYTHON);
+    }
 #endif
-    if (const char* env = std::getenv("PYTHON"); env != nullptr && ::access(env, X_OK) == 0) {
+    if (const char * env = std::getenv("PYTHON"); env != nullptr && ::access(env, X_OK) == 0) {
       return std::string(env);
     }
-    for (const char* p :
+    for (const char * p :
          {"/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"}) {
-      if (::access(p, X_OK) == 0) return std::string(p);
+      if (::access(p, X_OK) == 0) {
+        return std::string(p);
+      }
     }
     return std::nullopt;
   }
 
   /// Spawn with free ports. Returns nullopt (and fills `error`) on any failure.
-  static std::optional<SimProcess> start(std::string& error,
-                                         std::vector<std::string> extra_args = {}) {
+  static std::optional<SimProcess> start(
+    std::string & error, std::vector<std::string> extra_args = {})
+  {
     const auto py = python();
     if (!py) {
       error = "python3 not found";
@@ -90,12 +108,16 @@ class SimProcess {
       posix_spawn_file_actions_addclose(&fa, fd);
     }
     std::vector<std::string> args = {
-        *py, LIVOX_MID360_SIM_SCRIPT, "--bind", "127.0.0.1", "--base-port",
-        "0", "--startup-delay",       "0.1"};
-    for (auto& a : extra_args) args.push_back(std::move(a));
-    std::vector<char*> argv;
+      *py, LIVOX_MID360_SIM_SCRIPT, "--bind", "127.0.0.1", "--base-port",
+      "0", "--startup-delay",       "0.1"};
+    for (auto & a : extra_args) {
+      args.push_back(std::move(a));
+    }
+    std::vector<char *> argv;
     argv.reserve(args.size() + 1);
-    for (auto& a : args) argv.push_back(a.data());
+    for (auto & a : args) {
+      argv.push_back(a.data());
+    }
     argv.push_back(nullptr);
 
     pid_t pid = 0;
@@ -124,10 +146,12 @@ class SimProcess {
         error = "simulator exited before ready";
         return std::nullopt;
       }
-      if (line->find(R"("event":"ready")") == std::string::npos) continue;
+      if (line->find(R"("event":"ready")") == std::string::npos) {
+        continue;
+      }
       sim.ip_ = json_str(*line, "ip").value_or("127.0.0.1");
       sim.sn_ = json_str(*line, "sn").value_or("");
-      auto port = [&](const char* k) {
+      auto port = [&](const char * k) {
         return static_cast<std::uint16_t>(json_int(*line, k).value_or(0));
       };
       sim.ports_ = {port("discovery"), port("cmd"), port("push"), port("pcl"), port("imu")};
@@ -139,31 +163,38 @@ class SimProcess {
     }
   }
 
-  SimProcess(const SimProcess&) = delete;
-  SimProcess& operator=(const SimProcess&) = delete;
-  SimProcess(SimProcess&& o) noexcept { swap(o); }
-  SimProcess& operator=(SimProcess&& o) noexcept {
+  SimProcess(const SimProcess &) = delete;
+  SimProcess & operator=(const SimProcess &) = delete;
+  SimProcess(SimProcess && o) noexcept { swap(o); }
+  SimProcess & operator=(SimProcess && o) noexcept
+  {
     swap(o);
     return *this;
   }
   ~SimProcess() { stop(); }
 
-  [[nodiscard]] const Ports& ports() const noexcept { return ports_; }
-  [[nodiscard]] const std::string& ip() const noexcept { return ip_; }
-  [[nodiscard]] const std::string& sn() const noexcept { return sn_; }
+  [[nodiscard]] const Ports & ports() const noexcept { return ports_; }
+  [[nodiscard]] const std::string & ip() const noexcept { return ip_; }
+  [[nodiscard]] const std::string & sn() const noexcept { return sn_; }
   [[nodiscard]] pid_t pid() const noexcept { return pid_; }
 
   /// Send one JSON control line, e.g. R"({"cmd":"hms","codes":[34603011]})".
-  [[nodiscard]] bool control(std::string_view json) const {
-    if (control_fd_ < 0) return false;
+  [[nodiscard]] bool control(std::string_view json) const
+  {
+    if (control_fd_ < 0) {
+      return false;
+    }
     std::string line(json);
     line.push_back('\n');
     return ::write(control_fd_, line.data(), line.size()) == static_cast<ssize_t>(line.size());
   }
 
   /// Next stdout line (blocking); nullopt on EOF.
-  std::optional<std::string> read_event() {
-    if (events_ == nullptr) return std::nullopt;
+  std::optional<std::string> read_event()
+  {
+    if (events_ == nullptr) {
+      return std::nullopt;
+    }
     char buf[4096];
     if (std::fgets(buf, sizeof buf, events_) == nullptr) {  // EOF or error: stop reading
       std::fclose(events_);
@@ -171,23 +202,33 @@ class SimProcess {
       return std::nullopt;
     }
     std::string s(buf);
-    while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) {
+      s.pop_back();
+    }
     return s;
   }
 
   /// Read events until one contains `needle` or EOF. Returns the matching line.
-  std::optional<std::string> wait_event(std::string_view needle) {
+  std::optional<std::string> wait_event(std::string_view needle)
+  {
     while (auto line = read_event()) {
-      if (line->find(needle) != std::string::npos) return line;
+      if (line->find(needle) != std::string::npos) {
+        return line;
+      }
     }
     return std::nullopt;
   }
 
   /// Ask the simulator to quit and reap it. Returns the exit status (-1 if killed).
-  int stop() {
-    if (pid_ <= 0) return -1;
+  int stop()
+  {
+    if (pid_ <= 0) {
+      return -1;
+    }
     (void)control(R"({"cmd":"quit"})");
-    if (control_fd_ >= 0) ::close(control_fd_);
+    if (control_fd_ >= 0) {
+      ::close(control_fd_);
+    }
     control_fd_ = -1;
     if (events_ != nullptr) {
       while (read_event()) {  // drain; read_event() closes the stream at EOF
@@ -212,9 +253,10 @@ class SimProcess {
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
   }
 
- private:
+private:
   SimProcess() = default;
-  void swap(SimProcess& o) noexcept {
+  void swap(SimProcess & o) noexcept
+  {
     std::swap(pid_, o.pid_);
     std::swap(control_fd_, o.control_fd_);
     std::swap(events_, o.events_);
@@ -225,7 +267,7 @@ class SimProcess {
 
   pid_t pid_ = -1;
   int control_fd_ = -1;
-  std::FILE* events_ = nullptr;
+  std::FILE * events_ = nullptr;
   Ports ports_;
   std::string ip_;
   std::string sn_;

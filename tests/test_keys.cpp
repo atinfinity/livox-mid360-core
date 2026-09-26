@@ -6,7 +6,8 @@
 
 using namespace livox::mid360;
 
-TEST_CASE("key metadata", "[keys]") {
+TEST_CASE("key metadata", "[keys]")
+{
   STATIC_CHECK(is_read_only(Key::kSn));
   STATIC_CHECK_FALSE(is_read_only(Key::kWorkTgtMode));
   CHECK(to_string(Key::kPointCloudHostIpCfg) == "pointcloud_host_ipcfg");
@@ -16,11 +17,13 @@ TEST_CASE("key metadata", "[keys]") {
   CHECK(key_value_length(Key::kLidarDiagStatus) == 2);
 }
 
-TEST_CASE("host ip config", "[keys]") {
+TEST_CASE("host ip config", "[keys]")
+{
   HostIpConfig c{{192, 168, 1, 5}, 56301, 56300};
   auto e = encode_host_ip_config(c);
-  CHECK(std::vector<std::byte>(e.begin(), e.end()) ==
-        bytes_of({192, 168, 1, 5, 0xED, 0xDB, 0xEC, 0xDB}));
+  CHECK(
+    std::vector<std::byte>(e.begin(), e.end()) ==
+    bytes_of({192, 168, 1, 5, 0xED, 0xDB, 0xEC, 0xDB}));
   auto d = decode_host_ip_config(e);
   REQUIRE(d);
   CHECK(d->ip == c.ip);
@@ -29,7 +32,8 @@ TEST_CASE("host ip config", "[keys]") {
   CHECK(decode_host_ip_config(std::span(e).first(7)).error() == KeyError::kWrongLength);
 }
 
-TEST_CASE("lidar ip config", "[keys]") {
+TEST_CASE("lidar ip config", "[keys]")
+{
   LidarIpConfig c{{192, 168, 1, 12}, {255, 255, 255, 0}, {192, 168, 1, 1}};
   auto d = decode_lidar_ip_config(encode_lidar_ip_config(c));
   REQUIRE(d);
@@ -38,7 +42,8 @@ TEST_CASE("lidar ip config", "[keys]") {
   CHECK(d->gateway == c.gateway);
 }
 
-TEST_CASE("install attitude and fov", "[keys]") {
+TEST_CASE("install attitude and fov", "[keys]")
+{
   InstallAttitude a{1.5f, -2.5f, 90.0f, 10, -20, 30};
   auto e = encode_install_attitude(a);
   CHECK(e.size() == 24);
@@ -59,7 +64,8 @@ TEST_CASE("install attitude and fov", "[keys]") {
   CHECK(fd->pitch_stop_deg == 52);
 }
 
-TEST_CASE("func io and imu sensor config", "[keys]") {
+TEST_CASE("func io and imu sensor config", "[keys]")
+{
   auto io = decode_func_io_config(encode_func_io_config({0, 0, 1, 2}));
   REQUIRE(io);
   CHECK(io->out0 == 1);
@@ -75,7 +81,8 @@ TEST_CASE("func io and imu sensor config", "[keys]") {
   CHECK(decode_imu_sensor_config(bytes_of({0, 0, 8})).error() == KeyError::kOutOfRange);
 }
 
-TEST_CASE("read-only decoders", "[keys]") {
+TEST_CASE("read-only decoders", "[keys]")
+{
   auto v = decode_version(bytes_of({13, 18, 2, 44}));
   REQUIRE(v);
   CHECK(v->v == std::array<std::uint8_t, 4>{13, 18, 2, 44});

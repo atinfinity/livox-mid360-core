@@ -17,19 +17,23 @@ using namespace livox::mid360::detail;
 using namespace std::chrono_literals;
 using Catch::Approx;
 
-namespace {
+namespace
+{
 
 constexpr std::uint64_t kMs = 1'000'000;
 
 /// Synthetic packet: header fields + zero-filled samples (owning).
-struct Packet {
+struct Packet
+{
   std::vector<std::byte> data;
   DataPacketView view;
 };
 
-Packet make_packet(std::uint16_t udp_cnt, std::uint8_t frame_cnt, std::uint64_t ts_ns,
-                   std::uint16_t dots = 4, DataType type = DataType::kCartesian32,
-                   std::uint16_t interval_0p1us = 3000, TimeType time_type = TimeType::kNoSync) {
+Packet make_packet(
+  std::uint16_t udp_cnt, std::uint8_t frame_cnt, std::uint64_t ts_ns, std::uint16_t dots = 4,
+  DataType type = DataType::kCartesian32, std::uint16_t interval_0p1us = 3000,
+  TimeType time_type = TimeType::kNoSync)
+{
   Packet p;
   p.data.assign(dots * sample_size(type), std::byte{0});
   p.view.header.udp_cnt = udp_cnt;
@@ -43,24 +47,30 @@ Packet make_packet(std::uint16_t udp_cnt, std::uint8_t frame_cnt, std::uint64_t 
   return p;
 }
 
-FramePolicy counter_policy(std::chrono::nanoseconds window = 100ms) {
+FramePolicy counter_policy(std::chrono::nanoseconds window = 100ms)
+{
   return {.mode = FramePolicy::Mode::kFrameCounter, .window = window};
 }
-FramePolicy window_policy(std::chrono::nanoseconds window = 100ms) {
+FramePolicy window_policy(std::chrono::nanoseconds window = 100ms)
+{
   return {.mode = FramePolicy::Mode::kTimeWindow, .window = window};
 }
 
 }  // namespace
 
-TEST_CASE("frame assembler: golden sequence splits by frame_cnt and counts drops", "[frame]") {
+TEST_CASE("frame assembler: golden sequence splits by frame_cnt and counts drops", "[frame]")
+{
   FrameAssembler fa(counter_policy(), TimestampPolicy::kLidar);
   std::vector<Frame> frames;
   for (std::size_t i = 0; i < golden::frame_seq_count; ++i) {
-    const auto bytes = span_of(golden::frame_seq + golden::frame_seq_offsets[i],
-                               golden::frame_seq_offsets[i + 1] - golden::frame_seq_offsets[i]);
+    const auto bytes = span_of(
+      golden::frame_seq + golden::frame_seq_offsets[i],
+      golden::frame_seq_offsets[i + 1] - golden::frame_seq_offsets[i]);
     const auto pkt = parse_data_packet(bytes);
     REQUIRE(pkt.has_value());
-    if (auto f = fa.push(*pkt, 0)) frames.push_back(std::move(*f));
+    if (auto f = fa.push(*pkt, 0)) {
+      frames.push_back(std::move(*f));
+    }
   }
   REQUIRE(frames.size() == golden::frame_seq_frames - 1);
   CHECK(fa.has_partial());
@@ -96,7 +106,7 @@ TEST_CASE("frame assembler: golden sequence splits by frame_cnt and counts drops
   // last point of packet 0 is time_interval later
   CHECK(frames[0].points[7].offset_ns == golden::frame_seq_step_ns);
 
-  const auto& c = fa.counters();
+  const auto & c = fa.counters();
   CHECK(c.packets == golden::frame_seq_count);
   CHECK(c.frames == golden::frame_seq_frames);
   CHECK(c.dropped_packets == golden::frame_seq_dropped);
@@ -105,13 +115,16 @@ TEST_CASE("frame assembler: golden sequence splits by frame_cnt and counts drops
   CHECK(c.points == golden::frame_seq_count * 8);
 }
 
-TEST_CASE("frame assembler: time window closes on the first point past base + window", "[frame]") {
+TEST_CASE("frame assembler: time window closes on the first point past base + window", "[frame]")
+{
   FrameAssembler fa(window_policy(100ms), TimestampPolicy::kLidar);
   std::uint16_t cnt = 0;
   std::vector<std::size_t> sizes;
   for (std::uint64_t t = 0; t < 250 * kMs; t += 10 * kMs) {
     auto p = make_packet(cnt++, 0, 1000 + t);
-    if (auto f = fa.push(p.view, 0)) sizes.push_back(f->points.size());
+    if (auto f = fa.push(p.view, 0)) {
+      sizes.push_back(f->points.size());
+    }
   }
   // t = 0..90 -> frame, t = 100..190 -> frame, t = 200..240 partial
   CHECK(sizes == std::vector<std::size_t>{40, 40});
@@ -122,13 +135,16 @@ TEST_CASE("frame assembler: time window closes on the first point past base + wi
   CHECK(fa.time_window_active());
 }
 
-TEST_CASE("frame assembler: constant frame_cnt falls back to the time window", "[frame]") {
+TEST_CASE("frame assembler: constant frame_cnt falls back to the time window", "[frame]")
+{
   FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);
   std::uint16_t cnt = 0;
   std::size_t closed = 0;
   for (std::uint64_t t = 0; t <= 400 * kMs; t += 10 * kMs) {
     auto p = make_packet(cnt++, 0, t);
-    if (fa.push(p.view, 0)) ++closed;
+    if (fa.push(p.view, 0)) {
+      ++closed;
+    }
   }
   CHECK(fa.counters().frame_cnt_fallback == 1);
   CHECK(fa.time_window_active());
@@ -136,20 +152,24 @@ TEST_CASE("frame assembler: constant frame_cnt falls back to the time window", "
   CHECK(closed == 3);
 }
 
-TEST_CASE("frame assembler: frame_cnt that changes never falls back", "[frame]") {
+TEST_CASE("frame assembler: frame_cnt that changes never falls back", "[frame]")
+{
   FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);
   std::uint16_t cnt = 0;
   std::size_t closed = 0;
   for (std::uint64_t t = 0; t <= 400 * kMs; t += 10 * kMs) {
     auto p = make_packet(cnt++, static_cast<std::uint8_t>(t / (150 * kMs)), t);
-    if (fa.push(p.view, 0)) ++closed;
+    if (fa.push(p.view, 0)) {
+      ++closed;
+    }
   }
   CHECK(fa.counters().frame_cnt_fallback == 0);
   CHECK_FALSE(fa.time_window_active());
   CHECK(closed == 2);  // frame_cnt 0 -> 1 at 150 ms, 1 -> 2 at 300 ms
 }
 
-TEST_CASE("frame assembler: reordered packets are not drops", "[frame]") {
+TEST_CASE("frame assembler: reordered packets are not drops", "[frame]")
+{
   FrameAssembler fa(counter_policy(), TimestampPolicy::kLidar);
   for (std::uint16_t c :
        {std::uint16_t{10}, std::uint16_t{12}, std::uint16_t{11}, std::uint16_t{13}}) {
@@ -165,7 +185,8 @@ TEST_CASE("frame assembler: reordered packets are not drops", "[frame]") {
   CHECK(f->dropped_packets == 1);
 }
 
-TEST_CASE("frame assembler: udp_cnt wrap-around is in sequence", "[frame]") {
+TEST_CASE("frame assembler: udp_cnt wrap-around is in sequence", "[frame]")
+{
   DropCounter d;
   CHECK(d.observe(0xFFFE, false).dropped == 0);
   CHECK(d.observe(0xFFFF, false).dropped == 0);
@@ -178,8 +199,10 @@ TEST_CASE("frame assembler: udp_cnt wrap-around is in sequence", "[frame]") {
   CHECK(r.dropped == 0);
 }
 
-TEST_CASE("frame assembler: timestamp policies", "[frame]") {
-  SECTION("kHostOffsetOnce measures once and keeps the offset") {
+TEST_CASE("frame assembler: timestamp policies", "[frame]")
+{
+  SECTION("kHostOffsetOnce measures once and keeps the offset")
+  {
     FrameAssembler fa(counter_policy(), TimestampPolicy::kHostOffsetOnce);
     auto p0 = make_packet(0, 0, 1'000'000);
     (void)fa.push(p0.view, 5'000'000);  // host is 4 ms ahead
@@ -192,14 +215,16 @@ TEST_CASE("frame assembler: timestamp policies", "[frame]") {
     CHECK(f->base_time_ns == 5'000'000);
     CHECK(f->points[4].offset_ns == 1'000'000);  // packet 1 first point
   }
-  SECTION("kHostOffsetOnce passes PTP/GPS packets through") {
+  SECTION("kHostOffsetOnce passes PTP/GPS packets through")
+  {
     FrameAssembler fa(counter_policy(), TimestampPolicy::kHostOffsetOnce);
     auto p = make_packet(0, 0, 1'000'000, 4, DataType::kCartesian32, 3000, TimeType::kPtp);
     (void)fa.push(p.view, 5'000'000);
     CHECK_FALSE(fa.time_mapper().offset_ns().has_value());
     CHECK(fa.flush()->base_time_ns == 1'000'000);
   }
-  SECTION("kHostReceive uses the receive time") {
+  SECTION("kHostReceive uses the receive time")
+  {
     FrameAssembler fa(counter_policy(), TimestampPolicy::kHostReceive);
     auto p = make_packet(0, 0, 1'000'000, 4, DataType::kCartesian32, 3000);
     (void)fa.push(p.view, 7'000'000);
@@ -208,7 +233,8 @@ TEST_CASE("frame assembler: timestamp policies", "[frame]") {
     CHECK(f->points[3].offset_ns == 300'000);  // interpolation is packet-relative
     CHECK(f->end_time_ns == 7'300'000);
   }
-  SECTION("kLidar leaves the timestamp alone") {
+  SECTION("kLidar leaves the timestamp alone")
+  {
     FrameAssembler fa(counter_policy(), TimestampPolicy::kLidar);
     auto p = make_packet(0, 0, 1'000'000);
     (void)fa.push(p.view, 7'000'000);
@@ -216,7 +242,8 @@ TEST_CASE("frame assembler: timestamp policies", "[frame]") {
   }
 }
 
-TEST_CASE("frame assembler: offset_ns overflow forces a close", "[frame]") {
+TEST_CASE("frame assembler: offset_ns overflow forces a close", "[frame]")
+{
   FrameAssembler fa(counter_policy(10s), TimestampPolicy::kLidar);
   auto p0 = make_packet(0, 0, 0);
   (void)fa.push(p0.view, 0);
@@ -227,9 +254,11 @@ TEST_CASE("frame assembler: offset_ns overflow forces a close", "[frame]") {
   CHECK(fa.flush()->base_time_ns == 5'000'000'000ull);
 }
 
-TEST_CASE("frame assembler: point conversion of every data type", "[frame]") {
+TEST_CASE("frame assembler: point conversion of every data type", "[frame]")
+{
   Point out{};
-  SECTION("cartesian16 is in 10 mm units") {
+  SECTION("cartesian16 is in 10 mm units")
+  {
     auto p = make_packet(0, 0, 0, 1, DataType::kCartesian16);
     bytes::write_le<std::uint16_t>(p.data, 0, static_cast<std::uint16_t>(-150));  // x = -1.5 m
     bytes::write_le<std::uint16_t>(p.data, 2, 20);                                // y = 0.2 m
@@ -243,7 +272,8 @@ TEST_CASE("frame assembler: point conversion of every data type", "[frame]") {
     CHECK(out.reflectivity == 200);
     CHECK(out.tag == 0x12);
   }
-  SECTION("spherical uses zenith theta and azimuth phi") {
+  SECTION("spherical uses zenith theta and azimuth phi")
+  {
     auto p = make_packet(0, 0, 0, 1, DataType::kSpherical);
     bytes::write_le<std::uint32_t>(p.data, 0, 2000);  // 2 m
     bytes::write_le<std::uint16_t>(p.data, 4, 9000);  // theta 90 deg
@@ -256,7 +286,8 @@ TEST_CASE("frame assembler: point conversion of every data type", "[frame]") {
     CHECK(out.z == Approx(0.0F).margin(1e-4F));
     CHECK(out.reflectivity == 5);
   }
-  SECTION("imu packets are ignored by push") {
+  SECTION("imu packets are ignored by push")
+  {
     FrameAssembler fa(counter_policy(), TimestampPolicy::kLidar);
     auto p = make_packet(0, 0, 0, 1, DataType::kImu);
     CHECK_FALSE(fa.push(p.view, 0).has_value());
