@@ -123,7 +123,7 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   header's `frame_cnt` changes, a jump caused by lost packets still closes one frame;
   `kTimeWindow` closes every `window` of point time (livox_ros_driver2 publish period).
 - `TimestampPolicy`: `kLidar` (packet time as is, for PTP/GPS), `kHostOffsetOnce` (default,
-  the HANDOFF policy: LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
+  LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
   (kernel receive time). Whether a PTP/GPS `time_type` switches automatically to `kLidar` is
   decided in #6.
 - `Event{kind, time_ns, old_state, new_state, hms[8], hms_level, stats}`: a union-like struct

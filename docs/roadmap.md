@@ -11,7 +11,7 @@ PR #37). Open issues carry the labels `no-hardware` (doable against the simulato
 | --- | --- | --- |
 | 1 | Protocol, transport, session and device layers, simulator, CI | **Done** (v0.1.0) |
 | 2 | Typed configuration APIs, diagnostics, samples, hardware verification | In progress |
-| 3 | C ABI, ROS 2 driver (`livox-mid360-ros2`, separate repository) | Not started |
+| 3 | Time-sync verification, C ABI, CLI, ROS 2 driver (`livox-mid360-ros2`, separate repository) | Not started |
 
 ## Phase 1: done
 
@@ -91,9 +91,43 @@ listed in [simulator.md](simulator.md) and [protocol_notes.md](protocol_notes.md
 
 ## Phase 3: not started
 
+- **Time synchronisation on hardware**: PTP (IEEE 1588v2.0 over UDP) with linuxptp `ptp4l` as
+  the master, gPTP (L2) and GPS (PPS + GPRMC); confirm `time_type`, the `kLidar` timestamp
+  policy and timestamp monotonicity. PTP v2.1 is unsupported by the LiDAR and 1588 + gPTP
+  together is discouraged by the wiki.
 - **C ABI**: the mapping table is in [api.md](api.md#c-abi-mapping-phase-3); all output
   structs are already plain data with `static_assert`s in `tests/test_api_skeleton.cpp`.
-- **ROS 2 driver** in the separate `livox-mid360-ros2` repository.
+- **CLI** (`livox-mid360-cli`, separate repository): discovery, configuration, lvx2 record /
+  replay (#35 starts this inside `tools/`).
+- **ROS 2 driver** (`livox-mid360-ros2`, separate repository): rclcpp composable node
+  `livox_mid360_driver` in package `livox_mid360_ros2`, publishing output compatible with
+  `livox_ros_driver2` (`PointXYZRTLT` point cloud and `CustomMsg`: x, y, z, intensity, tag,
+  line, timestamp / offset_time). It uses the C++ API directly, one `Context` per node.
+- **Ideas not yet scheduled**: a loader for the official `MID360_config.json` so users can
+  migrate from Livox-SDK2 without rewriting their configuration.
+
+## Project decisions
+
+Fixed in phase 0 (2026-09-25) and not expected to change within v1.
+
+| Topic | Decision |
+| --- | --- |
+| Relation to Livox-SDK2 | Clean-room implementation from the public protocol wiki only. No code is copied from SDK2; it serves solely as a behavioural reference during hardware tests. |
+| Device scope | Base Mid-360 only. Mid-360S / Mid-360L keys (`speed_mode` `0x0021`, `pc_freq_mod` `0x0029`) are listed in the key enum but get no typed helpers. |
+| Language standard | C++20 code built with `-std=c++23`, because `std::expected` is only enabled under C++23 in libstdc++ and libc++. Clang 18 with libstdc++ cannot use `<expected>`, so Clang 19+ is required. |
+| Platform | Ubuntu 24.04 and later only. No Windows, no Ubuntu 18.04 / 20.04 / 22.04. |
+| Minimum firmware | Undecided. Firmware v13.18.0244 is the baseline for hardware verification (#11). |
+| Tests | Catch2 v3 from apt when available, otherwise FetchContent. |
+| Repository split | Core library here; ROS 2 driver and CLI in sister repositories `livox-mid360-ros2` and `livox-mid360-cli`. |
+| Lint | `.clang-format` (Google style, 100 columns, attached braces), `.clang-tidy` and `pyproject.toml` (ruff, 99 columns, pep257) are shared with `livox-mid360-ros2` through `ament_clang_format --config` / `ament_flake8 --config`. cpplint is not used because it conflicts with `#pragma once` (#17). |
+| Trademark | The README states up front that the project is unofficial and unaffiliated with Livox / DJI. |
+
+Naming:
+
+- C++ namespace `livox::mid360`, CMake target `livox::mid360_core`, shared library
+  `liblivox_mid360_core.so`, include path `<livox/mid360/...>`.
+- ROS 2 package `livox_mid360_ros2`, node `livox_mid360_driver`.
+- GitHub topics: `livox`, `mid-360`, `lidar`, `ros2`, `cpp20`.
 
 ## Out of scope
 
@@ -101,3 +135,29 @@ listed in [simulator.md](simulator.md) and [protocol_notes.md](protocol_notes.md
 - Mid-360S / Mid-360L specific features (v1 targets the base Mid-360).
 - Platforms other than Ubuntu 24.04+ (macOS builds for development only; Jetson / JetPack 6
   is unsupported until a C++23-capable toolchain is confirmed).
+
+## References
+
+Official:
+
+- Protocol (packet layouts, key-value list, CRC; primary source):
+  <https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/livox_eth_protocol_mid360.html>
+  (rev v1.4.12, 2026-09-21, adds Mid-360L notes)
+- Mid-360 index (time sync, HMS):
+  <https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/mid360.html>
+- Time synchronisation (PTP / gPTP / GPS):
+  <https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/common/time_sync.html>
+- HMS diagnostic codes (key `0x8011`):
+  <https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/hms_code_mid360.html>
+- Coordinate system and scan pattern:
+  <https://livox-wiki-en.readthedocs.io/en/latest/introduction/Point_Cloud_Characteristics_and_Coordinate_System%20.html>
+- Downloads (user manual 2024-04-25, firmware v13.18.0244 with release notes 2025-04-11,
+  Livox Viewer 2 for Ubuntu): <https://www.livoxtech.com/mid-360/downloads>
+- Livox-SDK2 (behavioural reference only, no code copied): <https://github.com/Livox-SDK/Livox-SDK2>
+- livox_ros_driver2 (the point-cloud format downstream expects):
+  <https://github.com/Livox-SDK/livox_ros_driver2>
+
+Unofficial:
+
+- <https://github.com/Yancey2023/mid360_driver>: a lightweight SDK2-free driver, useful as a
+  minimal-configuration example. Licence unchecked; no code is copied.
