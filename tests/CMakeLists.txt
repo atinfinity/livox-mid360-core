@@ -26,6 +26,7 @@ add_executable(mid360_core_tests
   test_api_skeleton.cpp
   test_frame_assembler.cpp
   test_device.cpp
+  test_reconnect.cpp
   test_golden_vectors.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
 target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)

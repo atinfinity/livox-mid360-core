@@ -117,6 +117,14 @@ std::string to_string(const SessionError& err) {
 // Discovery
 // ---------------------------------------------------------------------------
 
+namespace {
+/// With a stop token the wait is sliced so that a stop is noticed promptly.
+std::chrono::milliseconds bounded_wait(std::chrono::milliseconds left, const std::stop_token& st) {
+  constexpr std::chrono::milliseconds kSlice{100};
+  return st.stop_possible() ? std::min(left, kSlice) : left;
+}
+}  // namespace
+
 std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
     const DiscoveryOptions& options) {
   SocketOptions sopts;
@@ -148,9 +156,15 @@ std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
   std::array<std::byte, kMaxDatagramSize> buf{};
   const auto deadline = Clock::now() + options.timeout;
   while (true) {
+    if (options.stop.stop_requested()) {
+      SessionError err;
+      err.kind = SessionErrorKind::kCancelled;
+      err.cmd_id = 0;
+      return std::unexpected(err);
+    }
     const auto left = remaining(deadline);
     if (left.count() == 0) break;
-    const auto ev = poller->wait(left);
+    const auto ev = poller->wait(bounded_wait(left, options.stop));
     if (!ev) return std::unexpected(transport_error(ev.error(), 0, 1));
     if (ev->empty()) continue;
     while (true) {
@@ -288,7 +302,7 @@ std::expected<RawAck, SessionError> Session::request(std::uint16_t cmd_id,
   std::array<std::byte, kMaxDatagramSize> buf{};
   const std::uint32_t attempts = std::max<std::uint32_t>(ro.attempts, 1);
   for (std::uint32_t attempt = 1; attempt <= attempts; ++attempt) {
-    if (cancel_.exchange(false)) {
+    if (cancel_.exchange(false) || options_.stop.stop_requested()) {
       SessionError err;
       err.kind = SessionErrorKind::kCancelled;
       err.cmd_id = cmd_id;
@@ -303,9 +317,9 @@ std::expected<RawAck, SessionError> Session::request(std::uint16_t cmd_id,
     while (true) {
       const auto left = remaining(deadline);
       if (left.count() == 0) break;
-      const auto ev = poller_.wait(left);
+      const auto ev = poller_.wait(bounded_wait(left, options_.stop));
       if (!ev) return std::unexpected(transport_error(ev.error(), cmd_id, attempt));
-      if (cancel_.exchange(false)) {
+      if (cancel_.exchange(false) || options_.stop.stop_requested()) {
         SessionError err;
         err.kind = SessionErrorKind::kCancelled;
         err.cmd_id = cmd_id;
@@ -429,7 +443,7 @@ std::expected<void, SessionError> Session::wait_for_state(WorkState target,
     // Sleep on the poller so that cancel() interrupts the wait.
     const auto ev = poller_.wait(std::min(left, options_.state_poll_interval));
     if (!ev) return std::unexpected(transport_error(ev.error(), 0x0101));
-    if (cancel_.exchange(false)) {
+    if (cancel_.exchange(false) || options_.stop.stop_requested()) {
       SessionError err;
       err.kind = SessionErrorKind::kCancelled;
       err.cmd_id = 0x0101;

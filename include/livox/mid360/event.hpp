@@ -32,6 +32,8 @@ struct DeviceStats {
   std::uint64_t last_packet_time_ns = 0;  ///< host receive time of the last packet, 0 = none
   std::uint64_t pushes = 0;               ///< 0x0102 pushes accepted
   std::uint64_t last_push_time_ns = 0;    ///< host receive time of the last push, 0 = none
+  std::uint64_t disconnects = 0;          ///< kDisconnected events raised
+  std::uint64_t reconnects = 0;           ///< kReconnected events raised
   std::int64_t time_offset_ns = 0;        ///< kHostOffsetOnce: host - LiDAR, once measured
   bool time_offset_valid = false;
 };
@@ -42,17 +44,28 @@ struct ContextStats {
   std::uint64_t unknown_source = 0;  ///< dropped: source IP not registered by any Device
 };
 
+/// Why a Device left the connected state (Event::reason, issue #8).
+enum class DisconnectReason : std::uint8_t {
+  kNone = 0,
+  kPushTimeout,      ///< no 0x0102 push for ReconnectOptions::push_timeout
+  kCommandTimeout,   ///< a command timed out while the push was already stale
+  kRebootRequested,  ///< Device::reboot() was acknowledged
+  kUser,             ///< Device::disconnect()
+};
+
 /// One notification. `kind` selects which fields are meaningful; the rest are default.
 struct Event {
   enum class Kind : std::uint8_t {
     kStateChanged,  ///< `old_state` -> `new_state` seen in a 0x0102 push
     kHms,           ///< the set of active `hms` codes changed; see `hms_level`
-    kDisconnected,  ///< no push for the configured interval / command failures (#8)
-    kReconnected,   ///< session and host setup re-established (#8)
+    kDisconnected,  ///< see `reason` (#8); commands fail with kDisconnected until kReconnected
+    kReconnected,   ///< session, host setup and sampling re-established after `attempts`
     kStats,         ///< periodic `stats` snapshot (#6)
   };
   Kind kind = Kind::kStats;
   std::uint64_t time_ns = 0;               ///< host time of the observation
+  DisconnectReason reason = DisconnectReason::kNone;  ///< kDisconnected / kReconnected
+  std::uint32_t attempts = 0;              ///< kReconnected: attempts including the successful one
   WorkState old_state = WorkState::kIdle;  ///< kStateChanged
   WorkState new_state = WorkState::kIdle;  ///< kStateChanged
   std::array<HmsCode, 8> hms{};            ///< kHms: key 0x8011 slots, inactive ones raw == 0
@@ -61,6 +74,7 @@ struct Event {
 };
 
 [[nodiscard]] std::string_view to_string(Event::Kind kind) noexcept;
+[[nodiscard]] std::string_view to_string(DisconnectReason reason) noexcept;
 [[nodiscard]] std::string to_string(const Event& event);
 
 /// Errors of Context / Device. Session-level failures are wrapped, not re-encoded.
@@ -71,6 +85,7 @@ struct DeviceError {
     kInvalidState,       ///< e.g. callback set while running, command from a callback
     kAlreadyRegistered,  ///< another Device with the same IP is open on this Context
     kNotOpen,            ///< Device was closed (or never opened)
+    kDisconnected,       ///< command refused: the Device is between kDisconnected and kReconnected
   };
   Kind kind = Kind::kSession;
   std::optional<SessionError> session;  ///< kSession only

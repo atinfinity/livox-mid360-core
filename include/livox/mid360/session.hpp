@@ -20,6 +20,7 @@
 #include <expected>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -81,6 +82,9 @@ struct DiscoveryOptions {
   std::chrono::milliseconds timeout{1000};
   /// Local address to bind the discovery socket to (selects the interface for broadcast).
   Ipv4 bind_address{0, 0, 0, 0};
+  /// Optional stop token: when a stop is requested the call returns kCancelled within about
+  /// 100 ms (issue #8: the Device's reconnect thread must be interruptible).
+  std::stop_token stop;
 };
 
 /// Send 0x0000 and collect ACKs. Duplicates (same serial number) are collapsed, first wins.
@@ -104,6 +108,10 @@ struct SessionOptions {
   bool verify_serial = true;
   RequestOptions request;
   std::chrono::milliseconds state_poll_interval{100};
+  /// Optional stop token checked by every blocking call (like cancel(), but level-triggered
+  /// and shared by connect() as well). A stop makes the call return kCancelled within about
+  /// 100 ms.
+  std::stop_token stop;
 };
 
 struct SessionStats {

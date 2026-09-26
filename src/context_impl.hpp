@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -43,6 +45,8 @@ struct Context::Impl {
   struct Entry {
     Ipv4 ip;
     detail::Receiver* receiver;
+    std::string serial;  ///< for Context::find; unique among entries
+    Device* device;      ///< set by Device's constructor (bind), nullptr until then
   };
 
   ContextOptions options;
@@ -67,8 +71,13 @@ struct Context::Impl {
   std::atomic<std::uint64_t> datagrams{0};
   std::atomic<std::uint64_t> unknown_source{0};
 
-  /// False when the IP is already registered.
-  [[nodiscard]] bool add(const Ipv4& ip, detail::Receiver* receiver);
+  enum class AddResult : std::uint8_t { kOk, kDuplicateIp, kDuplicateSerial };
+  [[nodiscard]] AddResult add(const Ipv4& ip, std::string serial, detail::Receiver* receiver);
+  /// Attaches the public handle to an entry (Context::find returns it).
+  void bind(detail::Receiver* receiver, Device* device);
+  /// Moves an entry to a new source IP (reconnect found the LiDAR elsewhere). False when
+  /// another entry holds `ip`.
+  [[nodiscard]] bool rekey(detail::Receiver* receiver, const Ipv4& ip);
   /// Removes and blocks until the receive thread has dropped its snapshot of `receiver`.
   void remove(detail::Receiver* receiver);
   [[nodiscard]] bool on_receive_thread() const noexcept {

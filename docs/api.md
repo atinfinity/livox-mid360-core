@@ -3,9 +3,10 @@
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions
 are recorded in [issue #9](https://github.com/atinfinity/livox-mid360-core/issues/9); this page
 describes the resulting shape. The data path (#6: receive thread, dispatch, frames, IMU,
-drop counting, `kStats`) and push handling (#7: `work_state()`, `hms()`, `kStateChanged`,
-`kHms`) are implemented and the headers are part of `mid360.hpp`; reconnection (#8) is
-still to come.
+drop counting, `kStats`), push handling (#7: `work_state()`, `hms()`, `kStateChanged`,
+`kHms`) and reconnection / multi-device (#8: `kDisconnected`, `kReconnected`,
+`ReconnectOptions`, `Context::find()`) are implemented and the headers are part of
+`mid360.hpp`.
 
 ## Position in the stack
 
@@ -62,8 +63,8 @@ dev.reset();                                                          // before 
   destroyed before its Context (asserted in debug builds).
 - The Device destructor unregisters from the Context and waits for an in-flight callback to
   return. Destroying a Device from inside one of its own callbacks is therefore forbidden.
-- Reconnection after a LiDAR reboot or cable pull is added by #8 behind the same API
-  (`Event::kDisconnected` / `kReconnected`).
+- Reconnection after a LiDAR reboot or cable pull happens behind the same API
+  (`Event::kDisconnected` / `kReconnected`, see "Reconnection" below).
 
 ## Threading rules
 
@@ -197,8 +198,76 @@ thread parses it and consumes two keys (issue #7 decisions):
   raised with the slots in wire order and `hms_level` = highest active level.
 
 Other pushed keys are ignored for now. `DeviceStats::pushes` / `last_push_time_ns` count
-accepted pushes (frames that fail to parse count in `bad_packets`) and are what #8 will use
-for disconnect detection.
+accepted pushes (frames that fail to parse count in `bad_packets`); the push is also the
+heartbeat for disconnect detection below.
+
+## Reconnection
+
+Decisions recorded in [issue #8](https://github.com/atinfinity/livox-mid360-core/issues/8).
+A Device is either *connected* or *disconnected* (`Device::connected()`); the transitions are
+`Event::kDisconnected` (with `reason`) and `Event::kReconnected` (with `attempts`), both
+delivered on the receive thread like every other event. `DeviceStats::disconnects` /
+`reconnects` count them. Options live in `DeviceOptions::reconnect` (`ReconnectOptions`).
+
+**Detection** (connected → disconnected), first of:
+
+- no accepted 0x0102 push for `push_timeout` (3 s by default, checked by the receive thread's
+  timer; the LiDAR pushes about once per second) → `kPushTimeout`;
+- a command timed out **and** the last push is older than `push_timeout / 3` (one nominal
+  push period): a lone lost ACK on a healthy link is only reported to the caller →
+  `kCommandTimeout`;
+- `reboot()` was acknowledged: the outage is known, no need to wait for the timeout →
+  `kRebootRequested`;
+- `disconnect()` was called → `kUser`.
+
+Point-cloud / IMU silence is not a signal: the user may simply have stopped sampling.
+
+**While disconnected**, `start_sampling()`, `stop_sampling()`, `configure()`, `inquire()` and
+`reboot()` fail fast with `DeviceError::Kind::kDisconnected` instead of waiting for a LiDAR
+that is not there. Pushes that do arrive are still parsed (`work_state()` follows them and
+`kStateChanged` is raised against the last state seen before the outage; the baseline is
+not reset). Callbacks stay frozen for the whole period when sampling had been requested.
+
+**Recovery** (disconnected → connected) is one attempt, shared by the automatic worker and
+`Device::reconnect()`:
+
+1. `Session::connect` to the last known command endpoint with the serial number verified
+   (a cable pull keeps the address, so this is fast and does not broadcast);
+2. otherwise `discover()` (`discovery_targets` unicast, or broadcast; `discovery_timeout`)
+   filtered by the original serial number — a reboot or DHCP may have moved the LiDAR, and
+   the serial, not the IP, is its identity. A new IP re-registers the Device with the Context;
+   an IP held by another Device fails the attempt (`kAlreadyRegistered`) and it is retried;
+3. `apply_host_setup` with the setup recorded at `open()` (the LiDAR may have rebooted);
+4. `work_tgt_mode = SAMPLING` plus the state wait if sampling had been requested;
+5. the time offset (`kHostOffsetOnce`) is re-measured at the next packet, the partial frame
+   is discarded, and `kReconnected` is raised.
+
+Any failure keeps the Device disconnected. With `enabled` (the default) a worker thread owned
+by the Device — started lazily at the first disconnect, joined by the destructor — repeats the
+attempt with exponential backoff (`initial_backoff` 500 ms, doubling to `max_backoff` 8 s)
+for as long as the Device lives; there is no terminal "failed" state to poll and reset. With
+`enabled = false` the Device only detects; `reconnect()` runs one attempt on the caller's
+thread (serialised with the commands, `kSession` on failure, no-op when connected).
+
+The destructor requests a stop that the attempt observes within about 100 ms even inside
+`discover()` or `Session::connect` (`DiscoveryOptions::stop` / `SessionOptions::stop`,
+`std::stop_token`), so tearing down a Device mid-outage does not wait for the timeouts.
+
+## Multiple devices
+
+Every Device opened on a Context is registered under its source IP (dispatch) and its serial
+number (identity). `Context::find(serial)` returns the open `Device*` or nullptr and
+`Context::devices()` lists them; both are non-owning — the caller keeps the `unique_ptr` and
+destroys it before the Context, as before. `Device::open` refuses a serial number (or an IP)
+that is already open with `kAlreadyRegistered`. Discovery of every LiDAR on the network stays
+the free function `discover()`; auto-creating a Device per serial found is left to the caller
+(or a later `DeviceManager`).
+
+Each Device reconnects independently: one LiDAR's outage does not touch the others. Several
+Devices need distinct command sockets (`SessionOptions::host_command_port` 0 or distinct
+values). In the tests the second simulator answers from 127.0.0.2, which Linux accepts on the
+loopback interface as is and macOS after `sudo ifconfig lo0 alias 127.0.0.2` (the test skips
+otherwise).
 
 ## C ABI mapping (phase 3)
 
@@ -211,6 +280,8 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `Frame` | `const livox_mid360_frame_t*` with `const livox_mid360_point_t* points, size_t count` |
 | `Point`, `ImuData`, `Event`, `DeviceStats` | same layout, `typedef struct` |
 | `DeviceError` | `int` code + `livox_mid360_error_string()` |
+| `Context::find` / `devices` | `livox_mid360_context_find(ctx, sn)` / `..._devices(ctx, out, cap)` |
+| `ReconnectOptions`, `DisconnectReason` | same layout, `typedef struct` / `enum` |
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
 
 `livox-mid360-ros2` (separate repository) uses the C++ API directly: one `Context`, one

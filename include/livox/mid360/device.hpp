@@ -7,7 +7,15 @@
 //     your own thread instead;
 //   - an exception escaping a callback terminates the process;
 //   - a Device must not be destroyed from inside its own callbacks.
-// Data path (#6) and push / state / HMS (#7) are implemented; reconnection is #8.
+// Data path (#6), push / state / HMS (#7) and reconnection (#8) are implemented.
+// Reconnection: a Device is *disconnected* when no 0x0102 push arrived for
+// ReconnectOptions::push_timeout (or a command timed out while the push was already stale,
+// or reboot() was acknowledged). Event::kDisconnected is raised, commands fail with
+// DeviceError::Kind::kDisconnected, and - when ReconnectOptions::enabled - a worker thread
+// owned by the Device retries with exponential backoff: the last known command endpoint first
+// (serial verified), then discovery filtered by serial. On success the host setup is applied
+// again, sampling is resumed if it had been requested, and Event::kReconnected is raised.
+// Callbacks stay frozen for the whole period when sampling was requested.
 #pragma once
 
 #include <array>
@@ -18,6 +26,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <vector>
 
 #include "livox/mid360/config.hpp"
 #include "livox/mid360/context.hpp"
@@ -32,6 +41,21 @@
 LIVOX_MID360_API_BEGIN
 namespace livox::mid360 {
 
+/// Disconnect detection and automatic recovery (issue #8).
+struct ReconnectOptions {
+  bool enabled = true;  ///< false: only detect; recover with Device::reconnect()
+  /// No accepted 0x0102 push for this long → kDisconnected. The LiDAR pushes about once per
+  /// second. A command timeout counts as a disconnect only when the last push is older than
+  /// a third of this value (one nominal push period).
+  std::chrono::milliseconds push_timeout{3000};
+  std::chrono::milliseconds initial_backoff{500};  ///< delay after the first failed attempt
+  std::chrono::milliseconds max_backoff{8000};     ///< doubling stops here
+  /// Timeout of the discovery fallback per attempt (the direct attempt uses `session.request`).
+  std::chrono::milliseconds discovery_timeout{1000};
+  /// Unicast discovery targets for the fallback; empty = broadcast (see DiscoveryOptions).
+  std::vector<Endpoint> discovery_targets;
+};
+
 struct DeviceOptions {
   /// Ports, data type and IMU enable. `ip` and the ports are taken from the Context;
   /// `work_tgt_mode` is ignored (use start_sampling()).
@@ -43,6 +67,7 @@ struct DeviceOptions {
   bool verify_crc = true;
   /// Period of Event::Kind::kStats; 0 disables it.
   std::chrono::milliseconds stats_interval{1000};
+  ReconnectOptions reconnect;
 };
 
 /// Per-packet metadata handed to on_packet together with the non-owning DataPacketView.
@@ -95,8 +120,21 @@ class Device {
   /// Interrupts a blocking command from another thread (not serialised).
   void cancel() noexcept;
 
+  // --- connection (issue #8)
+  /// False between kDisconnected and kReconnected.
+  [[nodiscard]] bool connected() const noexcept;
+  /// One recovery attempt on the caller's thread (serialised with the commands): direct
+  /// endpoint, then discovery; host setup and sampling replayed. No-op when connected.
+  /// The automatic worker uses the same path. kSession on failure.
+  std::expected<void, DeviceError> reconnect();
+  /// Declares the Device disconnected (reason kUser) without touching the LiDAR; the
+  /// automatic worker, when enabled, reconnects. Useful for tests and for forcing a
+  /// re-discovery after a known network change.
+  void disconnect();
+
   // --- observation (thread-safe snapshots)
-  [[nodiscard]] const DiscoveredDevice& info() const noexcept;
+  /// Discovery record; `ip` / `cmd_port` / `from` follow a reconnect to a new address.
+  [[nodiscard]] DiscoveredDevice info() const;
   /// cur_work_state from the last 0x0102 push; nullopt before the first push.
   [[nodiscard]] std::optional<WorkState> work_state() const;
   /// hms_code slots from the last 0x0102 push (all inactive before the first push).
