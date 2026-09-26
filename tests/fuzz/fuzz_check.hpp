@@ -3,8 +3,10 @@
 // assert(), which NDEBUG would strip.
 #pragma once
 
-namespace fuzz {
-inline void require(bool ok) {
+namespace fuzz
+{
+inline void require(bool ok)
+{
   if (!ok) __builtin_trap();
 }
 }  // namespace fuzz

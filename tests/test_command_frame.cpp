@@ -7,7 +7,8 @@
 
 using namespace livox::mid360;
 
-TEST_CASE("discovery request frame layout", "[cmd]") {
+TEST_CASE("discovery request frame layout", "[cmd]")
+{
   auto f = build_command_frame({.seq_num = 1, .cmd_id = 0x0000});
   REQUIRE(f);
   REQUIRE(f->size() == 24);
@@ -22,20 +23,25 @@ TEST_CASE("discovery request frame layout", "[cmd]") {
   CHECK((*f)[10] == std::byte{0});
   CHECK((*f)[11] == std::byte{0});
   // crc32 of empty data is 0
-  for (int i = 20; i < 24; ++i) CHECK((*f)[static_cast<std::size_t>(i)] == std::byte{0});
+  for (int i = 20; i < 24; ++i) {
+    CHECK((*f)[static_cast<std::size_t>(i)] == std::byte{0});
+  }
   // header crc matches
   const auto c16 = crc::crc16_ccitt_false(std::span<const std::byte>(*f).first(18));
-  CHECK(bytes_of({static_cast<unsigned>(c16 & 0xFF), static_cast<unsigned>(c16 >> 8)}) ==
-        std::vector<std::byte>(f->begin() + 18, f->begin() + 20));
+  CHECK(
+    bytes_of({static_cast<unsigned>(c16 & 0xFF), static_cast<unsigned>(c16 >> 8)}) ==
+    std::vector<std::byte>(f->begin() + 18, f->begin() + 20));
 }
 
-TEST_CASE("encode then parse round trip with payload", "[cmd]") {
+TEST_CASE("encode then parse round trip with payload", "[cmd]")
+{
   const auto payload = bytes_of("hello");
-  CommandFrameSpec spec{.seq_num = 0xA5A5A5A5,
-                        .cmd_id = 0x0100,
-                        .cmd_type = CmdType::kReq,
-                        .sender_type = SenderType::kHost,
-                        .data = payload};
+  CommandFrameSpec spec{
+    .seq_num = 0xA5A5A5A5,
+    .cmd_id = 0x0100,
+    .cmd_type = CmdType::kReq,
+    .sender_type = SenderType::kHost,
+    .data = payload};
   auto f = build_command_frame(spec);
   REQUIRE(f);
   REQUIRE(f->size() == 29);
@@ -50,7 +56,8 @@ TEST_CASE("encode then parse round trip with payload", "[cmd]") {
   CHECK(std::vector<std::byte>(v->data.begin(), v->data.end()) == payload);
 }
 
-TEST_CASE("encode into fixed buffer", "[cmd]") {
+TEST_CASE("encode into fixed buffer", "[cmd]")
+{
   std::array<std::byte, 24> small{};
   const auto payload = bytes_of("x");
   CHECK(encode_command_frame(small, {.data = payload}).error() == EncodeError::kBufferTooSmall);
@@ -64,7 +71,8 @@ TEST_CASE("encode into fixed buffer", "[cmd]") {
   CHECK(parse_command_frame(*f).has_value());
 }
 
-TEST_CASE("parse rejects malformed frames", "[cmd]") {
+TEST_CASE("parse rejects malformed frames", "[cmd]")
+{
   auto ok = build_command_frame({.seq_num = 3, .cmd_id = 0x0200, .data = bytes_of("ab")}).value();
   CHECK(parse_command_frame(std::span(ok).first(10)).error() == ParseError::kTooShort);
 
@@ -89,7 +97,8 @@ TEST_CASE("parse rejects malformed frames", "[cmd]") {
   CHECK(parse_command_frame(bad).error() == ParseError::kBadCrc32);
 }
 
-TEST_CASE("trailing bytes after length are ignored", "[cmd]") {
+TEST_CASE("trailing bytes after length are ignored", "[cmd]")
+{
   auto ok = build_command_frame({.cmd_id = 0x0000}).value();
   ok.push_back(std::byte{0xFF});
   auto v = parse_command_frame(ok);
@@ -97,7 +106,8 @@ TEST_CASE("trailing bytes after length are ignored", "[cmd]") {
   CHECK(v->data.empty());
 }
 
-TEST_CASE("to_string coverage", "[cmd]") {
+TEST_CASE("to_string coverage", "[cmd]")
+{
   CHECK(to_string(RetCode::kSuccess) == "SUCCESS");
   CHECK(to_string(RetCode::kParamReadOnly) == "PARAM_RD_ONLY");
   // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): unknown value on purpose

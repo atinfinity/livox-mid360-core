@@ -14,36 +14,42 @@
 using namespace livox::mid360;
 using namespace std::chrono_literals;
 
-namespace {
+namespace
+{
 
-struct Fixture {
+struct Fixture
+{
   std::optional<SimProcess> sim;
   std::string err;
 
   Fixture() { sim = SimProcess::start(err, {"--startup-delay", "1"}); }
 
-  [[nodiscard]] DiscoveryOptions discovery_options() const {
+  [[nodiscard]] DiscoveryOptions discovery_options() const
+  {
     DiscoveryOptions o;
     o.targets = {Endpoint::loopback(sim->ports().discovery)};
     o.timeout = 2s;
     return o;
   }
 
-  [[nodiscard]] static SessionOptions session_options() {
+  [[nodiscard]] static SessionOptions session_options()
+  {
     SessionOptions o;
     o.host_command_port = 0;  // ephemeral: several tests may run in one process
     o.bind_address = {127, 0, 0, 1};
     return o;
   }
 
-  [[nodiscard]] Session connect() const {
+  [[nodiscard]] Session connect() const
+  {
     auto s = Session::connect(Endpoint::loopback(sim->ports().cmd), session_options());
     REQUIRE(s.has_value());
     return std::move(*s);
   }
 
   /// Send a control command and wait until the simulator confirms it.
-  void control(std::string_view json) {
+  void control(std::string_view json)
+  {
     REQUIRE(sim->control(json));
     REQUIRE(sim->wait_event("\"control\"").has_value());
   }
@@ -51,14 +57,17 @@ struct Fixture {
 
 }  // namespace
 
-TEST_CASE("Session: unicast discovery and connect", "[sim][session]") {
+TEST_CASE("Session: unicast discovery and connect", "[sim][session]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
 
   const auto devices = discover(f.discovery_options());
   REQUIRE(devices.has_value());
   REQUIRE(devices->size() == 1);
-  const auto& dev = devices->front();
+  const auto & dev = devices->front();
   CHECK(dev.serial_number == f.sim->sn());
   CHECK(dev.cmd_port == f.sim->ports().cmd);
   CHECK(dev.ip == Ipv4{127, 0, 0, 1});
@@ -85,9 +94,12 @@ TEST_CASE("Session: unicast discovery and connect", "[sim][session]") {
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("Session: typed commands and rejections", "[sim][session]") {
+TEST_CASE("Session: typed commands and rejections", "[sim][session]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
 
   // Read-only key -> 0x22 with error_key.
@@ -130,9 +142,12 @@ TEST_CASE("Session: typed commands and rejections", "[sim][session]") {
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("Session: retry on dropped ACK", "[sim][session]") {
+TEST_CASE("Session: retry on dropped ACK", "[sim][session]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
 
   f.control(R"({"cmd":"drop_ack","count":1})");
@@ -146,9 +161,12 @@ TEST_CASE("Session: retry on dropped ACK", "[sim][session]") {
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("Session: timeout after all attempts", "[sim][session]") {
+TEST_CASE("Session: timeout after all attempts", "[sim][session]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
 
   f.control(R"({"cmd":"silence","seconds":3})");
@@ -166,9 +184,12 @@ TEST_CASE("Session: timeout after all attempts", "[sim][session]") {
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("Session: wait_for_state", "[sim][session]") {
+TEST_CASE("Session: wait_for_state", "[sim][session]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
 
   // The simulator spends --startup-delay in MOTORSTARTUP before SAMPLING.
@@ -189,9 +210,12 @@ TEST_CASE("Session: wait_for_state", "[sim][session]") {
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("Session: cancel from another thread", "[sim][session]") {
+TEST_CASE("Session: cancel from another thread", "[sim][session]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
 
   f.control(R"({"cmd":"silence","seconds":5})");
@@ -211,14 +235,16 @@ TEST_CASE("Session: cancel from another thread", "[sim][session]") {
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("Session: broadcast discovery", "[sim][session][.broadcast]") {
+TEST_CASE("Session: broadcast discovery", "[sim][session][.broadcast]")
+{
   // The simulator binds 127.0.0.1, so 255.255.255.255 does not reach it on most hosts.
   // Kept as a hidden test for manual runs on a LAN with a real Mid-360.
   DiscoveryOptions o;
   o.timeout = 1s;
   const auto devices = discover(o);
-  if (!devices)
+  if (!devices) {
     WARN("broadcast discovery failed: " << to_string(devices.error()));
-  else if (devices->empty())
+  } else if (devices->empty()) {
     WARN("broadcast discovery found no devices");
+  }
 }

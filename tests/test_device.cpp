@@ -20,18 +20,23 @@
 using namespace livox::mid360;
 using namespace std::chrono_literals;
 
-namespace {
+namespace
+{
 
-bool wait_until(const std::function<bool()>& pred, std::chrono::milliseconds timeout = 5s) {
+bool wait_until(const std::function<bool()> & pred, std::chrono::milliseconds timeout = 5s)
+{
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   while (std::chrono::steady_clock::now() < deadline) {
-    if (pred()) return true;
+    if (pred()) {
+      return true;
+    }
     std::this_thread::sleep_for(10ms);
   }
   return pred();
 }
 
-std::unique_ptr<Context> loopback_context() {
+std::unique_ptr<Context> loopback_context()
+{
   ContextOptions o;
   o.bind_address = {127, 0, 0, 1};
   o.push_port = o.point_port = o.imu_port = 0;
@@ -40,7 +45,8 @@ std::unique_ptr<Context> loopback_context() {
   return std::move(*c);
 }
 
-struct Fixture {
+struct Fixture
+{
   std::optional<SimProcess> sim;
   std::string err;
   std::unique_ptr<Context> context;
@@ -48,36 +54,46 @@ struct Fixture {
   /// The simulator streams at a quarter of the real rate (500 pkt/s point cloud, 50 Hz IMU)
   /// so that sanitizer builds keep up; per-frame packet counts below assume this. Pushes
   /// come at 10 Hz so that state / HMS tests do not wait a second per step.
-  explicit Fixture(std::vector<std::string> args = {}) {
+  explicit Fixture(std::vector<std::string> args = {})
+  {
     args.insert(args.end(), {"--rate-multiplier", "0.25", "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(args));
-    if (sim) context = loopback_context();
+    if (sim) {
+      context = loopback_context();
+    }
   }
 
-  [[nodiscard]] DiscoveredDevice discovered() const {
-    return DiscoveredDevice{.serial_number = sim->sn(),
-                            .ip = {127, 0, 0, 1},
-                            .cmd_port = sim->ports().cmd,
-                            .dev_type = 9,
-                            .from = Endpoint::loopback(sim->ports().cmd)};
+  [[nodiscard]] DiscoveredDevice discovered() const
+  {
+    return DiscoveredDevice{
+      .serial_number = sim->sn(),
+      .ip = {127, 0, 0, 1},
+      .cmd_port = sim->ports().cmd,
+      .dev_type = 9,
+      .from = Endpoint::loopback(sim->ports().cmd)};
   }
 
-  [[nodiscard]] static DeviceOptions options() {
+  [[nodiscard]] static DeviceOptions options()
+  {
     DeviceOptions o;
     o.session.host_command_port = 0;
     o.session.request = {.timeout = 500ms, .attempts = 3};
     return o;
   }
 
-  [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions& o = options()) const {
+  [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions & o = options()) const
+  {
     auto d = Device::open(*context, discovered(), o);
-    if (!d) FAIL(to_string(d.error()));
+    if (!d) {
+      FAIL(to_string(d.error()));
+    }
     return std::move(*d);
   }
 };
 
 /// Everything the callbacks record, shared with the receive thread.
-struct Recorder {
+struct Recorder
+{
   std::atomic<std::uint64_t> frames{0};
   std::atomic<std::uint64_t> points{0};
   std::atomic<std::uint64_t> frame_packets{0};  ///< sum of Frame::packets
@@ -92,18 +108,20 @@ struct Recorder {
   std::vector<Frame> kept;    ///< headers only (points cleared) of every frame
   std::vector<Event> events;  ///< kStateChanged / kHms in order
 
-  void attach(Device& d) {
-    REQUIRE(d.on_packet([this](const DataPacketView& p, const ReceiveInfo& info) {
+  void attach(Device & d)
+  {
+    REQUIRE(d.on_packet([this](const DataPacketView & p, const ReceiveInfo & info) {
                if (info.host_time_ns == 0 || info.source.ip != Ipv4{127, 0, 0, 1}) ok = false;
                if (p.header.data_type == DataType::kImu) {
                  ++imu_packets;
                } else {
                  ++pcl_packets;
                }
-             }).has_value());
-    REQUIRE(d.on_frame([this](Frame&& f) {
+             })
+              .has_value());
+    REQUIRE(d.on_frame([this](Frame && f) {
                if (f.points.empty() || f.end_time_ns < f.base_time_ns) ok = false;
-               for (const Point& p : f.points) {
+               for (const Point & p : f.points) {
                  if (p.line > 3 || p.offset_ns > f.end_time_ns - f.base_time_ns) ok = false;
                }
                ++frames;
@@ -112,12 +130,14 @@ struct Recorder {
                const std::lock_guard lock(mutex);
                f.points.clear();
                kept.push_back(std::move(f));
-             }).has_value());
-    REQUIRE(d.on_imu([this](const ImuData& s) {
+             })
+              .has_value());
+    REQUIRE(d.on_imu([this](const ImuData & s) {
                if (s.time_ns == 0) ok = false;
                ++imu;
-             }).has_value());
-    REQUIRE(d.on_event([this](const Event& e) {
+             })
+              .has_value());
+    REQUIRE(d.on_event([this](const Event & e) {
                if (e.kind == Event::Kind::kStats) {
                  ++stats_events;
                  return;
@@ -127,10 +147,12 @@ struct Recorder {
                events.push_back(e);
                if (e.kind == Event::Kind::kStateChanged) ++state_events;
                if (e.kind == Event::Kind::kHms) ++hms_events;
-             }).has_value());
+             })
+              .has_value());
   }
 
-  [[nodiscard]] Event event(std::size_t i) {
+  [[nodiscard]] Event event(std::size_t i)
+  {
     const std::lock_guard lock(mutex);
     REQUIRE(i < events.size());
     return events[i];
@@ -139,10 +161,11 @@ struct Recorder {
 
 }  // namespace
 
-TEST_CASE("Context: ephemeral ports are resolved and unknown sources are counted",
-          "[device][context]") {
+TEST_CASE(
+  "Context: ephemeral ports are resolved and unknown sources are counted", "[device][context]")
+{
   auto ctx = loopback_context();
-  const ContextOptions& o = ctx->options();
+  const ContextOptions & o = ctx->options();
   CHECK(o.push_port != 0);
   CHECK(o.point_port != 0);
   CHECK(o.imu_port != 0);
@@ -159,7 +182,8 @@ TEST_CASE("Context: ephemeral ports are resolved and unknown sources are counted
   CHECK(ctx->stats().unknown_source == 3);
 }
 
-TEST_CASE("Context: invalid options", "[device][context]") {
+TEST_CASE("Context: invalid options", "[device][context]")
+{
   ContextOptions o;
   o.batch_size = 0;
   const auto c = Context::create(o);
@@ -168,7 +192,8 @@ TEST_CASE("Context: invalid options", "[device][context]") {
   CHECK(to_string(c.error()) == "invalid_argument");
 }
 
-TEST_CASE("Event / DeviceError to_string", "[device]") {
+TEST_CASE("Event / DeviceError to_string", "[device]")
+{
   Event e;
   e.kind = Event::Kind::kStateChanged;
   e.old_state = WorkState::kIdle;
@@ -192,11 +217,15 @@ TEST_CASE("Event / DeviceError to_string", "[device]") {
   CHECK(to_string(DeviceError::Kind::kAlreadyRegistered) == "already_registered");
 }
 
-TEST_CASE("Device: open errors", "[sim][device]") {
+TEST_CASE("Device: open errors", "[sim][device]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
 
-  SECTION("unreachable command port wraps the session error") {
+  SECTION("unreachable command port wraps the session error")
+  {
     DiscoveredDevice d = f.discovered();
     d.cmd_port = 1;
     d.from = Endpoint::loopback(1);
@@ -208,14 +237,16 @@ TEST_CASE("Device: open errors", "[sim][device]") {
     REQUIRE(r.error().session.has_value());
     CHECK(r.error().session->kind == SessionErrorKind::kTimeout);
   }
-  SECTION("invalid options are rejected before any I/O") {
+  SECTION("invalid options are rejected before any I/O")
+  {
     DeviceOptions o = Fixture::options();
     o.frame_policy.window = 0ns;
     const auto r = Device::open(*f.context, f.discovered(), o);
     REQUIRE_FALSE(r.has_value());
     CHECK(r.error().kind == DeviceError::Kind::kInvalidArgument);
   }
-  SECTION("a second Device with the same IP is refused") {
+  SECTION("a second Device with the same IP is refused")
+  {
     auto first = f.open();
     const auto second = Device::open(*f.context, f.discovered(), Fixture::options());
     REQUIRE_FALSE(second.has_value());
@@ -226,9 +257,12 @@ TEST_CASE("Device: open errors", "[sim][device]") {
   }
 }
 
-TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
+TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   DeviceOptions o = Fixture::options();
   o.stats_interval = 200ms;
   Recorder rec;  // outlives the Device: callbacks may run until the destructor returns
@@ -241,7 +275,7 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
   REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
   REQUIRE(dev->start_sampling().has_value());
   // Callbacks are frozen while sampling.
-  const auto locked = dev->on_imu([](const ImuData&) {});
+  const auto locked = dev->on_imu([](const ImuData &) {});
   REQUIRE_FALSE(locked.has_value());
   CHECK(locked.error().kind == DeviceError::Kind::kInvalidState);
 
@@ -266,8 +300,8 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
     REQUIRE(rec.kept.size() >= 5);
     // 100 ms frames at 500 pkt/s: about 50 packets, 96 points each, consecutive frame_cnt.
     for (std::size_t i = 1; i < rec.kept.size(); ++i) {
-      const Frame& a = rec.kept[i - 1];
-      const Frame& b = rec.kept[i];
+      const Frame & a = rec.kept[i - 1];
+      const Frame & b = rec.kept[i];
       CHECK(b.index == a.index + 1);
       CHECK(b.frame_cnt == static_cast<std::uint8_t>(a.frame_cnt + 1));
       // (no `b.base >= a.end` check: the simulator's catch-up bursts overlap packet times)
@@ -286,7 +320,7 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
   CHECK(inq->get(Key::kCurWorkState).has_value());
 
   REQUIRE(dev->stop_sampling().has_value());
-  CHECK(dev->on_imu([](const ImuData&) {}).has_value());  // editable again
+  CHECK(dev->on_imu([](const ImuData &) {}).has_value());  // editable again
   // The LiDAR is idle: once the socket queue has drained, the packet count stops moving.
   std::uint64_t settled = dev->stats().packets;
   REQUIRE(wait_until([&] {
@@ -300,13 +334,18 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]") {
   dev.reset();  // before the Context
 }
 
-TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]") {
+TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
-  for (const HmsCode& c : dev->hms()) CHECK_FALSE(c.active());
+  for (const HmsCode & c : dev->hms()) {
+    CHECK_FALSE(c.active());
+  }
 
   // The first push records the state without a kStateChanged. The simulator powers up
   // into SAMPLING (default work_tgt_mode) after its MOTORSTARTUP delay, so depending on
@@ -370,8 +409,12 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]") {
   REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[]})"));
   REQUIRE(wait_until([&] { return rec.hms_events >= 3; }));
   CHECK(rec.event(base + 3).hms_level == HmsLevel::kNone);
-  for (const HmsCode& c : rec.event(base + 3).hms) CHECK_FALSE(c.active());
-  for (const HmsCode& c : dev->hms()) CHECK_FALSE(c.active());
+  for (const HmsCode & c : rec.event(base + 3).hms) {
+    CHECK_FALSE(c.active());
+  }
+  for (const HmsCode & c : dev->hms()) {
+    CHECK_FALSE(c.active());
+  }
 
   // A LiDAR-side transition to ERROR shows up as well.
   REQUIRE(f.sim->control(R"({"cmd":"set_state","state":4})"));
@@ -384,9 +427,12 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]") {
   dev.reset();
 }
 
-TEST_CASE("Device: drop_rate shows up in dropped_packets", "[sim][device]") {
+TEST_CASE("Device: drop_rate shows up in dropped_packets", "[sim][device]")
+{
   Fixture f({"--drop-rate", "0.2"});
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
@@ -399,15 +445,20 @@ TEST_CASE("Device: drop_rate shows up in dropped_packets", "[sim][device]") {
   std::uint64_t per_frame = 0;
   {
     const std::lock_guard lock(rec.mutex);
-    for (const Frame& fr : rec.kept) per_frame += fr.dropped_packets;
+    for (const Frame & fr : rec.kept) {
+      per_frame += fr.dropped_packets;
+    }
   }
   CHECK(per_frame <= s.dropped_packets);
   CHECK(per_frame > 0);
 }
 
-TEST_CASE("Device: --frame-ms drives frame_cnt splitting", "[sim][device]") {
+TEST_CASE("Device: --frame-ms drives frame_cnt splitting", "[sim][device]")
+{
   Fixture f({"--frame-ms", "20"});
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
@@ -416,13 +467,18 @@ TEST_CASE("Device: --frame-ms drives frame_cnt splitting", "[sim][device]") {
   CHECK(dev->stats().frame_cnt_fallback == 0);
   const std::lock_guard lock(rec.mutex);
   std::uint64_t packets = 0;
-  for (const Frame& fr : rec.kept) packets += fr.packets;
+  for (const Frame & fr : rec.kept) {
+    packets += fr.packets;
+  }
   CHECK(packets / rec.kept.size() < 25);  // 20 ms at 500 pkt/s = 10 packets
 }
 
-TEST_CASE("Device: --frame-ms 0 falls back to the time window", "[sim][device]") {
+TEST_CASE("Device: --frame-ms 0 falls back to the time window", "[sim][device]")
+{
   Fixture f({"--frame-ms", "0"});
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   DeviceOptions o = Fixture::options();
   o.frame_policy.window = 50ms;
   Recorder rec;
@@ -435,7 +491,7 @@ TEST_CASE("Device: --frame-ms 0 falls back to the time window", "[sim][device]")
   const std::lock_guard lock(rec.mutex);
   // The first frame spans the 2 x window grace period; the rest are one window each.
   for (std::size_t i = 1; i < rec.kept.size(); ++i) {
-    const Frame& fr = rec.kept[i];
+    const Frame & fr = rec.kept[i];
     CHECK(fr.frame_cnt == rec.kept[0].frame_cnt);
     CHECK(fr.end_time_ns - fr.base_time_ns < 60'000'000);
   }
@@ -445,9 +501,12 @@ TEST_CASE("Device: --frame-ms 0 falls back to the time window", "[sim][device]")
   REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
 }
 
-TEST_CASE("Device: time window mode and kHostReceive", "[sim][device]") {
+TEST_CASE("Device: time window mode and kHostReceive", "[sim][device]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   DeviceOptions o = Fixture::options();
   o.frame_policy.mode = FramePolicy::Mode::kTimeWindow;
   o.frame_policy.window = 30ms;
@@ -460,15 +519,18 @@ TEST_CASE("Device: time window mode and kHostReceive", "[sim][device]") {
   CHECK(rec.ok);
   CHECK_FALSE(dev->stats().time_offset_valid);
   const std::lock_guard lock(rec.mutex);
-  for (const Frame& fr : rec.kept) {
+  for (const Frame & fr : rec.kept) {
     CHECK(fr.end_time_ns - fr.base_time_ns < 40'000'000);
     CHECK(fr.packets < 30);
   }
 }
 
-TEST_CASE("Device: idle close delivers the partial frame", "[sim][device]") {
+TEST_CASE("Device: idle close delivers the partial frame", "[sim][device]")
+{
   Fixture f({"--frame-ms", "50"});
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
@@ -485,9 +547,12 @@ TEST_CASE("Device: idle close delivers the partial frame", "[sim][device]") {
   CHECK(rec.frames == frames_now);  // nothing is invented while silent
 }
 
-TEST_CASE("Device: stop discards the partial frame and re-enables callbacks", "[sim][device]") {
+TEST_CASE("Device: stop discards the partial frame and re-enables callbacks", "[sim][device]")
+{
   Fixture f({"--frame-ms", "0"});  // no frame_cnt closes: frames come from the fallback
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   DeviceOptions o = Fixture::options();
   o.frame_policy.window = 1s;  // fallback only after 2 s: everything stays partial
   Recorder rec;
@@ -497,7 +562,7 @@ TEST_CASE("Device: stop discards the partial frame and re-enables callbacks", "[
   REQUIRE(wait_until([&] { return rec.pcl_packets >= 100; }));
   REQUIRE(dev->stop_sampling().has_value());
   CHECK(rec.frames == 0);
-  CHECK(dev->on_imu([](const ImuData&) {}).has_value());
+  CHECK(dev->on_imu([](const ImuData &) {}).has_value());
   REQUIRE(dev->start_sampling().has_value());
   REQUIRE(wait_until([&] { return rec.frames >= 1; }, 6s));
   CHECK(rec.ok);

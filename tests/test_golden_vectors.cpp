@@ -14,23 +14,25 @@ using namespace livox::mid360;
 
 #define GOLDEN(name) span_of(golden::name, golden::name##_len)
 
-namespace {
-std::vector<std::byte> to_vec(std::span<const std::byte> s) {
-  return {s.begin(), s.end()};
-}
+namespace
+{
+std::vector<std::byte> to_vec(std::span<const std::byte> s) { return {s.begin(), s.end()}; }
 }  // namespace
 
-TEST_CASE("golden: crc check values agree", "[golden]") {
+TEST_CASE("golden: crc check values agree", "[golden]")
+{
   CHECK(crc::crc16_ccitt_false(bytes_of("123456789")) == golden::crc16_check);
   CHECK(crc::crc32(bytes_of("123456789")) == golden::crc32_check);
   auto f = build_command_frame({.seq_num = 1, .cmd_id = 0}).value();
-  CHECK(crc::crc16_ccitt_false(std::span<const std::byte>(f).first(18)) ==
-        golden::crc16_discovery_header);
+  CHECK(
+    crc::crc16_ccitt_false(std::span<const std::byte>(f).first(18)) ==
+    golden::crc16_discovery_header);
 }
 
-TEST_CASE("golden: request frames byte-identical", "[golden]") {
-  CHECK(build_command_frame({.seq_num = 1, .cmd_id = 0x0000}).value() ==
-        to_vec(GOLDEN(discovery_req)));
+TEST_CASE("golden: request frames byte-identical", "[golden]")
+{
+  CHECK(
+    build_command_frame({.seq_num = 1, .cmd_id = 0x0000}).value() == to_vec(GOLDEN(discovery_req)));
 
   const auto h5 = encode_host_ip_config({{192, 168, 1, 5}, 56201, 56200});
   const auto h6 = encode_host_ip_config({{192, 168, 1, 5}, 56301, 56300});
@@ -38,31 +40,38 @@ TEST_CASE("golden: request frames byte-identical", "[golden]") {
   const auto one = encode_u8(1);
   const KeyValue kvs[] = {{0x0005, h5}, {0x0006, h6}, {0x0007, h7}, {0x0000, one}, {0x001C, one}};
   const auto cfg = encode_param_config_request(kvs);
-  CHECK(build_command_frame({.seq_num = 2, .cmd_id = 0x0100, .data = cfg}).value() ==
-        to_vec(GOLDEN(param_config_req)));
+  CHECK(
+    build_command_frame({.seq_num = 2, .cmd_id = 0x0100, .data = cfg}).value() ==
+    to_vec(GOLDEN(param_config_req)));
 
   const KeyValue smp[] = {{0x001A, one}};
   const auto smp_data = encode_param_config_request(smp);
-  CHECK(build_command_frame({.seq_num = 3, .cmd_id = 0x0100, .data = smp_data}).value() ==
-        to_vec(GOLDEN(set_sampling_req)));
+  CHECK(
+    build_command_frame({.seq_num = 3, .cmd_id = 0x0100, .data = smp_data}).value() ==
+    to_vec(GOLDEN(set_sampling_req)));
 
   const std::uint16_t keys[] = {0x8000, 0x8002, 0x8006};
   const auto inq = encode_param_inquire_request(keys);
-  CHECK(build_command_frame({.seq_num = 4, .cmd_id = 0x0101, .data = inq}).value() ==
-        to_vec(GOLDEN(param_inquire_req)));
+  CHECK(
+    build_command_frame({.seq_num = 4, .cmd_id = 0x0101, .data = inq}).value() ==
+    to_vec(GOLDEN(param_inquire_req)));
 
   const auto rb = encode_reboot_request(100);
-  CHECK(build_command_frame({.seq_num = 5, .cmd_id = 0x0200, .data = rb}).value() ==
-        to_vec(GOLDEN(reboot_req)));
+  CHECK(
+    build_command_frame({.seq_num = 5, .cmd_id = 0x0200, .data = rb}).value() ==
+    to_vec(GOLDEN(reboot_req)));
   const auto fr = encode_factory_reset_request();
-  CHECK(build_command_frame({.seq_num = 6, .cmd_id = 0x0201, .data = fr}).value() ==
-        to_vec(GOLDEN(factory_reset_req)));
+  CHECK(
+    build_command_frame({.seq_num = 6, .cmd_id = 0x0201, .data = fr}).value() ==
+    to_vec(GOLDEN(factory_reset_req)));
   const auto gps = encode_set_gps_timestamp_request(1700000000000000000ULL);
-  CHECK(build_command_frame({.seq_num = 8, .cmd_id = 0x0202, .data = gps}).value() ==
-        to_vec(GOLDEN(gps_time_req)));
+  CHECK(
+    build_command_frame({.seq_num = 8, .cmd_id = 0x0202, .data = gps}).value() ==
+    to_vec(GOLDEN(gps_time_req)));
 }
 
-TEST_CASE("golden: LiDAR-originated frames parse", "[golden]") {
+TEST_CASE("golden: LiDAR-originated frames parse", "[golden]")
+{
   auto d = parse_command_frame(GOLDEN(discovery_ack));
   REQUIRE(d);
   CHECK(d->header.cmd_type == CmdType::kAck);
@@ -88,10 +97,11 @@ TEST_CASE("golden: LiDAR-originated frames parse", "[golden]") {
   REQUIRE(ia);
   REQUIRE(ia->values.size() == 3);
   CHECK(decode_string(*find_key(ia->values, Key::kSn)) == "47MDL9K0010001");
-  CHECK(decode_version(*find_key(ia->values, Key::kVersionApp))->v ==
-        std::array<std::uint8_t, 4>{13, 18, 2, 44});
-  CHECK(decode_work_state(*find_key(ia->values, Key::kCurWorkState)).value() ==
-        WorkState::kSampling);
+  CHECK(
+    decode_version(*find_key(ia->values, Key::kVersionApp))->v ==
+    std::array<std::uint8_t, 4>{13, 18, 2, 44});
+  CHECK(
+    decode_work_state(*find_key(ia->values, Key::kCurWorkState)).value() == WorkState::kSampling);
 
   auto pu = parse_command_frame(GOLDEN(info_push));
   REQUIRE(pu);
@@ -108,7 +118,8 @@ TEST_CASE("golden: LiDAR-originated frames parse", "[golden]") {
   CHECK_FALSE(decode_hms(hms[2]).active());
 }
 
-TEST_CASE("golden: data packets", "[golden]") {
+TEST_CASE("golden: data packets", "[golden]")
+{
   auto p32 = parse_data_packet(GOLDEN(pcl32));
   REQUIRE(p32);
   CHECK(p32->header.length == 1380);

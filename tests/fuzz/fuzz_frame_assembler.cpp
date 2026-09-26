@@ -14,7 +14,8 @@
 #include "frame_assembler.hpp"
 #include "fuzz_check.hpp"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t * data, std::size_t size)
+{
   using namespace livox::mid360;
   if (size < 1) return 0;
   const std::uint8_t policy = data[0];
@@ -34,7 +35,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   std::uint32_t next_index = 0;
   constexpr std::size_t kRec = 8;
 
-  auto check_frame = [&](const Frame& f) {
+  auto check_frame = [&](const Frame & f) {
     fuzz::require(!f.points.empty());
     fuzz::require(f.index == next_index++);
     fuzz::require(f.end_time_ns >= f.base_time_ns);
@@ -44,7 +45,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   };
 
   for (std::size_t off = 1; off + kRec <= size; off += kRec) {
-    const std::uint8_t* r = data + off;
+    const std::uint8_t * r = data + off;
     DataPacketView v;
     std::memcpy(&v.header.udp_cnt, r, 2);
     v.header.frame_cnt = r[2];

@@ -17,12 +17,14 @@
 using namespace livox::mid360;
 using namespace std::chrono_literals;
 
-namespace {
+namespace
+{
 
 /// Send a request on `sock` and wait for the matching ACK. Returns the ACK payload copy.
-std::optional<std::vector<std::byte>> request(const UdpSocket& sock, const Endpoint& to,
-                                              std::uint32_t seq, std::uint16_t cmd_id,
-                                              std::span<const std::byte> payload) {
+std::optional<std::vector<std::byte>> request(
+  const UdpSocket & sock, const Endpoint & to, std::uint32_t seq, std::uint16_t cmd_id,
+  std::span<const std::byte> payload)
+{
   const auto frame = build_command_frame({.seq_num = seq, .cmd_id = cmd_id, .data = payload});
   REQUIRE(frame.has_value());
   REQUIRE(sock.send_to(*frame, to).has_value());
@@ -34,14 +36,21 @@ std::optional<std::vector<std::byte>> request(const UdpSocket& sock, const Endpo
   while (std::chrono::steady_clock::now() < deadline) {
     const auto ev = poller->wait(500ms);
     REQUIRE(ev.has_value());
-    if (ev->empty()) continue;
+    if (ev->empty()) {
+      continue;
+    }
     while (true) {
       const auto d = sock.recv_one(buf);
-      if (!d) break;
+      if (!d) {
+        break;
+      }
       const auto view = parse_command_frame(d->data);
-      if (!view) continue;
-      if (view->header.cmd_type == CmdType::kAck && view->header.seq_num == seq &&
-          view->header.cmd_id == cmd_id) {
+      if (!view) {
+        continue;
+      }
+      if (
+        view->header.cmd_type == CmdType::kAck && view->header.seq_num == seq &&
+        view->header.cmd_id == cmd_id) {
         return std::vector<std::byte>(view->data.begin(), view->data.end());
       }
     }
@@ -51,10 +60,13 @@ std::optional<std::vector<std::byte>> request(const UdpSocket& sock, const Endpo
 
 }  // namespace
 
-TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]") {
+TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
+{
   std::string err;
   auto sim = SimProcess::start(err);
-  if (!sim) SKIP("simulator unavailable: " << err);
+  if (!sim) {
+    SKIP("simulator unavailable: " << err);
+  }
 
   // Host sockets on free loopback ports.
   SocketOptions pcl_opts;
@@ -68,8 +80,9 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
 
   // Discovery is unicast to the simulator's discovery port.
   std::uint32_t seq = 1;
-  const auto disc = request(*cmd_sock, Endpoint::loopback(sim->ports().discovery), seq++,
-                            static_cast<std::uint16_t>(CmdId::kDiscovery), {});
+  const auto disc = request(
+    *cmd_sock, Endpoint::loopback(sim->ports().discovery), seq++,
+    static_cast<std::uint16_t>(CmdId::kDiscovery), {});
   REQUIRE(disc.has_value());
   const auto ack = parse_discovery_ack(*disc);
   REQUIRE(ack.has_value());
@@ -80,20 +93,21 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
   CHECK(ip_to_string(lidar_cmd.ip) == sim->ip());
 
   // Point the LiDAR at our sockets and enable the IMU.
-  const auto pcl_cfg = encode_host_ip_config({.ip = {127, 0, 0, 1},
-                                              .dst_port = pcl_sock->local_endpoint().port,
-                                              .src_port = kPointCloudPort});
+  const auto pcl_cfg = encode_host_ip_config(
+    {.ip = {127, 0, 0, 1},
+     .dst_port = pcl_sock->local_endpoint().port,
+     .src_port = kPointCloudPort});
   const auto imu_cfg = encode_host_ip_config(
-      {.ip = {127, 0, 0, 1}, .dst_port = imu_sock->local_endpoint().port, .src_port = kImuPort});
+    {.ip = {127, 0, 0, 1}, .dst_port = imu_sock->local_endpoint().port, .src_port = kImuPort});
   const auto imu_en = encode_u8(1);
   const KeyValue kvs[] = {
-      {static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg), pcl_cfg},
-      {static_cast<std::uint16_t>(Key::kImuHostIpCfg), imu_cfg},
-      {static_cast<std::uint16_t>(Key::kImuDataEn), imu_en},
+    {static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg), pcl_cfg},
+    {static_cast<std::uint16_t>(Key::kImuHostIpCfg), imu_cfg},
+    {static_cast<std::uint16_t>(Key::kImuDataEn), imu_en},
   };
-  const auto cfg_ack =
-      request(*cmd_sock, lidar_cmd, seq++, static_cast<std::uint16_t>(CmdId::kParamConfig),
-              encode_param_config_request(kvs));
+  const auto cfg_ack = request(
+    *cmd_sock, lidar_cmd, seq++, static_cast<std::uint16_t>(CmdId::kParamConfig),
+    encode_param_config_request(kvs));
   REQUIRE(cfg_ack.has_value());
   const auto cfg = parse_param_config_ack(*cfg_ack);
   REQUIRE(cfg.has_value());
@@ -105,8 +119,8 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
   WorkState state = WorkState::kMotorStartup;
   const auto deadline = std::chrono::steady_clock::now() + 5s;
   while (state != WorkState::kSampling && std::chrono::steady_clock::now() < deadline) {
-    const auto r = request(*cmd_sock, lidar_cmd, seq++,
-                           static_cast<std::uint16_t>(CmdId::kParamInquire), inquire);
+    const auto r = request(
+      *cmd_sock, lidar_cmd, seq++, static_cast<std::uint16_t>(CmdId::kParamInquire), inquire);
     REQUIRE(r.has_value());
     const auto inq = parse_param_inquire_ack(*r);
     REQUIRE(inq.has_value());
@@ -114,7 +128,9 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
     const auto v = find_key(inq->values, Key::kCurWorkState);
     REQUIRE(v.has_value());
     state = decode_work_state(*v).value_or(WorkState::kMotorStartup);
-    if (state != WorkState::kSampling) std::this_thread::sleep_for(50ms);
+    if (state != WorkState::kSampling) {
+      std::this_thread::sleep_for(50ms);
+    }
   }
   REQUIRE(state == WorkState::kSampling);
 
@@ -135,9 +151,11 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
          std::chrono::steady_clock::now() < rx_deadline) {
     const auto ev = poller->wait(500ms);
     REQUIRE(ev.has_value());
-    for (const ReadyEvent& e : *ev) {
-      const UdpSocket& s = e.tag == 1 ? *pcl_sock : *imu_sock;
-      for (std::size_t i = 0; i < batch.size(); ++i) batch[i].data = storage[i];
+    for (const ReadyEvent & e : *ev) {
+      const UdpSocket & s = e.tag == 1 ? *pcl_sock : *imu_sock;
+      for (std::size_t i = 0; i < batch.size(); ++i) {
+        batch[i].data = storage[i];
+      }
       const auto n = s.recv_batch(batch);
       REQUIRE(n.has_value());
       for (std::size_t i = 0; i < *n; ++i) {
@@ -146,8 +164,8 @@ TEST_CASE("Simulator smoke: discovery, configure, stream, quit", "[sim][smoke]")
         if (e.tag == 1) {
           CHECK(pkt->header.data_type == DataType::kCartesian32);
           CHECK(pkt->header.dot_num == kPointsPerPacket);
-          if (last_udp_cnt &&
-              pkt->header.udp_cnt != static_cast<std::uint16_t>(*last_udp_cnt + 1)) {
+          if (
+            last_udp_cnt && pkt->header.udp_cnt != static_cast<std::uint16_t>(*last_udp_cnt + 1)) {
             udp_cnt_monotonic = false;
           }
           last_udp_cnt = pkt->header.udp_cnt;

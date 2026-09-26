@@ -11,9 +11,11 @@
 #include "livox/mid360/export.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-enum class HmsLevel : std::uint8_t {
+enum class HmsLevel : std::uint8_t
+{
   kNone = 0,  ///< slot unused
   kInfo = 1,
   kWarning = 2,
@@ -21,7 +23,8 @@ enum class HmsLevel : std::uint8_t {
   kFatal = 4,
 };
 
-struct HmsCode {
+struct HmsCode
+{
   std::uint16_t abnormal_id;
   HmsLevel level;
   std::uint8_t reserved;
@@ -30,9 +33,11 @@ struct HmsCode {
   [[nodiscard]] constexpr bool active() const noexcept { return raw != 0; }
 };
 
-[[nodiscard]] constexpr HmsCode decode_hms(std::uint32_t raw) noexcept {
-  return {static_cast<std::uint16_t>(raw >> 16), static_cast<HmsLevel>(raw & 0xFFu),
-          static_cast<std::uint8_t>((raw >> 8) & 0xFFu), raw};
+[[nodiscard]] constexpr HmsCode decode_hms(std::uint32_t raw) noexcept
+{
+  return {
+    static_cast<std::uint16_t>(raw >> 16), static_cast<HmsLevel>(raw & 0xFFu),
+    static_cast<std::uint8_t>((raw >> 8) & 0xFFu), raw};
 }
 
 [[nodiscard]] std::string_view to_string(HmsLevel l) noexcept;

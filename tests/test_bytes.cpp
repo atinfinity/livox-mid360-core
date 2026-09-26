@@ -5,7 +5,8 @@
 
 using namespace livox::mid360;
 
-TEST_CASE("little-endian round trip", "[bytes]") {
+TEST_CASE("little-endian round trip", "[bytes]")
+{
   std::array<std::byte, 20> buf{};
   bytes::write_le<std::uint16_t>(buf, 0, 0x1234);
   bytes::write_le<std::uint32_t>(buf, 2, 0xDEADBEEF);

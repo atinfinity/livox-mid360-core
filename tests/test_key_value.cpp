@@ -7,15 +7,18 @@
 
 using namespace livox::mid360;
 
-TEST_CASE("key-value list round trip", "[kv]") {
+TEST_CASE("key-value list round trip", "[kv]")
+{
   const auto a = bytes_of({0x01});
   const auto b = bytes_of({0xC0, 0xA8, 0x01, 0x05, 0x35, 0xDB, 0x34, 0xDB});
   const KeyValue kvs[] = {{0x001A, a}, {0x0006, b}};
   std::vector<std::byte> out;
   append_key_value_list(out, kvs);
   REQUIRE(out.size() == 4 + 1 + 4 + 8);
-  CHECK(out == bytes_of({0x1A, 0x00, 0x01, 0x00, 0x01, 0x06, 0x00, 0x08, 0x00, 0xC0, 0xA8, 0x01,
-                         0x05, 0x35, 0xDB, 0x34, 0xDB}));
+  CHECK(
+    out == bytes_of(
+             {0x1A, 0x00, 0x01, 0x00, 0x01, 0x06, 0x00, 0x08, 0x00, 0xC0, 0xA8, 0x01, 0x05, 0x35,
+              0xDB, 0x34, 0xDB}));
   auto parsed = parse_key_value_list(out, 2);
   REQUIRE(parsed);
   REQUIRE(parsed->size() == 2);
@@ -27,7 +30,8 @@ TEST_CASE("key-value list round trip", "[kv]") {
   CHECK_FALSE(find_key(*parsed, Key::kSn).has_value());
 }
 
-TEST_CASE("key-value list errors", "[kv]") {
+TEST_CASE("key-value list errors", "[kv]")
+{
   const auto buf = bytes_of({0x1A, 0x00, 0x05, 0x00, 0x01});  // claims 5 bytes, has 1
   CHECK(parse_key_value_list(buf, 1).error() == ParseError::kTruncated);
   const auto short_hdr = bytes_of({0x1A, 0x00, 0x01});
@@ -39,30 +43,36 @@ TEST_CASE("key-value list errors", "[kv]") {
   CHECK(parse_key_value_list({}, 0).value().empty());
 }
 
-TEST_CASE("0x0100 request payload", "[kv]") {
+TEST_CASE("0x0100 request payload", "[kv]")
+{
   const auto one = bytes_of({0x01});
   const KeyValue kvs[] = {{0x001A, one}};
-  CHECK(encode_param_config_request(kvs) ==
-        bytes_of({0x01, 0x00, 0x00, 0x00, 0x1A, 0x00, 0x01, 0x00, 0x01}));
+  CHECK(
+    encode_param_config_request(kvs) ==
+    bytes_of({0x01, 0x00, 0x00, 0x00, 0x1A, 0x00, 0x01, 0x00, 0x01}));
 }
 
-TEST_CASE("0x0101 request payload", "[kv]") {
+TEST_CASE("0x0101 request payload", "[kv]")
+{
   const std::uint16_t keys[] = {0x8000, 0x8006};
-  CHECK(encode_param_inquire_request(keys) ==
-        bytes_of({0x02, 0x00, 0x00, 0x00, 0x00, 0x80, 0x06, 0x80}));
+  CHECK(
+    encode_param_inquire_request(keys) ==
+    bytes_of({0x02, 0x00, 0x00, 0x00, 0x00, 0x80, 0x06, 0x80}));
 }
 
-TEST_CASE("control command payloads", "[kv]") {
+TEST_CASE("control command payloads", "[kv]")
+{
   CHECK(encode_reboot_request(1000) == bytes_of({0xE8, 0x03}));
   CHECK(encode_factory_reset_request().size() == 16);
   auto g = encode_set_gps_timestamp_request(0x0102030405060708ULL);
   CHECK(g == bytes_of({0x02, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01}));
 }
 
-TEST_CASE("ack parsers", "[kv]") {
+TEST_CASE("ack parsers", "[kv]")
+{
   auto d =
-      parse_discovery_ack(bytes_of({0x00, 0x09, 'S', 'N', '1', 0, 0,   0,   0, 0,  0,    0,
-                                    0,    0,    0,   0,   0,   0, 192, 168, 1, 12, 0x24, 0xDB}));
+    parse_discovery_ack(bytes_of({0x00, 0x09, 'S', 'N', '1', 0, 0,   0,   0, 0,  0,    0,
+                                  0,    0,    0,   0,   0,   0, 192, 168, 1, 12, 0x24, 0xDB}));
   REQUIRE(d);
   CHECK(d->ret_code == RetCode::kSuccess);
   CHECK(d->dev_type == 9);

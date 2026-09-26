@@ -12,19 +12,21 @@
 
 #include "context_impl.hpp"
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-namespace {
+namespace
+{
 
 using Clock = std::chrono::steady_clock;
-using namespace std::chrono_literals;
 
 constexpr std::uint64_t kPushTag = 1;
 constexpr std::uint64_t kPointTag = 2;
 constexpr std::uint64_t kImuTag = 3;
-constexpr auto kMaxPoll = 100ms;
+constexpr auto kMaxPoll = std::chrono::milliseconds{100};
 
-DeviceError transport_error(const TransportError& err) {
+DeviceError transport_error(const TransportError & err)
+{
   SessionError s;
   s.kind = SessionErrorKind::kTransport;
   s.transport = err;
@@ -33,13 +35,14 @@ DeviceError transport_error(const TransportError& err) {
 
 }  // namespace
 
-Context::Impl::AddResult Context::Impl::add(const Ipv4& ip, std::string serial,
-                                            detail::Receiver* receiver) {
+Context::Impl::AddResult Context::Impl::add(
+  const Ipv4 & ip, std::string serial, detail::Receiver * receiver)
+{
   const std::lock_guard lock(mutex);
-  if (std::ranges::any_of(entries, [&](const Entry& e) { return e.ip == ip; })) {
+  if (std::ranges::any_of(entries, [&](const Entry & e) { return e.ip == ip; })) {
     return AddResult::kDuplicateIp;
   }
-  if (std::ranges::any_of(entries, [&](const Entry& e) { return e.serial == serial; })) {
+  if (std::ranges::any_of(entries, [&](const Entry & e) { return e.serial == serial; })) {
     return AddResult::kDuplicateSerial;
   }
   entries.push_back({ip, receiver, std::move(serial), nullptr});
@@ -48,36 +51,48 @@ Context::Impl::AddResult Context::Impl::add(const Ipv4& ip, std::string serial,
   return AddResult::kOk;
 }
 
-void Context::Impl::bind(detail::Receiver* receiver, Device* device) {
+void Context::Impl::bind(detail::Receiver * receiver, Device * device)
+{
   const std::lock_guard lock(mutex);
-  for (Entry& e : entries) {
-    if (e.receiver == receiver) e.device = device;
+  for (Entry & e : entries) {
+    if (e.receiver == receiver) {
+      e.device = device;
+    }
   }
 }
 
-bool Context::Impl::rekey(detail::Receiver* receiver, const Ipv4& ip) {
+bool Context::Impl::rekey(detail::Receiver * receiver, const Ipv4 & ip)
+{
   const std::lock_guard lock(mutex);
   const auto it =
-      std::ranges::find_if(entries, [&](const Entry& e) { return e.receiver == receiver; });
-  if (it == entries.end()) return false;
-  if (it->ip == ip) return true;
-  if (std::ranges::any_of(entries, [&](const Entry& e) { return e.ip == ip; })) return false;
+    std::ranges::find_if(entries, [&](const Entry & e) { return e.receiver == receiver; });
+  if (it == entries.end()) {
+    return false;
+  }
+  if (it->ip == ip) {
+    return true;
+  }
+  if (std::ranges::any_of(entries, [&](const Entry & e) { return e.ip == ip; })) {
+    return false;
+  }
   it->ip = ip;
   generation.fetch_add(1, std::memory_order_release);
   poller.wake();
   return true;
 }
 
-void Context::Impl::remove(detail::Receiver* receiver) {
+void Context::Impl::remove(detail::Receiver * receiver)
+{
   assert(!on_receive_thread() && "Device destroyed from its own callback");
   std::unique_lock lock(mutex);
-  std::erase_if(entries, [&](const Entry& e) { return e.receiver == receiver; });
+  std::erase_if(entries, [&](const Entry & e) { return e.receiver == receiver; });
   const std::uint64_t target = generation.fetch_add(1, std::memory_order_release) + 1;
   poller.wake();
   cv.wait(lock, [&] { return observed >= target || stop.load(std::memory_order_acquire); });
 }
 
-void Context::Impl::run() {
+void Context::Impl::run()
+{
   std::vector<std::array<std::byte, kMaxDatagramSize>> storage(options.batch_size);
   std::vector<Datagram> batch(options.batch_size);
   std::vector<Entry> snapshot;
@@ -95,17 +110,21 @@ void Context::Impl::run() {
     // Timers first: they also give the poll timeout.
     Clock::time_point now = Clock::now();
     Clock::time_point deadline = now + kMaxPoll;
-    for (const Entry& e : snapshot) {
-      if (const auto next = e.receiver->tick(now)) deadline = std::min(deadline, *next);
+    for (const Entry & e : snapshot) {
+      if (const auto next = e.receiver->tick(now)) {
+        deadline = std::min(deadline, *next);
+      }
     }
     now = Clock::now();
     const auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::max(deadline, now) - now + 999us);
+      std::max(deadline, now) - now + std::chrono::microseconds{999});
 
     const auto ready = poller.wait(timeout);
-    if (!ready) continue;  // EINTR or similar; the loop re-evaluates `stop`
-    for (const ReadyEvent& ev : *ready) {
-      const UdpSocket* socket = nullptr;
+    if (!ready) {
+      continue;  // EINTR or similar; the loop re-evaluates `stop`
+    }
+    for (const ReadyEvent & ev : *ready) {
+      const UdpSocket * socket = nullptr;
       detail::DataPort port = detail::DataPort::kPush;
       switch (ev.tag) {
         case kPushTag:
@@ -125,21 +144,27 @@ void Context::Impl::run() {
       }
       // Drain the socket; bounded so that one busy socket cannot starve the others.
       for (int round = 0; round < 8; ++round) {
-        for (std::size_t i = 0; i < batch.size(); ++i) batch[i].data = storage[i];
+        for (std::size_t i = 0; i < batch.size(); ++i) {
+          batch[i].data = storage[i];
+        }
         const auto n = socket->recv_batch(batch);
-        if (!n) break;
+        if (!n) {
+          break;
+        }
         datagrams.fetch_add(*n, std::memory_order_relaxed);
         for (std::size_t i = 0; i < *n; ++i) {
-          const Datagram& d = batch[i];
+          const Datagram & d = batch[i];
           const auto it =
-              std::ranges::find_if(snapshot, [&](const Entry& e) { return e.ip == d.from.ip; });
+            std::ranges::find_if(snapshot, [&](const Entry & e) { return e.ip == d.from.ip; });
           if (it == snapshot.end()) {
             unknown_source.fetch_add(1, std::memory_order_relaxed);
             continue;
           }
           it->receiver->on_datagram(port, d);
         }
-        if (*n < batch.size()) break;
+        if (*n < batch.size()) {
+          break;
+        }
       }
     }
   }
@@ -148,10 +173,11 @@ void Context::Impl::run() {
   cv.notify_all();
 }
 
-std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const ContextOptions& opts) {
+std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const ContextOptions & opts)
+{
   if (opts.batch_size == 0) {
     return std::unexpected(
-        DeviceError{.kind = DeviceError::Kind::kInvalidArgument, .session = std::nullopt});
+      DeviceError{.kind = DeviceError::Kind::kInvalidArgument, .session = std::nullopt});
   }
   auto impl = std::make_unique<Impl>();
   impl->options = opts;
@@ -161,13 +187,21 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
     return UdpSocket::open(Endpoint{opts.bind_address, port}, sopts);
   };
   auto push = open(opts.push_port);
-  if (!push) return std::unexpected(transport_error(push.error()));
+  if (!push) {
+    return std::unexpected(transport_error(push.error()));
+  }
   auto point = open(opts.point_port);
-  if (!point) return std::unexpected(transport_error(point.error()));
+  if (!point) {
+    return std::unexpected(transport_error(point.error()));
+  }
   auto imu = open(opts.imu_port);
-  if (!imu) return std::unexpected(transport_error(imu.error()));
+  if (!imu) {
+    return std::unexpected(transport_error(imu.error()));
+  }
   auto poller = Poller::create();
-  if (!poller) return std::unexpected(transport_error(poller.error()));
+  if (!poller) {
+    return std::unexpected(transport_error(poller.error()));
+  }
   impl->push_socket = std::move(*push);
   impl->point_socket = std::move(*point);
   impl->imu_socket = std::move(*imu);
@@ -183,7 +217,7 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
   impl->options.point_port = impl->point_socket.local_endpoint().port;
   impl->options.imu_port = impl->imu_socket.local_endpoint().port;
 
-  Impl* raw = impl.get();
+  Impl * raw = impl.get();
   impl->thread = std::thread([raw] { raw->run(); });
   impl->thread_id = impl->thread.get_id();
   return std::unique_ptr<Context>(new Context(std::move(impl)));
@@ -191,41 +225,49 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
 
 Context::Context(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
-Context::~Context() {
+Context::~Context()
+{
   {
     const std::lock_guard lock(impl_->mutex);
     assert(impl_->entries.empty() && "Context destroyed before its Devices");
   }
   impl_->stop.store(true, std::memory_order_release);
   impl_->poller.wake();
-  if (impl_->thread.joinable()) impl_->thread.join();
+  if (impl_->thread.joinable()) {
+    impl_->thread.join();
+  }
 }
 
-const ContextOptions& Context::options() const noexcept {
-  return impl_->options;
-}
+const ContextOptions & Context::options() const noexcept { return impl_->options; }
 
-Device* Context::find(std::string_view serial_number) const {
+Device * Context::find(std::string_view serial_number) const
+{
   const std::lock_guard lock(impl_->mutex);
-  for (const Impl::Entry& e : impl_->entries) {
-    if (e.serial == serial_number) return e.device;
+  for (const Impl::Entry & e : impl_->entries) {
+    if (e.serial == serial_number) {
+      return e.device;
+    }
   }
   return nullptr;
 }
 
-std::vector<Device*> Context::devices() const {
+std::vector<Device *> Context::devices() const
+{
   const std::lock_guard lock(impl_->mutex);
-  std::vector<Device*> out;
-  for (const Impl::Entry& e : impl_->entries) {
-    if (e.device != nullptr) out.push_back(e.device);
+  std::vector<Device *> out;
+  for (const Impl::Entry & e : impl_->entries) {
+    if (e.device != nullptr) {
+      out.push_back(e.device);
+    }
   }
   return out;
 }
 
-ContextStats Context::stats() const {
+ContextStats Context::stats() const
+{
   return ContextStats{
-      .datagrams = impl_->datagrams.load(std::memory_order_relaxed),
-      .unknown_source = impl_->unknown_source.load(std::memory_order_relaxed),
+    .datagrams = impl_->datagrams.load(std::memory_order_relaxed),
+    .unknown_source = impl_->unknown_source.load(std::memory_order_relaxed),
   };
 }
 
