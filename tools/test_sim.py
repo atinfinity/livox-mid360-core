@@ -235,6 +235,21 @@ class DeviceModelTest(unittest.TestCase):
         # The other keys are untouched.
         self.assertEqual(m.inquire([sim.KEY_IMU_EN], 0), (sim.RET_OK, [(sim.KEY_IMU_EN, b'\x00')]))
 
+    def test_func_io_out_of_range(self) -> None:
+        self.assertEqual(
+            self.m.configure([(sim.KEY_FUNC_IO, b'\x00\x00\x02\x01')]), (sim.RET_OK, 0)
+        )
+        for bad in (
+            b'\x01\x00\x00\x00',
+            b'\x00\x01\x00\x00',
+            b'\x00\x00\x03\x00',
+            b'\x00\x00\x00\x03',
+        ):
+            self.assertEqual(
+                self.m.configure([(sim.KEY_FUNC_IO, bad)]), (sim.RET_OUT_OF_RANGE, sim.KEY_FUNC_IO)
+            )
+        self.assertEqual(self.m.settings[sim.KEY_FUNC_IO], b'\x00\x00\x02\x01')
+
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
         self.assertEqual(
             self.m.configure([(sim.KEY_SN, b'x' * 16)]), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN)

@@ -122,10 +122,25 @@ TEST_CASE("install attitude and fov", "[keys]")
 
 TEST_CASE("func io and imu sensor config", "[keys]")
 {
-  auto io = decode_func_io_config(encode_func_io_config({0, 0, 1, 2}));
+  const FuncIoConfig cfg{.out0 = FuncOut::kFollowInput, .out1 = FuncOut::kSafetyZone};
+  auto io = decode_func_io_config(encode_func_io_config(cfg));
   REQUIRE(io);
-  CHECK(io->out0 == 1);
-  CHECK(io->out1 == 2);
+  CHECK(io->in0 == FuncIn0::kPps);
+  CHECK(io->in1 == FuncIn1::kGps);
+  CHECK(io->out0 == FuncOut::kFollowInput);
+  CHECK(io->out1 == FuncOut::kSafetyZone);
+  CHECK(func_io_config_valid(cfg));
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
+  CHECK_FALSE(func_io_config_valid({.in0 = static_cast<FuncIn0>(1)}));
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
+  CHECK_FALSE(func_io_config_valid({.in1 = static_cast<FuncIn1>(1)}));
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
+  CHECK_FALSE(func_io_config_valid({.out0 = static_cast<FuncOut>(3)}));
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
+  CHECK_FALSE(func_io_config_valid({.out1 = static_cast<FuncOut>(255)}));
+  CHECK(decode_func_io_config(bytes_of({0, 0, 0, 3})).error() == KeyError::kOutOfRange);
+  CHECK(decode_func_io_config(bytes_of({1, 0, 0, 0})).error() == KeyError::kOutOfRange);
+  CHECK(decode_func_io_config(bytes_of({0, 0, 2})).error() == KeyError::kWrongLength);
 
   ImuSensorConfig c{ImuOutputRate::k500Hz, ImuAccelRange::k16g, ImuGyroRange::k250dps};
   auto e = encode_imu_sensor_config(c);

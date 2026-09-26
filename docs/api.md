@@ -226,7 +226,7 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 | `kFovCfg0` / `kFovCfg1` 0x0015 / 0x0016 | `FovConfig` | |
 | `kFovCfgEn` 0x0017 | `FovEnable{fov0, fov1}` | bits 0 / 1 |
 | `kDetectMode` 0x0018 | `DetectMode` | |
-| `kFuncIoCfg` 0x0019 | `FuncIoConfig` | |
+| `kFuncIoCfg` 0x0019 | `FuncIoConfig` | `set_func_io_config()`; enum fields, out-of-enum bytes → `kDecodeFailed` |
 | `kWorkTgtMode` 0x001A | `WorkState` | 1 / 2 / 9 accepted by the LiDAR |
 | `kImuDataEn` 0x001C, `kTimeFilter` 0x0026 | `bool` | |
 | `kImuSensorCfg` 0x002B | `ImuSensorConfig` | |
@@ -403,6 +403,29 @@ are still not replayed; that is the LiDAR's own persistence.
 | `set_point_format()` / `point_format()` | `livox_mid360_device_set_point_format(dev, int)` / `..._point_format(dev, int*)` |
 | `set_scan_pattern()` / `scan_pattern()` | `livox_mid360_device_set_scan_pattern(dev, int)` / `..._scan_pattern(dev, int*)` |
 | `set_frame_policy()` / `frame_policy()` | `livox_mid360_device_set_frame_policy(dev, const livox_mid360_frame_policy_t*)` / `..._frame_policy(dev, livox_mid360_frame_policy_t*)` |
+
+## Function IO
+
+`Device::set_func_io_config(FuncIoConfig)` / `func_io_config()` (issue #52) wrap key 0x0019,
+the four M12 function pins: `in0` (`FuncIn0::kPps`, the only defined input function),
+`in1` (`FuncIn1::kGps`), `out0` / `out1` (`FuncOut::kNone`, `kFollowInput` = the output
+mirrors its input pin, `kSafetyZone` = safety zone output 0 / 1). The struct keeps the raw
+4-byte layout. `func_io_config_valid()` in `keys.hpp` is checked before any I/O
+(`kInvalidArgument` with `key` = 0x0019), and `decode_func_io_config()` rejects a byte
+outside the enums with `KeyError::kOutOfRange`, so `func_io_config()` and
+`pushed_status().func_io_cfg` never carry a non-enumerator value. The value is persisted on
+the LiDAR and not replayed on reconnect.
+
+Time synchronisation: the PPS / GPS inputs are where an external clock arrives; the host
+pushes a GPS timestamp with `set_gps_time()` (0x0202) and reads the resulting state with
+`time_sync_status()` (0x8009–0x800C), both in the time-sync section. `time_type` in the
+data packets is the per-packet signal `TimestampPolicy` acts on. How the firmware treats a
+write of an undefined input function is [unverified] (#11); the simulator answers
+`kOutOfRange`.
+
+| C++ | C |
+| --- | --- |
+| `set_func_io_config()` / `func_io_config()` | `livox_mid360_device_set_func_io_config(dev, const livox_mid360_func_io_config_t*, bool*)` / `..._func_io_config(dev, livox_mid360_func_io_config_t*)` |
 
 ## Detection mode, IMU and time filter
 

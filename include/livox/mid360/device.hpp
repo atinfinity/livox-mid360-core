@@ -197,6 +197,15 @@ public:
   std::expected<InstallAttitude, DeviceError> install_attitude(
     std::optional<RequestOptions> opts = std::nullopt);
 
+  // --- function IO (issue #52): key 0x0019, PPS / GPS inputs and the two outputs.
+  /// func_io_config_valid() → else kInvalidArgument with `key` before any I/O. Persisted on
+  /// the LiDAR, not replayed on reconnect. IN1 = GPS is the input set_gps_time() (0x0202)
+  /// complements; time_sync_status() reports the resulting synchronisation (#53).
+  std::expected<SetResult, DeviceError> set_func_io_config(
+    const FuncIoConfig & c, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<FuncIoConfig, DeviceError> func_io_config(
+    std::optional<RequestOptions> opts = std::nullopt);
+
   // --- stored settings (issues #46 / #47 / #54): keys 0x0018, 0x001C, 0x002B, 0x0026.
   /// Thin wrappers over set<K>() / get<K>(). The setters return the LiDAR's answer; a value
   /// outside its enum (DetectMode > 1, an ImuSensorConfig field past its last enumerator) is

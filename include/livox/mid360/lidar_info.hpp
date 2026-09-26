@@ -66,6 +66,10 @@ inline constexpr std::array<Key, 6> kIdentityKeys{
 /// `fov0=<...> fov1=<...> enable=<...>`; absent fields are omitted, all absent → "".
 [[nodiscard]] std::string to_string(const FovSettings & s);
 /// `in0/in1/out0/out1`
+[[nodiscard]] std::string_view to_string(FuncIn0 f) noexcept;
+[[nodiscard]] std::string_view to_string(FuncIn1 f) noexcept;
+[[nodiscard]] std::string_view to_string(FuncOut f) noexcept;
+/// "pps/gps/none/safety_zone"
 [[nodiscard]] std::string to_string(const FuncIoConfig & c);
 /// `<rate>/<accel>/<gyro>`, e.g. `200Hz/4g/2000dps`
 [[nodiscard]] std::string to_string(const ImuSensorConfig & c);
