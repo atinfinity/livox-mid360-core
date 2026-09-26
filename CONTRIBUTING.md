@@ -28,7 +28,8 @@ work and project decisions are in [docs/roadmap.md](docs/roadmap.md).
 
 Style and static analysis are enforced by the `Lint` workflow (clang-format 19, clang-tidy 19,
 ruff). The configuration files `.clang-format`, `.clang-tidy` and `pyproject.toml` are shared
-with `livox-mid360-ros2` (`ament_clang_format --config`, `ament_flake8 --config`).
+with `livox-mid360-ros2` (`ament_clang_format --config`; ruff reads `pyproject.toml` directly,
+`ament_flake8` cannot, see below).
 
 C++ follows the [ROS 2 C++ style](https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#c):
 `.clang-format` is a verbatim copy of the configuration shipped with `ament_clang_format`
@@ -36,7 +37,29 @@ C++ follows the [ROS 2 C++ style](https://docs.ros.org/en/rolling/The-ROS2-Proje
 formatter, clang-tidy's `readability-braces-around-statements` requires braces on every
 `if` / `for` / `while` body. Deviations from the ROS 2 rules: `#pragma once` instead of include
 guards (so cpplint is not used, #17), and no cpplint-style header/footer comments. Code blocks in
-the documentation follow the same style. Run the same checks locally with:
+the documentation follow the same style.
+
+Python (`tools/`) follows the [ROS 2 Python style](https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#python)
+as checked by `ament_flake8` and `ament_pep257` with their default settings, but enforced here
+with ruff: `pyproject.toml` selects the matching rule families (single quotes, google import
+order, 99 columns, the `ament` pydocstyle convention with the summary of a multi-line docstring
+on the second line). ruff has no port of `flake8-deprecated` or `flake8-class-newline`, so a
+class without a docstring needs a blank line before its first member, and `ruff format`'s
+`a[x : y]` slice spacing trips `E203`; write `a[x:end]` with a named bound instead. Python
+snippets in docs and docstrings follow the same style. Whether the ruff configuration still
+matches the ROS 2 tools is checked by hand with the real tools (the ROS 2 side has no
+`pyproject.toml` support, so `livox-mid360-ros2` uses `ament_flake8` / `ament_pep257` defaults):
+
+```sh
+python3 -m venv .venv-ament && .venv-ament/bin/pip install flake8 flake8-blind-except \
+  flake8-builtins flake8-class-newline flake8-comprehensions flake8-deprecated \
+  flake8-docstrings flake8-import-order flake8-quotes pydocstyle \
+  "git+https://github.com/ament/ament_lint.git@rolling#subdirectory=ament_flake8" \
+  "git+https://github.com/ament/ament_lint.git@rolling#subdirectory=ament_pep257"
+.venv-ament/bin/ament_flake8 tools/ && .venv-ament/bin/ament_pep257 tools/
+```
+
+Run the same checks as CI locally with:
 
 ```sh
 scripts/lint.sh            # check (clang-tidy needs clang-19 and builds build-tidy/)
