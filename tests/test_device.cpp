@@ -447,16 +447,15 @@ TEST_CASE("Device: start_sampling from IDLE passes through MOTORSTARTUP", "[sim]
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
-  // The push handler updates work_state() before it runs the event callback, so wait for
-  // the recorded events to catch up as well (seen racing on the arm64 ASan runners).
+  // The push handler updates work_state() before it runs the event callback, so after the
+  // state is seen wait for one more push: the receive thread handles pushes in order, so by
+  // then the event of the earlier push has been recorded (raced on the arm64 ASan runners).
   auto settled = [&](WorkState s) {
-    return wait_until([&] {
-      if (dev->work_state() != s) {
-        return false;
-      }
-      const std::size_t n = rec.state_events;
-      return n == 0 || rec.event(n - 1).new_state == s;
-    });
+    if (!wait_until([&] { return dev->work_state() == s; })) {
+      return false;
+    }
+    const std::uint64_t pushes = dev->stats().pushes;
+    return wait_until([&] { return dev->stats().pushes > pushes; });
   };
   REQUIRE(settled(WorkState::kSampling));
 
