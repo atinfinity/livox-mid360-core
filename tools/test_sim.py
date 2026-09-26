@@ -31,6 +31,15 @@ class DeviceModelTest(unittest.TestCase):
         self.events: list[tuple[int, int]] = []
         self.m.on_state = lambda o, n: self.events.append((o, n))
 
+    def test_lidar_ipcfg_change_answers_reboot_effect(self) -> None:
+        cur = self.m.settings[sim.KEY_LIDAR_IPCFG]
+        self.assertEqual(self.m.configure([(sim.KEY_LIDAR_IPCFG, cur)]), (sim.RET_OK, 0))
+        new = bytes([192, 168, 1, 101]) + cur[4:]
+        self.assertEqual(
+            self.m.configure([(sim.KEY_LIDAR_IPCFG, new)]), (sim.RET_PARAM_REBOOT_EFFECT, 0)
+        )
+        self.assertEqual(self.m.settings[sim.KEY_LIDAR_IPCFG], new)
+
     def test_power_on_selfcheck_idle_motorstartup_ready_sampling(self) -> None:
         # Figure: POWEROFF -> SELFCHECK -> IDLE, then IDLE -> MOTORSTARTUP -> READY -> target.
         self.m.power_on(now=100.0)

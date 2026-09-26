@@ -135,9 +135,10 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, pushes,
   last_push_time_ns, time_offset_ns, time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
   atomics written by the receive thread only.
-- `DeviceError{kind, optional<SessionError> session}` with kinds `kSession`,
+- `DeviceError{kind, optional<SessionError> session, optional<Key> key}` with kinds `kSession`,
   `kInvalidArgument`, `kInvalidState`, `kAlreadyRegistered` (same IP opened twice on one
-  Context), `kNotOpen`. Everything returns `std::expected`; `std::error_code` is not used.
+  Context), `kNotOpen`, `kDisconnected` and `kDecodeFailed` (`get<K>()` could not decode
+  `key`). Everything returns `std::expected`; `std::error_code` is not used.
   Transport failures surface through the wrapped `SessionError`.
 - `BoundedQueue<T>`: bounded (default 8), drops the **oldest** element on overflow (newest
   data wins) and counts it in `dropped()`; `push` from the receive thread, `pop(timeout)` /
@@ -185,6 +186,59 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
 - **Conversion**: Cartesian32 × 0.001, Cartesian16 × 0.01, spherical
   `x = d·sinθ·cosφ, y = d·sinθ·sinφ, z = d·cosθ` (θ zenith, φ azimuth, 0.01°), `line =
   index % 4` within the packet, `offset_ns = sample time − base_time_ns`.
+
+## Typed key access
+
+`Device::set<K>()` / `get<K>()` (issue #57) read and write one key with its C++ type;
+`set_many<K...>()` / `get_many<K...>()` do the same for several keys in one 0x0100 / 0x0101.
+The mapping from `Key` to type is `key_traits<K>` in `keys.hpp` (`key_value_t<K>` for the type,
+concepts `typed_key<K>` / `writable_key<K>`). The dedicated APIs of #38–#56 (FOV, IMU config,
+network config, ...) are thin wrappers over these; use `set<K>` directly when no wrapper exists
+yet, and the raw `configure()` / `inquire()` for keys chosen at run time.
+
+```cpp
+auto r = dev->set<Key::kDetectMode>(DetectMode::kSensitive);      // one 0x0100
+if (r && r->reboot_required) { /* ret 0x21: effective after reboot */ }
+auto sn = dev->get<Key::kSn>();                                   // std::string
+auto all = dev->get_many<Key::kFovCfg0, Key::kFovCfgEn, Key::kCoreTemp>();
+if (all) { auto & [fov0, en, temp] = *all; }
+dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
+```
+
+- `set` returns `SetResult{reboot_required}`; a LiDAR rejection is `kSession` with
+  `session->ret_code` / `session->error_key`, and a batch is all-or-nothing on the LiDAR side.
+- `set<Key::kWorkTgtMode>` only waits for the ACK; `start_sampling()` / `stop_sampling()`
+  additionally wait for the state change and manage the callbacks.
+- `get` returns `kDecodeFailed` with `key` when the ACK lacks the key or the value has the
+  wrong length or an out-of-range code. Read-only keys and the Mid-360S / 360L keys
+  (`kSpeedMode`, `kPcFreqMod`) have no `set`; the latter have no `get` either (no traits).
+
+| Key | Type (`key_value_t`) | Notes |
+| --- | --- | --- |
+| `kPclDataType` 0x0000 | `DataType` | 1–3; `kImu` (0) is out of range |
+| `kPatternMode` 0x0001 | `std::uint8_t` | only 0 is documented |
+| `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `reboot_required` after a change (simulator behaviour, [unverified]) |
+| `kStateInfoHostIpCfg` / `kPointCloudHostIpCfg` / `kImuHostIpCfg` 0x0005–0x0007 | `HostIpConfig` | normally set by `open()` |
+| `kInstallAttitude` 0x0012 | `InstallAttitude` | |
+| `kFovCfg0` / `kFovCfg1` 0x0015 / 0x0016 | `FovConfig` | |
+| `kFovCfgEn` 0x0017 | `FovEnable{fov0, fov1}` | bits 0 / 1 |
+| `kDetectMode` 0x0018 | `DetectMode` | |
+| `kFuncIoCfg` 0x0019 | `FuncIoConfig` | |
+| `kWorkTgtMode` 0x001A | `WorkState` | 1 / 2 / 9 accepted by the LiDAR |
+| `kImuDataEn` 0x001C, `kTimeFilter` 0x0026 | `bool` | |
+| `kImuSensorCfg` 0x002B | `ImuSensorConfig` | |
+| `kSn` 0x8000, `kProductInfo` 0x8001 | `std::string` | text before the first NUL |
+| `kVersionApp` / `kVersionLoader` / `kVersionHardware` 0x8002–0x8004 | `Version` | |
+| `kMac` 0x8005 | `std::array<std::uint8_t, 6>` | |
+| `kCurWorkState` 0x8006 | `WorkState` | |
+| `kCoreTemp` 0x8007 | `std::int32_t` | raw 0.01 °C units |
+| `kPowerupCnt` 0x8008 | `std::uint32_t` | |
+| `kLocalTimeNow` / `kLastSyncTime` 0x8009 / 0x800A | `std::uint64_t` | ns |
+| `kTimeOffset` 0x800B | `std::int64_t` | ns |
+| `kTimeSyncType` 0x800C | `TimeSyncType` | |
+| `kLidarDiagStatus` 0x800E | `DiagStatus` | |
+| `kFwType` 0x8010 | `FwType` | |
+| `kHmsCode` 0x8011 | `std::array<std::uint32_t, 8>` | raw codes; `Device::hms()` decodes them |
 
 ## Push handling
 
@@ -285,6 +339,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `Context::find` / `devices` | `livox_mid360_context_find(ctx, sn)` / `..._devices(ctx, out, cap)` |
 | `ReconnectOptions`, `DisconnectReason` | same layout, `typedef struct` / `enum` |
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
+| `set<K>` / `get<K>` (#57) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper (#38–#56) exists |
 
 `livox-mid360-ros2` (separate repository) uses the C++ API directly: one `Context`, one
 `Device` per LiDAR, `on_frame` publishing from the receive thread or through a queue.

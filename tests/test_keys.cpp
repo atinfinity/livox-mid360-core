@@ -17,6 +17,47 @@ TEST_CASE("key metadata", "[keys]")
   CHECK(key_value_length(Key::kLidarDiagStatus) == 2);
 }
 
+TEST_CASE("u8 enum and flag codecs (issue #57)", "[keys]")
+{
+  CHECK(encode_bool(true) == encode_u8(1));
+  CHECK(decode_bool(encode_u8(0)).value() == false);
+  CHECK(decode_bool(encode_u8(2)).error() == KeyError::kOutOfRange);
+  CHECK(decode_data_type(encode_u8(3)).value() == DataType::kSpherical);
+  CHECK(decode_data_type(encode_u8(0)).error() == KeyError::kOutOfRange);  // IMU is not settable
+  CHECK(decode_data_type(encode_u8(4)).error() == KeyError::kOutOfRange);
+  CHECK(
+    decode_detect_mode(encode_enum_u8(DetectMode::kSensitive)).value() == DetectMode::kSensitive);
+  CHECK(decode_detect_mode(encode_u8(2)).error() == KeyError::kOutOfRange);
+  CHECK(decode_time_sync_type(encode_u8(2)).value() == TimeSyncType::kGps);
+  CHECK(decode_time_sync_type(encode_u8(3)).error() == KeyError::kOutOfRange);
+  CHECK(decode_fw_type(encode_u8(1)).value() == FwType::kApp);
+  CHECK(decode_fw_type(std::span<const std::byte>{}).error() == KeyError::kWrongLength);
+  const FovEnable both{.fov0 = true, .fov1 = true};
+  CHECK(encode_fov_enable(both) == encode_u8(3));
+  CHECK(encode_fov_enable({.fov0 = false, .fov1 = true}) == encode_u8(2));
+  auto d = decode_fov_enable(encode_u8(1));
+  REQUIRE(d);
+  CHECK((d->fov0 && !d->fov1));
+  CHECK(decode_fov_enable(encode_u8(4)).error() == KeyError::kOutOfRange);
+}
+
+TEST_CASE("key_traits (issue #57)", "[keys]")
+{
+  STATIC_CHECK(typed_key<Key::kFovCfg0>);
+  STATIC_CHECK(writable_key<Key::kFovCfg0>);
+  STATIC_CHECK(!writable_key<Key::kHmsCode>);
+  STATIC_CHECK(!typed_key<Key::kSpeedMode>);
+  STATIC_CHECK(std::is_same_v<key_value_t<Key::kMac>, std::array<std::uint8_t, 6>>);
+  const auto bytes = key_traits<Key::kImuHostIpCfg>::encode({{10, 0, 0, 1}, 56301, 56300});
+  STATIC_CHECK(std::tuple_size_v<decltype(bytes)> == 8);
+  auto back = key_traits<Key::kImuHostIpCfg>::decode(bytes);
+  REQUIRE(back);
+  CHECK(back->dst_port == 56301);
+  auto sn = key_traits<Key::kSn>::decode(bytes_of("ABC\0\0"));
+  REQUIRE(sn);
+  CHECK(*sn == "ABC");
+}
+
 TEST_CASE("host ip config", "[keys]")
 {
   HostIpConfig c{{192, 168, 1, 5}, 56301, 56300};

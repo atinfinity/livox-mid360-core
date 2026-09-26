@@ -53,6 +53,10 @@ simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-6
 
 ### Typed configuration and status APIs on `Device`
 
+The generic `Device::set<K>()` / `get<K>()` / `set_many` / `get_many` over `key_traits<K>`
+(#57, done) are the primary API; the dedicated methods below are implemented as thin wrappers
+over them and only add what the raw key does not express (waits, combined keys, events).
+
 - #38 firmware type and version query
 - #39 FOV configuration and enable (keys `0x0015` / `0x0016` / `0x0017`)
 - #40 coordinate format, scan pattern and point-cloud frame rate
@@ -67,7 +71,7 @@ simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-6
 - #54 time filter (key `0x0026`)
 - #55 diag status (key `0x800E`) read-back and change event
 - #56 typed snapshot of the full `0x0102` push payload and optional `on_push` callback
-- #57 generic typed key access (`set<Key>` / `get<Key>`, batched) over the `keys.hpp` codecs
+- #57 generic typed key access (`set<Key>` / `get<Key>`, batched) over the `keys.hpp` codecs: **done**
 - #58 typed `DeviceType` from the discovery ACK (needs hardware to confirm values)
 
 ### Diagnostics, tooling and samples

@@ -81,9 +81,9 @@ The process is driven over its standard streams so that any test harness can use
 - **Configure** validates every key first with the wiki return codes (`RetCode` in
   `protocol.hpp`): read-only → `0x22`, unknown → `0x20`, wrong length → `0x23`,
   `pcl_data_type` outside 1–3 → `0x03`. All keys are applied only if none failed; the ACK's
-  `error_key` names the offender. `0x21` (reboot required) is never produced because no
-  simulated key needs a reboot. Value lengths mirror `key_value_length()` in
-  `keys.cpp`.
+  `error_key` names the offender. A *changed* `lidar_ipcfg` is stored and answered with `0x21`
+  (reboot required, [unverified] which keys the LiDAR does this for, #11); writing the current
+  value back is a plain `0x00`. Value lengths mirror `key_value_length()` in `keys.cpp`.
 - **State machine** the figure in [protocol_notes.md](protocol_notes.md#working-state):
   power-on → SELFCHECK (`--selfcheck-delay`, commands are answered) → IDLE, then the machine
   chases `work_tgt_mode` (SAMPLING by default): IDLE → MOTORSTARTUP (`--startup-delay`) →

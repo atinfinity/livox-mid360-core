@@ -26,6 +26,8 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "livox/mid360/config.hpp"
@@ -85,6 +87,13 @@ using FrameCallback = std::function<void(Frame &&)>;
 using ImuCallback = std::function<void(const ImuData &)>;
 using EventCallback = std::function<void(const Event &)>;
 
+/// Result of Device::set<K>() / set_many<>(): the LiDAR accepted the values.
+struct SetResult
+{
+  /// ret_code 0x21: the new value takes effect after the next reboot (e.g. kLidarIpCfg).
+  bool reboot_required = false;
+};
+
 class Device
 {
 public:
@@ -121,7 +130,76 @@ public:
     std::span<const KeyValue> values, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<InquireResult, DeviceError> inquire(
     std::span<const std::uint16_t> keys, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<InquireResult, DeviceError> inquire(
+    std::span<const Key> keys, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<void, DeviceError> reboot(std::optional<RequestOptions> opts = std::nullopt);
+
+  // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
+  /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()
+  /// does not wait for the state change (start_sampling() / stop_sampling() do). Read-only
+  /// keys and the unmodelled Mid-360S / 360L keys do not compile.
+  template <Key K>
+    requires writable_key<K>
+  std::expected<SetResult, DeviceError> set(
+    const key_value_t<K> & value, std::optional<RequestOptions> opts = std::nullopt)
+  {
+    return set_many<K>(opts, value);
+  }
+  /// Several keys in one 0x0100 (the LiDAR applies all or rejects the whole request).
+  template <Key... Ks>
+    requires(sizeof...(Ks) > 0 && (writable_key<Ks> && ...))
+  std::expected<SetResult, DeviceError> set_many(const key_value_t<Ks> &... values)
+  {
+    return set_many<Ks...>(std::nullopt, values...);
+  }
+  template <Key... Ks>
+    requires(sizeof...(Ks) > 0 && (writable_key<Ks> && ...))
+  std::expected<SetResult, DeviceError> set_many(
+    std::optional<RequestOptions> opts, const key_value_t<Ks> &... values)
+  {
+    auto encoded = std::make_tuple(key_traits<Ks>::encode(values)...);
+    const auto kvs = std::apply(
+      [](const auto &... e) {
+        return std::array<KeyValue, sizeof...(Ks)>{
+          KeyValue{static_cast<std::uint16_t>(Ks), std::span<const std::byte>(e)}...};
+      },
+      encoded);
+    auto ack = configure(kvs, opts);
+    if (!ack) {
+      return std::unexpected(ack.error());
+    }
+    return SetResult{.reboot_required = ack->ret_code == RetCode::kParamRebootEffect};
+  }
+  /// One 0x0101 for `K`, decoded. kDecodeFailed (with `key`) when the ACK lacks the key or
+  /// its value has the wrong length / an out-of-range value.
+  template <Key K>
+    requires typed_key<K>
+  std::expected<key_value_t<K>, DeviceError> get(std::optional<RequestOptions> opts = std::nullopt)
+  {
+    auto r = get_many<K>(opts);
+    if (!r) {
+      return std::unexpected(r.error());
+    }
+    return std::get<0>(std::move(*r));
+  }
+  /// Several keys in one 0x0101, decoded into a tuple in the order of `Ks`.
+  template <Key... Ks>
+    requires(sizeof...(Ks) > 0 && (typed_key<Ks> && ...))
+  std::expected<std::tuple<key_value_t<Ks>...>, DeviceError> get_many(
+    std::optional<RequestOptions> opts = std::nullopt)
+  {
+    const std::array<Key, sizeof...(Ks)> keys{Ks...};
+    auto res = inquire(keys, opts);
+    if (!res) {
+      return std::unexpected(res.error());
+    }
+    std::optional<DeviceError> failed;
+    std::tuple<key_value_t<Ks>...> out{decode_one<Ks>(*res, failed)...};
+    if (failed) {
+      return std::unexpected(*failed);
+    }
+    return out;
+  }
   /// Interrupts a blocking command from another thread (not serialised).
   void cancel() noexcept;
 
@@ -150,6 +228,20 @@ public:
 private:
   struct Impl;
   explicit Device(std::unique_ptr<Impl> impl);
+
+  template <Key K>
+  static key_value_t<K> decode_one(const InquireResult & res, std::optional<DeviceError> & failed)
+  {
+    if (const auto raw = res.get(K)) {
+      if (auto v = key_traits<K>::decode(*raw)) {
+        return std::move(*v);
+      }
+    }
+    if (!failed) {
+      failed = DeviceError{.kind = DeviceError::Kind::kDecodeFailed, .key = K};
+    }
+    return {};
+  }
   std::unique_ptr<Impl> impl_;
 };
 

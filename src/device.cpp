@@ -726,6 +726,14 @@ std::expected<InquireResult, DeviceError> Device::inquire(
   return std::move(*r);
 }
 
+std::expected<InquireResult, DeviceError> Device::inquire(
+  std::span<const Key> keys, std::optional<RequestOptions> opts)
+{
+  std::vector<std::uint16_t> raw(keys.size());
+  std::ranges::transform(keys, raw.begin(), [](Key k) { return static_cast<std::uint16_t>(k); });
+  return inquire(raw, opts);
+}
+
 std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts)
 {
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
