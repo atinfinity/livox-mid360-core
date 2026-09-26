@@ -31,28 +31,176 @@ class DeviceModelTest(unittest.TestCase):
         self.events: list[tuple[int, int]] = []
         self.m.on_state = lambda o, n: self.events.append((o, n))
 
-    def test_power_on_goes_through_motorstartup(self) -> None:
+    def test_power_on_selfcheck_idle_motorstartup_ready_sampling(self) -> None:
+        # Figure: POWEROFF -> SELFCHECK -> IDLE, then IDLE -> MOTORSTARTUP -> READY -> target.
         self.m.power_on(now=100.0)
-        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
-        self.m.tick(100.5)
+        self.assertEqual(self.m.work_state, sim.WS_SELFCHECK)
+        self.m.tick(100.05)
+        self.assertEqual(self.m.work_state, sim.WS_SELFCHECK)
+        self.m.tick(100.1)  # self-check done: IDLE, target SAMPLING -> motor starts
         self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
         self.m.tick(101.0)
-        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # factory work_tgt_mode
-        self.assertEqual(self.events, [(sim.WS_MOTORSTARTUP, sim.WS_SAMPLING)])
-
-    def test_work_tgt_mode_transitions(self) -> None:
-        self.m.power_on(0.0)
-        self.m.tick(1.0)
-        ret, err = self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))])
-        self.assertEqual((ret, err), (sim.RET_OK, 0))
-        self.assertEqual(self.m.work_state, sim.WS_IDLE)
-        self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_SAMPLING]))])
-        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
-        # During MOTORSTARTUP the target is stored but applied only when startup completes.
-        self.m.power_on(10.0)
-        self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))])
         self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
-        self.m.tick(11.0)
+        self.m.tick(101.1)
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # factory work_tgt_mode
+        self.assertEqual(
+            self.events,
+            [
+                (sim.WS_SELFCHECK, sim.WS_IDLE),
+                (sim.WS_IDLE, sim.WS_MOTORSTARTUP),
+                (sim.WS_MOTORSTARTUP, sim.WS_READY),
+                (sim.WS_READY, sim.WS_SAMPLING),
+            ],
+        )
+
+    def _boot(self, now: float = 0.0) -> None:
+        self.m.power_on(now)
+        self.m.tick(now + 10.0)  # SELFCHECK done -> IDLE -> MOTORSTARTUP
+        self.m.tick(now + 20.0)  # motor started -> READY -> SAMPLING
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
+        self.events.clear()
+
+    def _set_target(self, state: int, now: float) -> None:
+        ret, err = self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([state]))], now)
+        self.assertEqual((ret, err), (sim.RET_OK, 0))
+
+    def test_sampling_to_idle_passes_through_ready(self) -> None:
+        self._boot()
+        self._set_target(sim.WS_IDLE, 20.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)  # immediate, READY has no dwell
+        self.assertEqual(
+            self.events, [(sim.WS_SAMPLING, sim.WS_READY), (sim.WS_READY, sim.WS_IDLE)]
+        )
+
+    def test_sampling_to_ready_and_back(self) -> None:
+        self._boot()
+        self._set_target(sim.WS_READY, 20.0)
+        self.assertEqual(self.m.work_state, sim.WS_READY)
+        self._set_target(sim.WS_SAMPLING, 21.0)
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # READY -> SAMPLING is direct
+        self.assertEqual(
+            self.events, [(sim.WS_SAMPLING, sim.WS_READY), (sim.WS_READY, sim.WS_SAMPLING)]
+        )
+
+    def test_idle_to_sampling_goes_through_motorstartup_and_ready(self) -> None:
+        self._boot()
+        self._set_target(sim.WS_IDLE, 20.0)
+        self.events.clear()
+        self._set_target(sim.WS_SAMPLING, 30.0)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(30.5)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(31.0)
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
+        self.assertEqual(
+            self.events,
+            [
+                (sim.WS_IDLE, sim.WS_MOTORSTARTUP),
+                (sim.WS_MOTORSTARTUP, sim.WS_READY),
+                (sim.WS_READY, sim.WS_SAMPLING),
+            ],
+        )
+
+    def test_idle_to_ready_stops_at_ready(self) -> None:
+        self._boot()
+        self._set_target(sim.WS_IDLE, 20.0)
+        self._set_target(sim.WS_READY, 30.0)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(31.0)
+        self.assertEqual(self.m.work_state, sim.WS_READY)
+        self.m.tick(40.0)
+        self.assertEqual(self.m.work_state, sim.WS_READY)
+        self._set_target(sim.WS_IDLE, 41.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+
+    def test_target_written_during_timed_state_is_followed_afterwards(self) -> None:
+        # During SELFCHECK / MOTORSTARTUP the target is stored and chased once the timed
+        # state completes ([unverified] on hardware, #11).
+        self.m.power_on(10.0)
+        self._set_target(sim.WS_IDLE, 10.01)
+        self.assertEqual(self.m.work_state, sim.WS_SELFCHECK)
+        self.m.tick(10.1)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)  # no motor start for target IDLE
+        self._set_target(sim.WS_SAMPLING, 11.0)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self._set_target(sim.WS_IDLE, 11.5)  # changed mind during MOTORSTARTUP
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(12.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+        self.assertEqual(
+            self.events[-2:], [(sim.WS_MOTORSTARTUP, sim.WS_READY), (sim.WS_READY, sim.WS_IDLE)]
+        )
+
+    def test_work_tgt_mode_rejects_intermediate_and_undefined_values(self) -> None:
+        self._boot()
+        for v in (sim.WS_ERROR, sim.WS_SELFCHECK, sim.WS_MOTORSTARTUP, sim.WS_UPGRADE):
+            self.assertEqual(
+                self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([v]))], 20.0),
+                (sim.RET_PARAM_NOT_SUPPORT, sim.KEY_WORK_TGT_MODE),
+                v,
+            )
+        for v in (0, 3, 7, 10, 255):
+            self.assertEqual(
+                self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([v]))], 20.0),
+                (sim.RET_OUT_OF_RANGE, sim.KEY_WORK_TGT_MODE),
+                v,
+            )
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
+        self.assertEqual(self.m.settings[sim.KEY_WORK_TGT_MODE], bytes([sim.WS_SAMPLING]))
+        self.assertEqual(self.events, [])
+
+    def test_error_and_upgrade_reject_target_writes_until_recovery(self) -> None:
+        self._boot()
+        for forced in (sim.WS_ERROR, sim.WS_UPGRADE):
+            self.m.force_state(forced, 20.0)
+            self.m.tick(25.0)
+            self.assertEqual(self.m.work_state, forced)  # stays until recovery
+            self.assertEqual(
+                self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))], 26.0),
+                (sim.RET_NOT_PERMIT_NOW, sim.KEY_WORK_TGT_MODE),
+            )
+            self.assertEqual(self.m.settings[sim.KEY_WORK_TGT_MODE], bytes([sim.WS_SAMPLING]))
+            # Other keys are still configurable.
+            self.assertEqual(self.m.configure([(sim.KEY_IMU_EN, b'\x01')], 26.0), (sim.RET_OK, 0))
+        # "Abnormal disappearance": forced back into a work substate, the machine chases
+        # the (unchanged) target again.
+        self.m.force_state(sim.WS_IDLE, 30.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+        self.m.tick(30.0)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(31.0)
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
+
+    def test_force_state_leaves_target_alone(self) -> None:
+        self._boot()
+        self._set_target(sim.WS_IDLE, 20.0)
+        self.m.force_state(sim.WS_ERROR, 21.0)
+        self.assertEqual(self.m.settings[sim.KEY_WORK_TGT_MODE], bytes([sim.WS_IDLE]))
+        self.m.force_state(sim.WS_SAMPLING, 22.0)  # forced SAMPLING, but target is IDLE
+        self.m.tick(22.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+        self.m.force_state(sim.WS_MOTORSTARTUP, 23.0)  # timed even when forced
+        self.m.tick(23.5)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(24.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+
+    def test_pattern_mode_change_restarts_motor(self) -> None:
+        self._boot()
+        same = self.m.settings[sim.KEY_PATTERN_MODE]
+        self.assertEqual(self.m.configure([(sim.KEY_PATTERN_MODE, same)], 20.0), (sim.RET_OK, 0))
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # same value: no-op
+        self.assertEqual(
+            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x01')], 21.0), (sim.RET_OK, 0)
+        )
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.m.tick(22.0)
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
+        # In IDLE the scan module is off: nothing to restart.
+        self._set_target(sim.WS_IDLE, 23.0)
+        self.assertEqual(
+            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x00')], 24.0), (sim.RET_OK, 0)
+        )
         self.assertEqual(self.m.work_state, sim.WS_IDLE)
 
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
@@ -99,10 +247,12 @@ class DeviceModelTest(unittest.TestCase):
             [(sim.KEY_IMU_EN, b'\x01'), (sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))]
         )
         self.m.reboot(5.0)
-        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+        self.assertEqual(self.m.work_state, sim.WS_SELFCHECK)
         self.assertTrue(self.m.imu_enabled)
         self.assertEqual(self.m.powerup_cnt, 2)
-        self.m.tick(6.0)
+        self.m.tick(5.1)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)  # target is SAMPLING again
+        self.m.tick(6.1)
         self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
 
     def test_factory_reset_restores_defaults(self) -> None:
@@ -123,7 +273,7 @@ class DeviceModelTest(unittest.TestCase):
     def test_push_payload_parses(self) -> None:
         self.m.hms = [0x02100003] + [0] * 7
         kvs = dict(proto.parse_info_push(self.m.push_payload(123)))
-        self.assertEqual(kvs[sim.KEY_CUR_WORK_STATE], bytes([sim.WS_MOTORSTARTUP]))
+        self.assertEqual(kvs[sim.KEY_CUR_WORK_STATE], bytes([sim.WS_SELFCHECK]))
         self.assertEqual(struct.unpack('<8I', kvs[sim.KEY_HMS])[0], 0x02100003)
         self.assertEqual(kvs[sim.KEY_LOCAL_TIME], struct.pack('<Q', 123))
 
@@ -152,6 +302,8 @@ class EndToEndTest(unittest.TestCase):
                 '--base-port',
                 '0',
                 '--startup-delay',
+                '0.05',
+                '--selfcheck-delay',
                 '0.05',
                 '--reboot-silence',
                 '0.5',
@@ -249,8 +401,15 @@ class EndToEndTest(unittest.TestCase):
         d, _ = self.pcl.recvfrom(2048)
         self.assertLess(proto.DataPacket.parse(d).udp_cnt, 50)
         states = [(e['from'], e['to']) for e in self.events() if e['event'] == 'state']
-        self.assertIn((sim.WS_MOTORSTARTUP, sim.WS_SAMPLING), states)
-        self.assertGreaterEqual(states.count((sim.WS_MOTORSTARTUP, sim.WS_SAMPLING)), 2)
+        boot = [
+            (sim.WS_SELFCHECK, sim.WS_IDLE),
+            (sim.WS_IDLE, sim.WS_MOTORSTARTUP),
+            (sim.WS_MOTORSTARTUP, sim.WS_READY),
+            (sim.WS_READY, sim.WS_SAMPLING),
+        ]
+        self.assertEqual(states[: len(boot)], boot)  # power-on
+        self.assertEqual(states[-len(boot) :], boot)  # after the reboot
+        self.assertEqual(states.count((sim.WS_READY, sim.WS_SAMPLING)), 2)
 
     def test_control_channel_hms_and_drop_ack(self) -> None:
         cmd = ('127.0.0.1', self.s.ports['cmd'])

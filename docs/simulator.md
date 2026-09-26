@@ -24,7 +24,8 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--base-port` | 56000 | discovery port; cmd, push, pcl, imu follow at +100, +200, +300, +400. `0` picks free ports |
 | `--sn` | `SIM0000000000001` | serial number (≤ 16 chars) |
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
-| `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP after power-on / reboot |
+| `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
+| `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
 | `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, #11) |
 | `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and 200 pkt/s IMU rates |
@@ -53,7 +54,7 @@ The process is driven over its standard streams so that any test harness can use
 | `hms` | `codes` (≤ 8 ints) | set the HMS code slots reported by 0x800E/0x8011 and the push |
 | `drop_ack` | `count` | do not answer the next `count` requests (the request is still processed) |
 | `reboot` | | same as receiving 0x0200 |
-| `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR) |
+| `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR); `work_tgt_mode` is untouched, so forcing a work substate makes the machine chase the target again |
 | `drop_rate` | `rate` | change the point-cloud drop fraction at run time |
 | `frame_ms` | `ms` | change the `frame_cnt` period at run time (`0` freezes it); the current frame restarts now |
 | `status` | | emit a `status` event |
@@ -83,11 +84,18 @@ The process is driven over its standard streams so that any test harness can use
   `error_key` names the offender. `0x21` (reboot required) is never produced because no
   simulated key needs a reboot. Value lengths mirror `key_value_length()` in
   `keys.cpp`.
-- **State machine** power-on → MOTORSTARTUP → `work_tgt_mode` (SAMPLING by default) after
-  `--startup-delay`. Writing `work_tgt_mode` switches immediately when not starting up.
-  Reboot and factory reset go back through MOTORSTARTUP, reset `udp_cnt`/`frame_cnt`/`seq`,
-  and stay silent for `--reboot-silence`. Reboot keeps every setting except `work_tgt_mode`;
-  factory reset restores `factory_settings()`.
+- **State machine** the figure in [protocol_notes.md](protocol_notes.md#working-state):
+  power-on → SELFCHECK (`--selfcheck-delay`, commands are answered) → IDLE, then the machine
+  chases `work_tgt_mode` (SAMPLING by default): IDLE → MOTORSTARTUP (`--startup-delay`) →
+  READY → SAMPLING. The pass-through READY has no dwell (SAMPLING → IDLE is immediate), but
+  every transition emits a `state` event. `work_tgt_mode` accepts 1 / 2 / 9 only (4 / 5 / 6 /
+  8 → `0x20`, undefined → `0x03`, in ERROR / UPGRADE → `0x02`); a write during SELFCHECK /
+  MOTORSTARTUP is stored and followed afterwards. A changed `pattern_mode` while READY /
+  SAMPLING restarts the motor. ERROR / UPGRADE are entered only by `set_state` and left by
+  `set_state` or a reboot. Reboot and factory reset go back through SELFCHECK, reset
+  `udp_cnt`/`frame_cnt`/`seq`, and stay silent for `--reboot-silence`. Reboot keeps every
+  setting except `work_tgt_mode`; factory reset restores `factory_settings()`. All durations
+  and the return codes are assumptions ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 - **Streaming** while SAMPLING: point-cloud packets of 96 points in the configured
   `pcl_data_type` at 2000 pkt/s to the host in key `0x0006`, IMU packets at 200 pkt/s to the
   host in `0x0007` when `imu_data_en = 1`, and a `0x0102` push once per second to the host in
@@ -120,7 +128,9 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unicast discovery | answered like broadcast | wiki says "broadcast only" |
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | |
 | Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |
-| Silence after reboot | ~0.5 s, then MOTORSTARTUP → target | real duration unknown |
+| Silence after reboot | ~0.5 s, then SELFCHECK → IDLE → target | real durations unknown |
+| SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | real durations unknown; the figure gives the edges only |
+| `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
 | Unknown key | ret `0x20` | same |
 | `lidar_ipcfg` write | ret `0x00` (no reboot required) | real device likely answers `0x21` |

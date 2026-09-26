@@ -50,7 +50,11 @@ WS_SAMPLING, WS_IDLE, WS_ERROR, WS_SELFCHECK, WS_MOTORSTARTUP, WS_UPGRADE, WS_RE
     9,
 )
 
-RET_OK, RET_FAIL = 0x00, 0x01
+# Requestable through work_tgt_mode; the rest are intermediate states (wiki 1.2.1.2.2).
+WS_REQUESTABLE = (WS_SAMPLING, WS_IDLE, WS_READY)
+WS_ALL = (WS_SAMPLING, WS_IDLE, WS_ERROR, WS_SELFCHECK, WS_MOTORSTARTUP, WS_UPGRADE, WS_READY)
+
+RET_OK, RET_FAIL, RET_NOT_PERMIT_NOW = 0x00, 0x01, 0x02
 # Parameter errors as listed in the wiki (protocol.hpp RetCode): mirrors kParamNotSupport,
 # kParamReadOnly, kParamInvalidLen, kOutOfRange.
 RET_PARAM_NOT_SUPPORT, RET_PARAM_READ_ONLY, RET_PARAM_INVALID_LEN, RET_OUT_OF_RANGE = (
@@ -169,24 +173,31 @@ def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
 # --------------------------------------------------------------------------- device model
 @dataclass
 class DeviceModel:
-    """Pure state machine + parameter table; no sockets, unit-testable."""
+    """
+    Pure state machine + parameter table; no sockets, unit-testable.
+
+    The work-state machine follows the figure in the protocol wiki (1.2.1.2.2), see
+    docs/protocol_notes.md: power-on -> SELFCHECK -> IDLE, then the machine chases
+    work_tgt_mode through MOTORSTARTUP / READY. SELFCHECK and MOTORSTARTUP are timed
+    (``selfcheck_delay`` / ``startup_delay``); the pass-through READY has no dwell.
+    """
 
     sn: str = 'SIM0000000000001'
     startup_delay: float = 0.3
+    selfcheck_delay: float = 0.1
     settings: dict[int, bytes] = field(default_factory=factory_settings)
-    work_state: int = WS_MOTORSTARTUP
+    work_state: int = WS_SELFCHECK
     hms: list[int] = field(default_factory=lambda: [0] * 8)
     time_offset_ns: int = 0
     time_sync_type: int = 0
     powerup_cnt: int = 1
     diag_status: int = 0
-    state_deadline: float = 0.0  # monotonic time at which the pending transition completes
+    state_deadline: float = 0.0  # monotonic time at which the timed state completes
     on_state: Callable[[int, int], None] | None = None
 
     # -- lifecycle ---------------------------------------------------------
     def power_on(self, now: float) -> None:
-        self._set_state(WS_MOTORSTARTUP)
-        self.state_deadline = now + self.startup_delay
+        self._enter_timed(WS_SELFCHECK, now)
 
     def reboot(self, now: float) -> None:
         self.powerup_cnt += 1
@@ -200,14 +211,50 @@ class DeviceModel:
         self.time_sync_type = 0
         self.reboot(now)
 
+    # -- work-state machine ------------------------------------------------
+    @property
+    def timed(self) -> bool:
+        """True while in a state that completes at ``state_deadline``."""
+        return self.work_state in (WS_SELFCHECK, WS_MOTORSTARTUP)
+
     def tick(self, now: float) -> None:
-        """Complete pending transitions."""
-        if self.work_state == WS_MOTORSTARTUP and now >= self.state_deadline:
-            self._set_state(self.target_state())
+        """Complete the pending timed transition, then chase the target."""
+        if self.timed and now >= self.state_deadline:
+            # Self-check succeeded -> "Enter idle"; motor started -> READY.
+            self._set_state(WS_IDLE if self.work_state == WS_SELFCHECK else WS_READY)
+        self._follow_target(now)
 
     def target_state(self) -> int:
         tgt = self.settings[KEY_WORK_TGT_MODE][0]
-        return tgt if tgt in (WS_SAMPLING, WS_IDLE, WS_READY) else WS_IDLE
+        return tgt if tgt in WS_REQUESTABLE else WS_IDLE
+
+    def force_state(self, new: int, now: float) -> None:
+        """
+        Control-channel override of cur_work_state (e.g. a LiDAR-side ERROR).
+
+        work_tgt_mode is untouched: forcing a work substate models "abnormal
+        disappearance", after which the machine chases the target again from the
+        next tick.
+        """
+        if new in (WS_SELFCHECK, WS_MOTORSTARTUP):
+            self._enter_timed(new, now)
+        else:
+            self._set_state(new)
+
+    def _enter_timed(self, state: int, now: float) -> None:
+        self._set_state(state)
+        delay = self.selfcheck_delay if state == WS_SELFCHECK else self.startup_delay
+        self.state_deadline = now + delay
+
+    def _follow_target(self, now: float) -> None:
+        """Take the instantaneous edges of the work substate towards work_tgt_mode."""
+        tgt = self.target_state()
+        if self.work_state == WS_IDLE and tgt in (WS_SAMPLING, WS_READY):
+            self._enter_timed(WS_MOTORSTARTUP, now)
+        elif self.work_state == WS_SAMPLING and tgt in (WS_IDLE, WS_READY):
+            self._set_state(WS_READY)
+        if self.work_state == WS_READY and tgt in (WS_SAMPLING, WS_IDLE):
+            self._set_state(tgt)
 
     def _set_state(self, new: int) -> None:
         old = self.work_state
@@ -221,7 +268,7 @@ class DeviceModel:
         return self.work_state == WS_SAMPLING
 
     # -- parameters --------------------------------------------------------
-    def configure(self, kvs: list[tuple[int, bytes]]) -> tuple[int, int]:
+    def configure(self, kvs: list[tuple[int, bytes]], now: float = 0.0) -> tuple[int, int]:
         """0x0100 semantics: validate everything first, then apply. Returns (ret, error_key)."""
         for key, value in kvs:
             if key in READ_ONLY:
@@ -232,10 +279,22 @@ class DeviceModel:
                 return RET_PARAM_INVALID_LEN, key
             if key == KEY_PCL_DATA_TYPE and value[0] not in (1, 2, 3):
                 return RET_OUT_OF_RANGE, key
+            if key == KEY_WORK_TGT_MODE:
+                # [unverified] return codes, see #11. ERROR / UPGRADE are left only by
+                # reboot / "abnormal disappearance"; 4/5/6/8 exist but are "Not Support".
+                if self.work_state in (WS_ERROR, WS_UPGRADE):
+                    return RET_NOT_PERMIT_NOW, key
+                if value[0] in WS_ALL and value[0] not in WS_REQUESTABLE:
+                    return RET_PARAM_NOT_SUPPORT, key
+                if value[0] not in WS_REQUESTABLE:
+                    return RET_OUT_OF_RANGE, key
         for key, value in kvs:
+            changed = self.settings.get(key) != bytes(value)
             self.settings[key] = bytes(value)
-            if key == KEY_WORK_TGT_MODE and self.work_state != WS_MOTORSTARTUP:
-                self._set_state(self.target_state())
+            if key == KEY_PATTERN_MODE and changed and self.work_state in (WS_READY, WS_SAMPLING):
+                # "Scan mode changed" edge of the figure: the scan module restarts.
+                self._enter_timed(WS_MOTORSTARTUP, now)
+        self._follow_target(now)
         return RET_OK, 0
 
     def inquire(self, keys: list[int], now_ns: int) -> tuple[int, list[tuple[int, bytes]]]:
@@ -342,7 +401,9 @@ class Simulator:
         self.out = out
         self.control = control
         self.verbose = args.verbose
-        self.model = DeviceModel(sn=args.sn, startup_delay=args.startup_delay)
+        self.model = DeviceModel(
+            sn=args.sn, startup_delay=args.startup_delay, selfcheck_delay=args.selfcheck_delay
+        )
         self.model.on_state = self._on_state
         self.points = PointSource(args.seed)
         self.rate = args.rate_multiplier
@@ -435,7 +496,7 @@ class Simulator:
 
     def _next_deadline(self, now: float) -> float:
         d = [self.next_push, self.next_stats]
-        if self.model.work_state == WS_MOTORSTARTUP:
+        if self.model.timed:
             d.append(self.model.state_deadline)
         if self.model.sampling:
             d.append(self.next_pcl)
@@ -477,8 +538,7 @@ class Simulator:
         elif cmd == 'reboot':
             self._do_reboot(now)
         elif cmd == 'set_state':
-            self.model.settings[KEY_WORK_TGT_MODE] = bytes([int(req['state'])])
-            self.model._set_state(int(req['state']))
+            self.model.force_state(int(req['state']), now)
         elif cmd == 'drop_rate':
             self.drop_rate = float(req.get('rate', 0.0))
         elif cmd == 'frame_ms':
@@ -561,7 +621,7 @@ class Simulator:
                 kvs = proto.parse_kv_list(f.data[4:], n)
             except (struct.error, ValueError):
                 return RET_FAIL, struct.pack('<BH', RET_FAIL, 0)
-            ret, err = m.configure(kvs)
+            ret, err = m.configure(kvs, now)
             if ret == RET_OK:
                 self.log(f'configured {[hex(k) for k, _ in kvs]}')
             return ret, struct.pack('<BH', ret, err)
@@ -699,6 +759,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--seed', type=int, default=1)
     p.add_argument(
         '--startup-delay', type=float, default=0.3, help='seconds spent in MOTORSTARTUP'
+    )
+    p.add_argument(
+        '--selfcheck-delay',
+        type=float,
+        default=0.1,
+        help='seconds spent in SELFCHECK after power-on / reboot',
     )
     p.add_argument(
         '--reboot-silence', type=float, default=0.5, help='seconds of silence after 0x0200'

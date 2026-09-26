@@ -192,7 +192,8 @@ TEST_CASE("Session: wait_for_state", "[sim][session]")
   }
   Session s = f.connect();
 
-  // The simulator spends --startup-delay in MOTORSTARTUP before SAMPLING.
+  // The simulator boots SELFCHECK -> IDLE -> MOTORSTARTUP (--startup-delay) -> READY ->
+  // SAMPLING; wait_for_state() simply polls through the intermediate states.
   const auto ok = s.wait_for_state(WorkState::kSampling, 5s);
   REQUIRE(ok.has_value());
   CHECK(s.work_state().value() == WorkState::kSampling);
@@ -202,11 +203,21 @@ TEST_CASE("Session: wait_for_state", "[sim][session]")
   CHECK(to.error().kind == SessionErrorKind::kTimeout);
   CHECK(to.error().work_state == WorkState::kSampling);
 
+  // A LiDAR sitting in ERROR: wait_for_state() gives up at once instead of timing out,
+  // and work_tgt_mode is refused with 0x02 (docs/protocol_notes.md, [unverified]).
   f.control(R"({"cmd":"set_state","state":4})");
   const auto bad = s.wait_for_state(WorkState::kIdle, 2s);
   REQUIRE_FALSE(bad.has_value());
   CHECK(bad.error().kind == SessionErrorKind::kUnexpectedState);
   CHECK(bad.error().work_state == WorkState::kError);
+  const std::byte idle{static_cast<std::uint8_t>(WorkState::kIdle)};
+  const KeyValue tgt{
+    static_cast<std::uint16_t>(Key::kWorkTgtMode), std::span<const std::byte>(&idle, 1)};
+  const auto rej = s.configure(std::span<const KeyValue>(&tgt, 1));
+  REQUIRE_FALSE(rej.has_value());
+  CHECK(rej.error().kind == SessionErrorKind::kLidarRejected);
+  CHECK(rej.error().ret_code == RetCode::kNotPermitNow);
+  CHECK(rej.error().error_key == 0x001A);
   CHECK(f.sim->stop() == 0);
 }
 

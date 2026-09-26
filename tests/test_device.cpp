@@ -348,16 +348,21 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
   }
 
   // The first push records the state without a kStateChanged. The simulator powers up
-  // into SAMPLING (default work_tgt_mode) after its MOTORSTARTUP delay, so depending on
-  // timing the first push carries either MOTORSTARTUP (then one MOTORSTARTUP -> SAMPLING
-  // event follows) or SAMPLING (no event).
+  // SELFCHECK -> IDLE -> MOTORSTARTUP -> READY -> SAMPLING (docs/protocol_notes.md); which
+  // of those the pushes catch depends on timing, so only the chain is checked.
   REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
   CHECK(dev->stats().pushes >= 1);
   CHECK(dev->stats().last_push_time_ns != 0);
-  CHECK(rec.state_events <= 1);
-  if (rec.state_events == 1) {
-    CHECK(rec.event(0).old_state == WorkState::kMotorStartup);
-    CHECK(rec.event(0).new_state == WorkState::kSampling);
+  CHECK(rec.state_events <= 4);
+  for (std::size_t i = 0; i < rec.state_events; ++i) {
+    const Event e = rec.event(i);
+    CHECK(e.old_state != WorkState::kError);
+    CHECK(e.old_state != WorkState::kUpgrade);
+    if (i + 1 < rec.state_events) {
+      CHECK(rec.event(i + 1).old_state == e.new_state);
+    } else {
+      CHECK(e.new_state == WorkState::kSampling);
+    }
   }
   CHECK(rec.hms_events == 0);  // all slots empty == baseline
   std::size_t base = rec.state_events;
@@ -369,15 +374,19 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
   CHECK(rec.event(base).new_state == WorkState::kIdle);
   CHECK(dev->work_state() == WorkState::kIdle);
   ++base;
+  // IDLE -> SAMPLING restarts the motor: the 10 Hz pushes may or may not catch the
+  // 0.1 s MOTORSTARTUP (a dedicated test below makes it observable).
   REQUIRE(dev->start_sampling().has_value());
-  REQUIRE(wait_until([&] { return rec.state_events >= base + 1; }));
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  REQUIRE(rec.state_events >= base + 1);
   {
     const Event e = rec.event(base);
     CHECK(e.kind == Event::Kind::kStateChanged);
     CHECK(e.old_state == WorkState::kIdle);
-    CHECK(e.new_state == WorkState::kSampling);
+    CHECK((e.new_state == WorkState::kSampling || e.new_state == WorkState::kMotorStartup));
   }
-  CHECK(dev->work_state() == WorkState::kSampling);
+  base = rec.state_events - 1;  // index of the event that reached SAMPLING
+  CHECK(rec.event(base).new_state == WorkState::kSampling);
 
   // Two codes: abnormal 0x0001 level error, 0x0002 level warning -> one kHms at level error.
   constexpr std::uint32_t kErr = 0x0001'0003;
@@ -424,6 +433,79 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
   CHECK(dev->work_state() == WorkState::kError);
   CHECK(rec.ok);
   CHECK(dev->stats().bad_packets == 0);
+  dev.reset();
+}
+
+TEST_CASE("Device: start_sampling from IDLE passes through MOTORSTARTUP", "[sim][device]")
+{
+  // 0.5 s of MOTORSTARTUP against 10 Hz pushes: the intermediate state is always seen
+  // (issue #45). stop_sampling() is immediate (SAMPLING -> READY -> IDLE, no motor stop).
+  Fixture f({"--startup-delay", "0.5"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+
+  const std::size_t boot = rec.state_events;  // whatever the pushes caught of the boot
+
+  // work_state() follows the pushes, so it lags the command by up to one push period.
+  const auto t0 = std::chrono::steady_clock::now();
+  REQUIRE(dev->stop_sampling().has_value());
+  CHECK(std::chrono::steady_clock::now() - t0 < 2s);
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kIdle; }));
+  const std::size_t base = rec.state_events;
+  CHECK(base == boot + 1);  // a single SAMPLING -> IDLE, nothing in between
+  CHECK(rec.event(base - 1).old_state == WorkState::kSampling);
+  CHECK(rec.event(base - 1).new_state == WorkState::kIdle);
+
+  REQUIRE(dev->start_sampling().has_value());  // waits for SAMPLING (host_setup.wait_timeout)
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  REQUIRE(rec.state_events >= base + 2);
+  CHECK(rec.event(base).old_state == WorkState::kIdle);
+  CHECK(rec.event(base).new_state == WorkState::kMotorStartup);
+  const Event last = rec.event(rec.state_events - 1);
+  CHECK(last.old_state != WorkState::kIdle);  // MOTORSTARTUP or READY
+  CHECK(last.new_state == WorkState::kSampling);
+  CHECK(rec.ok);
+  dev.reset();
+}
+
+TEST_CASE("Device: start_sampling fails while the LiDAR sits in ERROR", "[sim][device]")
+{
+  // work_tgt_mode is refused (0x02) in ERROR, and wait_for_state would give up on ERROR
+  // anyway: the call returns promptly instead of waiting host_setup.wait_timeout.
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  REQUIRE(dev->stop_sampling().has_value());
+  REQUIRE(f.sim->control(R"({"cmd":"set_state","state":4})"));
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kError; }));
+
+  const auto t0 = std::chrono::steady_clock::now();
+  const auto r = dev->start_sampling();
+  REQUIRE_FALSE(r.has_value());
+  CHECK(std::chrono::steady_clock::now() - t0 < 3s);
+  REQUIRE(r.error().kind == DeviceError::Kind::kSession);
+  REQUIRE(r.error().session.has_value());
+  CHECK(r.error().session->kind == SessionErrorKind::kLidarRejected);
+  CHECK(r.error().session->ret_code == RetCode::kNotPermitNow);
+  CHECK(dev->work_state() == WorkState::kError);
+
+  // "Abnormal disappearance": back in a work substate the LiDAR chases work_tgt_mode
+  // (still IDLE) and start_sampling() works again.
+  REQUIRE(f.sim->control(R"({"cmd":"set_state","state":2})"));
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kIdle; }));
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  CHECK(rec.ok);
   dev.reset();
 }
 
