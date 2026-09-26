@@ -29,6 +29,7 @@ add_executable(mid360_core_tests
   test_typed_keys.cpp
   test_lidar_info.cpp
   test_fov.cpp
+  test_point_format.cpp
   test_reconnect.cpp
   test_golden_vectors.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)

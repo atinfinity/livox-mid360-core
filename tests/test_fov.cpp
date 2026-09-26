@@ -381,7 +381,8 @@ TEST_CASE("HostSetup::fov is applied at open and replayed after a reconnect", "[
   CHECK(same(got->fov0, kFront));
   CHECK(got->enable->fov0);
 
-  // Something else changes the LiDAR; the reconnect restores the HostSetup value.
+  // A later set_fov() replaces the replayed value (#40: a reconnect restores the last value
+  // the Device wrote); the replay itself is exercised by test_point_format.cpp.
   REQUIRE(
     dev
       ->set_fov(FovSettings{
@@ -393,6 +394,6 @@ TEST_CASE("HostSetup::fov is applied at open and replayed after a reconnect", "[
   REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 8s));
   const auto after_reconnect = dev->fov();
   REQUIRE(after_reconnect.has_value());
-  CHECK(same(after_reconnect->fov0, kFront));
-  CHECK(after_reconnect->enable->fov0);
+  CHECK(same(after_reconnect->fov0, kBack));
+  CHECK_FALSE(after_reconnect->enable->fov0);
 }

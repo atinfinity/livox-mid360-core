@@ -325,6 +325,50 @@ if (cur) { LOG(to_string(*cur)); }            // fov0=yaw0-90/pitch-5-5 fov1=...
 | --- | --- |
 | `set_fov()` / `fov()` | `livox_mid360_device_set_fov(dev, const livox_mid360_fov_t*)` / `..._fov(dev, livox_mid360_fov_t*)` with a `present` bit mask for the optionals |
 
+## Point format, scan pattern and frame policy
+
+Issue #40 covers the three things the wiki calls "coordinate format, scan pattern and
+point-cloud frame rate":
+
+- `Device::set_point_format(DataType)` / `point_format()`: key 0x0000. `kImu` is rejected
+  before any I/O (`kInvalidArgument`, `key` = 0x0000). The switch is immediate on the LiDAR;
+  the receive pipeline closes and delivers the frame being assembled when the first packet in
+  the new format arrives, so every `Frame` carries a single `source_type`. The same holds for
+  a raw `configure()` of 0x0000, since the assembler decides on the packet header, not on the
+  request.
+- `Device::set_scan_pattern(ScanPattern)` / `scan_pattern()`: key 0x0001 with the enum
+  `kNonRepetitive` (0) / `kRepetitive` (1) / `kLowRateRepetitive` (2). Nothing is pre-checked:
+  the base Mid-360 has only the non-repetitive pattern, and the LiDAR's ACK
+  (`kLidarRejected`, `ret_code` 0x20 on the simulator) is the answer for the others.
+  `LidarSettings::pattern_mode` and `HostSetup::scan_pattern` use the same enum.
+- `Device::set_frame_policy(const FramePolicy &)` / `frame_policy()`: the base Mid-360 has
+  no frame-rate key (0x0029 exists on other Livox models only and is not modelled), so the
+  frame rate is the host-side `FramePolicy` (`window` for `kTimeWindow`, the LiDAR's
+  `frame_cnt` period for `kFrameCounter`). The new policy is handed to the receive thread and
+  takes effect at the next data packet; the frame in progress is closed by whichever policy
+  is active then, and the `kFrameCounter` fallback detection restarts. `window <= 0` →
+  `kInvalidArgument`. `frame_policy()` returns the last requested policy.
+
+```cpp
+dev->set_point_format(DataType::kSpherical);           // frames from now on: source_type kSpherical
+dev->set_frame_policy({.mode = FramePolicy::Mode::kTimeWindow, .window = 50ms});  // 20 Hz frames
+if (auto p = dev->set_scan_pattern(ScanPattern::kRepetitive); !p) { /* kLidarRejected */ }
+```
+
+**Reconnect replay rule.** The `HostSetup` replayed after a reconnect is not frozen at
+`open()`: every key it models (0x0000, 0x0001, 0x0015, 0x0016, 0x0017) that a later
+successful 0x0100 carried, whether through `set_point_format()`, `set_fov()`, `set<K>()` or a
+raw `configure()`, overwrites the stored copy. A reconnect therefore restores the last value
+the Device successfully wrote, not the value passed at open. Keys `HostSetup` does not model
+(detect mode, install attitude, ...) are still not replayed; that is the LiDAR's own
+persistence.
+
+| C++ | C |
+| --- | --- |
+| `set_point_format()` / `point_format()` | `livox_mid360_device_set_point_format(dev, int)` / `..._point_format(dev, int*)` |
+| `set_scan_pattern()` / `scan_pattern()` | `livox_mid360_device_set_scan_pattern(dev, int)` / `..._scan_pattern(dev, int*)` |
+| `set_frame_policy()` / `frame_policy()` | `livox_mid360_device_set_frame_policy(dev, const livox_mid360_frame_policy_t*)` / `..._frame_policy(dev, livox_mid360_frame_policy_t*)` |
+
 ## Push handling
 
 The LiDAR sends a 0x0102 info push about once per second to the host push port. The receive

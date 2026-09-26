@@ -146,6 +146,28 @@ public:
   /// from the last 0x0102 push without a round trip.
   std::expected<LidarStatus, DeviceError> status(std::optional<RequestOptions> opts = std::nullopt);
 
+  // --- point stream (issue #40): keys 0x0000 / 0x0001 and the host-side frame policy.
+  /// Key 0x0000. kImu → kInvalidArgument with `key` before any I/O. The receive side needs no
+  /// help: the frame being assembled is closed and delivered when the first packet in the
+  /// new format arrives, so every Frame has one `source_type`.
+  std::expected<SetResult, DeviceError> set_point_format(
+    DataType format, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<DataType, DeviceError> point_format(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0001. Not pre-checked: the wiki says only kNonRepetitive works on the base
+  /// Mid-360, and the LiDAR's ACK (kSession / kLidarRejected) is the answer for the others.
+  std::expected<SetResult, DeviceError> set_scan_pattern(
+    ScanPattern pattern, std::optional<RequestOptions> opts = std::nullopt);
+  std::expected<ScanPattern, DeviceError> scan_pattern(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// Replace DeviceOptions::frame_policy at run time (`window` must be > 0 →
+  /// kInvalidArgument). Takes effect at the next data packet; the frame in progress is closed
+  /// by whichever policy is active then. The base Mid-360 has no frame-rate key: the frame
+  /// rate is this policy's `window` (or the LiDAR's frame_cnt period).
+  std::expected<void, DeviceError> set_frame_policy(const FramePolicy & policy);
+  /// The policy last requested (DeviceOptions::frame_policy until set_frame_policy()).
+  [[nodiscard]] FramePolicy frame_policy() const;
+
   // --- FOV (issue #39): keys 0x0015 / 0x0016 / 0x0017.
   /// One 0x0100 with the present fields of `fov` (the LiDAR applies all or none). Validated
   /// before any I/O: no field → kInvalidArgument without `key`; a window outside

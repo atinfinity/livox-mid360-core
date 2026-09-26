@@ -92,6 +92,19 @@ std::string to_string(const DeviceIdentity & id)
   return out;
 }
 
+std::string_view to_string(ScanPattern p) noexcept
+{
+  switch (p) {
+    case ScanPattern::kNonRepetitive:
+      return "non_repetitive";
+    case ScanPattern::kRepetitive:
+      return "repetitive";
+    case ScanPattern::kLowRateRepetitive:
+      return "low_rate_repetitive";
+  }
+  return "unknown";
+}
+
 std::string_view to_string(DetectMode m) noexcept
 {
   switch (m) {
@@ -261,11 +274,10 @@ std::string to_string(const LidarSettings & s)
 {
   const auto sv = [](auto v) { return std::string(to_string(v)); };
   const auto str = [](const auto & v) { return to_string(v); };
-  const auto num = [](auto v) { return std::to_string(v); };
   const auto boolean = [](bool v) { return std::string(v ? "1" : "0"); };
   std::string out;
   append(out, "pcl_data_type", s.pcl_data_type, sv);
-  append(out, "pattern_mode", s.pattern_mode, num);
+  append(out, "pattern_mode", s.pattern_mode, sv);
   append(out, "lidar_ipcfg", s.lidar_ipcfg, str);
   append(out, "state_info_host_ipcfg", s.state_info_host_ipcfg, str);
   append(out, "pointcloud_host_ipcfg", s.pointcloud_host_ipcfg, str);

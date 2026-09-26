@@ -194,23 +194,22 @@ class DeviceModelTest(unittest.TestCase):
         self.m.tick(24.0)
         self.assertEqual(self.m.work_state, sim.WS_IDLE)
 
-    def test_pattern_mode_change_restarts_motor(self) -> None:
+    def test_pattern_mode_accepts_only_non_repetitive(self) -> None:
         self._boot()
-        same = self.m.settings[sim.KEY_PATTERN_MODE]
-        self.assertEqual(self.m.configure([(sim.KEY_PATTERN_MODE, same)], 20.0), (sim.RET_OK, 0))
-        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # same value: no-op
         self.assertEqual(
-            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x01')], 21.0), (sim.RET_OK, 0)
+            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x00')], 20.0), (sim.RET_OK, 0)
         )
-        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
-        self.m.tick(22.0)
-        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
-        # In IDLE the scan module is off: nothing to restart.
-        self._set_target(sim.WS_IDLE, 23.0)
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # no motor restart
+        for value in (b'\x01', b'\x02'):
+            self.assertEqual(
+                self.m.configure([(sim.KEY_PATTERN_MODE, value)], 21.0),
+                (sim.RET_PARAM_NOT_SUPPORT, sim.KEY_PATTERN_MODE),
+            )
         self.assertEqual(
-            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x00')], 24.0), (sim.RET_OK, 0)
+            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x03')], 22.0),
+            (sim.RET_OUT_OF_RANGE, sim.KEY_PATTERN_MODE),
         )
-        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+        self.assertEqual(self.m.settings[sim.KEY_PATTERN_MODE], b'\x00')
 
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
         self.assertEqual(

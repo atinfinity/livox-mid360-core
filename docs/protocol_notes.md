@@ -113,7 +113,9 @@ visible in the push; the return codes for a `work_tgt_mode` write of 4 / 5 / 6 /
 `0x20`), of an undefined value (assumed `0x03`) and in `ERROR` / `UPGRADE` (assumed `0x02`);
 whether a write during `SELFCHECK` / `MOTORSTARTUP` is accepted and followed (assumed yes);
 whether `0x07` is ever reported; the persistence of `work_tgt_mode`; and whether a changed
-`pattern_mode` really restarts the motor ("scan mode changed" edge).
+`pattern_mode` really restarts the motor ("scan mode changed" edge). The simulator no longer
+models that edge: it accepts only `pattern_mode` 0, the one pattern the base Mid-360 has, and
+answers 1 / 2 with `0x20`.
 
 ## Return code 0x21 (PARAM_REBOOT_EFFECT)
 

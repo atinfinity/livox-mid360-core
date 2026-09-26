@@ -56,6 +56,7 @@ struct Device::Impl : detail::Receiver
   : context(ctx),
     options(o),
     host_setup(setup),
+    frame_policy_(o.frame_policy),
     session_options(std::move(sopts)),
     stop(std::move(stop_source)),
     session(std::move(s)),
@@ -70,7 +71,15 @@ struct Device::Impl : detail::Receiver
   // --- fixed after open ---------------------------------------------------
   Context::Impl & context;
   const DeviceOptions options;
-  const HostSetup host_setup;            ///< as applied at open(); replayed on reconnect
+  /// Replayed on reconnect. Starts as applied at open(); every key it models that a later
+  /// successful 0x0100 carried (set_point_format(), set_fov(), configure(), ...) overwrites
+  /// it, so a reconnect restores the last value the Device wrote. Guarded by setup_mutex.
+  HostSetup host_setup;
+  mutable std::mutex setup_mutex;
+  mutable std::mutex policy_mutex;            ///< frame_policy_ / policy_pending
+  FramePolicy frame_policy_;                  ///< last requested (frame_policy())
+  std::optional<FramePolicy> policy_pending;  ///< handed to the receive thread
+  std::atomic<bool> policy_requested{false};
   const SessionOptions session_options;  ///< with `stop` and verify_serial for reconnects
   std::stop_source stop;                 ///< requested by the destructor
 
@@ -327,6 +336,57 @@ struct Device::Impl : detail::Receiver
       assembler.time_mapper().reset();
       imu_drops.reset();
     }
+    if (policy_requested.exchange(false, std::memory_order_acq_rel)) {
+      std::optional<FramePolicy> p;
+      {
+        const std::lock_guard lock(policy_mutex);
+        p.swap(policy_pending);
+      }
+      if (p) {
+        assembler.set_policy(*p);
+        idle_window = std::chrono::duration_cast<Clock::duration>(p->window);
+      }
+    }
+  }
+
+  /// Fold the keys of an accepted 0x0100 into the replayed HostSetup (see host_setup).
+  void absorb(std::span<const KeyValue> values)
+  {
+    const std::lock_guard lock(setup_mutex);
+    for (const KeyValue & kv : values) {
+      switch (static_cast<Key>(kv.key)) {
+        case Key::kPclDataType:
+          if (const auto v = decode_data_type(kv.value)) {
+            host_setup.pcl_data_type = *v;
+          }
+          break;
+        case Key::kPatternMode:
+          if (const auto v = decode_scan_pattern(kv.value)) {
+            host_setup.scan_pattern = *v;
+          }
+          break;
+        case Key::kFovCfg0:
+          if (const auto v = decode_fov_config(kv.value)) {
+            host_setup.fov = host_setup.fov.value_or(FovSettings{});
+            host_setup.fov->fov0 = *v;
+          }
+          break;
+        case Key::kFovCfg1:
+          if (const auto v = decode_fov_config(kv.value)) {
+            host_setup.fov = host_setup.fov.value_or(FovSettings{});
+            host_setup.fov->fov1 = *v;
+          }
+          break;
+        case Key::kFovCfgEn:
+          if (const auto v = decode_fov_enable(kv.value)) {
+            host_setup.fov = host_setup.fov.value_or(FovSettings{});
+            host_setup.fov->enable = *v;
+          }
+          break;
+        default:
+          break;
+      }
+    }
   }
 
   // --- connection state machine (issue #8) ------------------------------------
@@ -422,7 +482,12 @@ struct Device::Impl : detail::Receiver
       info_ = target;
       session = std::move(*s);
     }
-    if (auto r = apply_host_setup(session, host_setup); !r) {
+    HostSetup replay;
+    {
+      const std::lock_guard slock(setup_mutex);
+      replay = host_setup;
+    }
+    if (auto r = apply_host_setup(session, replay); !r) {
       return std::unexpected(wrap(r.error()));
     }
     if (sampling_requested.load(std::memory_order_acquire)) {
@@ -711,6 +776,7 @@ std::expected<ParamConfigAck, DeviceError> Device::configure(
     impl_->note_command_error(r.error());
     return std::unexpected(wrap(r.error()));
   }
+  impl_->absorb(values);
   return *r;
 }
 
@@ -766,6 +832,53 @@ std::expected<LidarStatus, DeviceError> Device::status(std::optional<RequestOpti
     return std::unexpected(r.error());
   }
   return decode_status(r->values);
+}
+
+std::expected<SetResult, DeviceError> Device::set_point_format(
+  DataType format, std::optional<RequestOptions> opts)
+{
+  if (format == DataType::kImu) {
+    DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+    err.key = Key::kPclDataType;
+    return std::unexpected(err);
+  }
+  return set<Key::kPclDataType>(format, opts);
+}
+
+std::expected<DataType, DeviceError> Device::point_format(std::optional<RequestOptions> opts)
+{
+  return get<Key::kPclDataType>(opts);
+}
+
+std::expected<SetResult, DeviceError> Device::set_scan_pattern(
+  ScanPattern pattern, std::optional<RequestOptions> opts)
+{
+  return set<Key::kPatternMode>(pattern, opts);
+}
+
+std::expected<ScanPattern, DeviceError> Device::scan_pattern(std::optional<RequestOptions> opts)
+{
+  return get<Key::kPatternMode>(opts);
+}
+
+std::expected<void, DeviceError> Device::set_frame_policy(const FramePolicy & policy)
+{
+  if (policy.window.count() <= 0) {
+    return std::unexpected(error(DeviceError::Kind::kInvalidArgument));
+  }
+  {
+    const std::lock_guard lock(impl_->policy_mutex);
+    impl_->frame_policy_ = policy;
+    impl_->policy_pending = policy;
+  }
+  impl_->policy_requested.store(true, std::memory_order_release);
+  return {};
+}
+
+FramePolicy Device::frame_policy() const
+{
+  const std::lock_guard lock(impl_->policy_mutex);
+  return impl_->frame_policy_;
 }
 
 std::expected<SetResult, DeviceError> Device::set_fov(

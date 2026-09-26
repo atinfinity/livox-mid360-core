@@ -247,7 +247,7 @@ TEST_CASE("decode_settings fills every key and skips bad ones", "[lidar_info]")
   };
   const auto s = decode_settings(kvs);
   CHECK(s.pcl_data_type == DataType::kCartesian16);
-  CHECK(s.pattern_mode == 0);
+  CHECK(s.pattern_mode == ScanPattern::kNonRepetitive);
   CHECK_FALSE(s.lidar_ipcfg.has_value());
   CHECK_FALSE(s.fov_cfg0.has_value());
   REQUIRE(s.fov_cfg1.has_value());
@@ -262,7 +262,8 @@ TEST_CASE("decode_settings fills every key and skips bad ones", "[lidar_info]")
   CHECK(s.imu_sensor_cfg->gyro_range == ImuGyroRange::k500dps);
   CHECK(
     to_string(s) ==
-    "pcl_data_type=CARTESIAN16 pattern_mode=0 fov_cfg1=yaw10-20/pitch0-5 fov_cfg_en=fov0:1,fov1:1 "
+    "pcl_data_type=CARTESIAN16 pattern_mode=non_repetitive fov_cfg1=yaw10-20/pitch0-5 "
+    "fov_cfg_en=fov0:1,fov1:1 "
     "work_tgt_mode=SAMPLING imu_data_en=1 time_filter=1 imu_sensor_cfg=500Hz/8g/500dps");
   CHECK(to_string(decode_settings({})).empty());
 }
