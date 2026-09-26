@@ -447,7 +447,18 @@ TEST_CASE("Device: start_sampling from IDLE passes through MOTORSTARTUP", "[sim]
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
-  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  // The push handler updates work_state() before it runs the event callback, so wait for
+  // the recorded events to catch up as well (seen racing on the arm64 ASan runners).
+  auto settled = [&](WorkState s) {
+    return wait_until([&] {
+      if (dev->work_state() != s) {
+        return false;
+      }
+      const std::size_t n = rec.state_events;
+      return n == 0 || rec.event(n - 1).new_state == s;
+    });
+  };
+  REQUIRE(settled(WorkState::kSampling));
 
   const std::size_t boot = rec.state_events;  // whatever the pushes caught of the boot
 
@@ -455,14 +466,14 @@ TEST_CASE("Device: start_sampling from IDLE passes through MOTORSTARTUP", "[sim]
   const auto t0 = std::chrono::steady_clock::now();
   REQUIRE(dev->stop_sampling().has_value());
   CHECK(std::chrono::steady_clock::now() - t0 < 2s);
-  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kIdle; }));
+  REQUIRE(settled(WorkState::kIdle));
   const std::size_t base = rec.state_events;
   CHECK(base == boot + 1);  // a single SAMPLING -> IDLE, nothing in between
   CHECK(rec.event(base - 1).old_state == WorkState::kSampling);
   CHECK(rec.event(base - 1).new_state == WorkState::kIdle);
 
   REQUIRE(dev->start_sampling().has_value());  // waits for SAMPLING (host_setup.wait_timeout)
-  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  REQUIRE(settled(WorkState::kSampling));
   REQUIRE(rec.state_events >= base + 2);
   CHECK(rec.event(base).old_state == WorkState::kIdle);
   CHECK(rec.event(base).new_state == WorkState::kMotorStartup);
