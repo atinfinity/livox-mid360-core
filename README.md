@@ -78,28 +78,38 @@ using namespace livox::mid360;
 
 // One receive thread for all LiDARs (host ports 56201 / 56301 / 56401 on this interface).
 auto ctx = Context::create({.bind_address = {192, 168, 1, 5}});
-if (!ctx) { std::cerr << to_string(ctx.error()) << "\n"; return 1; }
+if (!ctx) {
+  std::cerr << to_string(ctx.error()) << "\n";
+  return 1;
+}
 
 // Find the LiDAR, point it at this host (commands block on the calling thread).
-auto devices = discover();                          // broadcast 0x0000, 1 s
-if (!devices || devices->empty()) return 1;
+auto devices = discover();  // broadcast 0x0000, 1 s
+if (!devices || devices->empty()) {
+  return 1;
+}
 auto dev = Device::open(**ctx, devices->front(), {.session = {.bind_address = {192, 168, 1, 5}}});
-if (!dev) { std::cerr << to_string(dev.error()) << "\n"; return 1; }
+if (!dev) {
+  std::cerr << to_string(dev.error()) << "\n";
+  return 1;
+}
 
 // Frames and IMU samples arrive on the receive thread; hand them to your own thread.
-BoundedQueue<Frame> frames;                         // drops the oldest when full
-(void)(*dev)->on_frame([&](Frame&& f) { frames.push(std::move(f)); });
-(void)(*dev)->on_imu([](const ImuData& imu) { /* 200 Hz */ });
-(void)(*dev)->on_event([](const Event& e) { std::clog << to_string(e) << "\n"; });
-if (auto r = (*dev)->start_sampling(); !r) {       // work_tgt_mode = SAMPLING + wait
-  std::cerr << to_string(r.error()) << "\n";        // e.g. session: lidar_rejected ...
+BoundedQueue<Frame> frames;  // drops the oldest when full
+(void)(*dev)->on_frame([&](Frame && f) { frames.push(std::move(f)); });
+(void)(*dev)->on_imu([](const ImuData & imu) { /* 200 Hz */ });
+(void)(*dev)->on_event([](const Event & e) { std::clog << to_string(e) << "\n"; });
+if (auto r = (*dev)->start_sampling(); !r) {  // work_tgt_mode = SAMPLING + wait
+  std::cerr << to_string(r.error()) << "\n";  // e.g. session: lidar_rejected ...
   return 1;
 }
 while (auto f = frames.pop(std::chrono::seconds{1})) {
-  for (const Point& p : f->points) { /* x, y, z in metres, offset_ns from f->base_time_ns */ }
+  for (const Point & p : f->points) {
+    // x, y, z in metres, offset_ns from f->base_time_ns
+  }
 }
 (void)(*dev)->stop_sampling();
-dev->reset();                                       // Devices before the Context
+dev->reset();  // Devices before the Context
 ```
 
 The lower layers stay available on their own: `Session` / `apply_host_setup` for synchronous
