@@ -1201,6 +1201,79 @@ std::expected<FovSettings, DeviceError> Device::fov(std::optional<RequestOptions
   return out;
 }
 
+std::expected<TimeSyncStatus, DeviceError> Device::time_sync_status(
+  std::optional<RequestOptions> opts)
+{
+  static constexpr std::array<Key, 4> kKeys{
+    Key::kLocalTimeNow, Key::kLastSyncTime, Key::kTimeOffset, Key::kTimeSyncType};
+  auto r = inquire(kKeys, opts);
+  if (!r) {
+    return std::unexpected(r.error());
+  }
+  const auto fail = [](Key k) {
+    DeviceError err = error(DeviceError::Kind::kDecodeFailed);
+    err.key = k;
+    return std::unexpected(err);
+  };
+  TimeSyncStatus out;
+  const auto local = find_key(r->values, Key::kLocalTimeNow);
+  const auto sync = find_key(r->values, Key::kLastSyncTime);
+  const auto offset = find_key(r->values, Key::kTimeOffset);
+  const auto type = find_key(r->values, Key::kTimeSyncType);
+  if (!local) {
+    return fail(Key::kLocalTimeNow);
+  }
+  if (!sync) {
+    return fail(Key::kLastSyncTime);
+  }
+  if (!offset) {
+    return fail(Key::kTimeOffset);
+  }
+  if (!type) {
+    return fail(Key::kTimeSyncType);
+  }
+  const auto v_local = decode_u64(*local);
+  const auto v_sync = decode_u64(*sync);
+  const auto v_offset = decode_i64(*offset);
+  const auto v_type = decode_time_sync_type(*type);
+  if (!v_local) {
+    return fail(Key::kLocalTimeNow);
+  }
+  if (!v_sync) {
+    return fail(Key::kLastSyncTime);
+  }
+  if (!v_offset) {
+    return fail(Key::kTimeOffset);
+  }
+  if (!v_type) {
+    return fail(Key::kTimeSyncType);
+  }
+  out.local_time_ns = *v_local;
+  out.last_sync_time_ns = *v_sync;
+  out.offset_ns = *v_offset;
+  out.type = *v_type;
+  return out;
+}
+
+std::expected<void, DeviceError> Device::set_gps_time(
+  std::uint64_t pps_time_ns, std::optional<RequestOptions> opts)
+{
+  assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
+  if (auto c = impl_->check_connected(); !c) {
+    return c;
+  }
+  const std::lock_guard lock(impl_->cmd_mutex);
+  if (auto c = impl_->check_connected(); !c) {
+    return c;
+  }
+  if (auto r = impl_->session.set_gps_time(pps_time_ns, opts); !r) {
+    impl_->note_command_error(r.error());
+    return std::unexpected(wrap(r.error()));
+  }
+  LIVOX_LOG(LogLevel::kInfo, impl_->serial, "gps time {} ns sent", pps_time_ns);
+  return {};
+}
+
 std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts)
 {
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");

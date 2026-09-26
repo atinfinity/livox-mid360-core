@@ -204,6 +204,7 @@ class DeviceModel:
     core_temp: int = 3500  # 0.01 degC
     last_sync_time_ns: int = 0
     push_omit: set[int] = field(default_factory=set)  # keys left out of the push (tests)
+    bad_time_offset: int = 0  # 1: answer 0x800B truncated to 4 bytes (tests)
     state_deadline: float = 0.0  # monotonic time at which the timed state completes
     on_state: Callable[[int, int], None] | None = None
 
@@ -356,7 +357,9 @@ class DeviceModel:
             KEY_POWERUP_CNT: struct.pack('<I', self.powerup_cnt),
             KEY_LOCAL_TIME: struct.pack('<Q', now_ns),
             KEY_LAST_SYNC_TIME: struct.pack('<Q', self.last_sync_time_ns),
-            KEY_TIME_OFFSET: struct.pack('<q', self.time_offset_ns),
+            KEY_TIME_OFFSET: struct.pack('<q', self.time_offset_ns)[
+                : 4 if self.bad_time_offset else 8
+            ],
             KEY_TIME_SYNC_TYPE: bytes([self.time_sync_type]),
             KEY_DIAG_STATUS: struct.pack('<H', self.diag_status),
             KEY_FW_TYPE: b'\x00',
@@ -399,6 +402,7 @@ class DeviceModel:
         'time_sync_type': 'time_sync_type',
         'time_offset_ns': 'time_offset_ns',
         'last_sync_time': 'last_sync_time_ns',
+        'bad_time_offset': 'bad_time_offset',
         'powerup_cnt': 'powerup_cnt',
     }
 

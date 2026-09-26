@@ -223,6 +223,21 @@ TEST_CASE("frame assembler: timestamp policies", "[frame]")
     CHECK_FALSE(fa.time_mapper().offset_ns().has_value());
     CHECK(fa.flush()->base_time_ns == 1'000'000);
   }
+  SECTION("kHostOffsetOnce re-measures after a synced stretch")
+  {
+    FrameAssembler fa(counter_policy(), TimestampPolicy::kHostOffsetOnce);
+    auto p0 = make_packet(0, 0, 1'000'000);
+    (void)fa.push(p0.view, 5'000'000);  // offset 4 ms
+    auto p1 = make_packet(1, 0, 9'000'000'000, 4, DataType::kCartesian32, 3000, TimeType::kGps);
+    (void)fa.push(p1.view, 6'000'000);  // GPS: passed through, offset untouched
+    CHECK(*fa.time_mapper().offset_ns() == 4'000'000);
+    auto p2 = make_packet(2, 0, 9'000'001'000);  // sync lost, clock stays jumped
+    (void)fa.push(p2.view, 7'000'000);
+    CHECK(*fa.time_mapper().offset_ns() == 7'000'000 - 9'000'001'000);
+    auto p3 = make_packet(3, 0, 9'000'002'000);
+    (void)fa.push(p3.view, 8'500'000);  // measured again only once
+    CHECK(*fa.time_mapper().offset_ns() == 7'000'000 - 9'000'001'000);
+  }
   SECTION("kHostReceive uses the receive time")
   {
     FrameAssembler fa(counter_policy(), TimestampPolicy::kHostReceive);

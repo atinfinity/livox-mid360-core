@@ -215,6 +215,17 @@ public:
     DetectMode mode, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<DetectMode, DeviceError> detect_mode(
     std::optional<RequestOptions> opts = std::nullopt);
+  // --- time synchronisation (issue #53): keys 0x8009–0x800C and command 0x0202.
+  /// One 0x0101 for the four keys; a key missing or undecodable → kDecodeFailed with `key`.
+  /// The pushed copy is in pushed_status(). Diagnostics only: the data path acts on each
+  /// packet's own time_type (see TimestampPolicy), never on these keys.
+  std::expected<TimeSyncStatus, DeviceError> time_sync_status(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0202: hands the host's GPS time of the last PPS edge to the LiDAR. Not validated;
+  /// read time_sync_status() back to see whether the LiDAR took it (type becomes kGps).
+  std::expected<void, DeviceError> set_gps_time(
+    std::uint64_t pps_time_ns, std::optional<RequestOptions> opts = std::nullopt);
+
   /// Key 0x800E by inquire (#55); the pushed value is pushed_status()->lidar_diag_status
   /// and changes raise Event::kDiagChanged.
   std::expected<DiagStatus, DeviceError> diag_status(

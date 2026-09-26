@@ -261,6 +261,13 @@ std::string_view to_string(FuncOut f) noexcept
   return "unknown";
 }
 
+std::string to_string(const TimeSyncStatus & s)
+{
+  return "local_time=" + std::to_string(s.local_time_ns) +
+         " last_sync=" + std::to_string(s.last_sync_time_ns) +
+         " offset=" + std::to_string(s.offset_ns) + " type=" + std::string(to_string(s.type));
+}
+
 std::string to_string(const FuncIoConfig & c)
 {
   return std::string(to_string(c.in0)) + '/' + std::string(to_string(c.in1)) + '/' +

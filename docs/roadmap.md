@@ -69,7 +69,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
 - #51 install attitude / extrinsics (key `0x0012`) and optional host-side transform — **done**
 - #52 function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs) — **done**
 - #53 time-sync status read-back (`0x8009`–`0x800C`) and `set_gps_time` integration with
-  `TimestampPolicy`
+  `TimestampPolicy` — **done**
 - #54 time filter (key `0x0026`; `set_time_filter()`): **done**
 - #55 diag status (key `0x800E`) read-back and change event
 - #56 typed snapshot of the full `0x0102` push payload and optional `on_push` callback

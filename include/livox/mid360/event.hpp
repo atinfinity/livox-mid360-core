@@ -40,7 +40,8 @@ struct DeviceStats
   std::uint64_t last_push_time_ns = 0;  ///< host receive time of the last push, 0 = none
   std::uint64_t disconnects = 0;        ///< kDisconnected events raised
   std::uint64_t reconnects = 0;         ///< kReconnected events raised
-  std::int64_t time_offset_ns = 0;      ///< kHostOffsetOnce: host - LiDAR, once measured
+  std::int64_t time_offset_ns =
+    0;  ///< kHostOffsetOnce: host - LiDAR, measured once (again after a sync loss)
   bool time_offset_valid = false;
 };
 
