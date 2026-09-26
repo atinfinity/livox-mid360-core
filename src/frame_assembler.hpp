@@ -42,11 +42,16 @@ public:
   /// Output time of the packet's first sample. `recv_time_ns` is the kernel receive time.
   [[nodiscard]] std::uint64_t map(const DataPacketHeader & h, std::uint64_t recv_time_ns) noexcept;
   [[nodiscard]] std::optional<std::int64_t> offset_ns() const noexcept { return offset_; }
-  void reset() noexcept { offset_.reset(); }
+  void reset() noexcept
+  {
+    offset_.reset();
+    synced_ = false;
+  }
 
 private:
   TimestampPolicy policy_;
   std::optional<std::int64_t> offset_;
+  bool synced_ = false;  ///< the previous packet carried a PTP / GPS stamp
 };
 
 class FrameAssembler

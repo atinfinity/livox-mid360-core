@@ -376,6 +376,44 @@ TEST_CASE("Device::set_func_io_config / func_io_config round trip and rejections
   CHECK(dev->func_io_config()->out0 == FuncOut::kSafetyZone);  // unchanged
 }
 
+TEST_CASE("Device::time_sync_status and set_gps_time through the simulator", "[sim]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+  const auto before = dev->time_sync_status();
+  REQUIRE(before.has_value());
+  CHECK(before->type == TimeSyncType::kNone);
+  CHECK(before->last_sync_time_ns == 0);
+  CHECK(before->offset_ns == 0);
+  CHECK(before->local_time_ns != 0);
+
+  // One year ahead of the host clock: the simulator's clock follows the pushed time.
+  const std::uint64_t host_now =
+    static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::system_clock::now().time_since_epoch())
+                                 .count());
+  const std::uint64_t gps = host_now + 365ULL * 24 * 3600 * 1'000'000'000ULL;
+  REQUIRE(dev->set_gps_time(gps).has_value());
+  const auto after = dev->time_sync_status();
+  REQUIRE(after.has_value());
+  CHECK(after->type == TimeSyncType::kGps);
+  CHECK(after->last_sync_time_ns != 0);
+  CHECK(after->offset_ns > 300LL * 24 * 3600 * 1'000'000'000LL);
+  CHECK(after->local_time_ns > gps);
+  CHECK(after->local_time_ns < gps + 5'000'000'000ULL);
+  CHECK(to_string(*after).find("type=gps") != std::string::npos);
+
+  // A key that does not decode fails the whole read, naming the key.
+  REQUIRE(f.sim->control(R"({"cmd":"set_status","bad_time_offset":1})"));  // 0x800B, 4 bytes
+  const auto partial = dev->time_sync_status();
+  REQUIRE_FALSE(partial.has_value());
+  CHECK(partial.error().kind == DeviceError::Kind::kDecodeFailed);
+  CHECK(partial.error().key == Key::kTimeOffset);
+}
+
 TEST_CASE("Simulator crops the point cloud to the enabled windows", "[fov][sim]")
 {
   Fixture f;

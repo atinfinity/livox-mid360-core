@@ -127,8 +127,11 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   `kTimeWindow` closes every `window` of point time (livox_ros_driver2 publish period).
 - `TimestampPolicy`: `kLidar` (packet time as is, for PTP/GPS), `kHostOffsetOnce` (default,
   LiDAR time plus a host-minus-LiDAR offset measured once), `kHostReceive`
-  (kernel receive time). Whether a PTP/GPS `time_type` switches automatically to `kLidar` is
-  decided in #6.
+  (kernel receive time). The switch is per packet, not per policy: under `kHostOffsetOnce`
+  a packet whose header `time_type` is PTP or GPS is passed through unchanged and the host
+  offset is re-measured at the first unsynchronised packet after it; `kLidar` is always the
+  raw stamp. The status keys 0x8009–0x800C (`time_sync_status()`) are diagnostics and never
+  consulted on the data path.
 - `Event{kind, time_ns, old_state, new_state, hms[8], hms_level, diag_old, diag_new, stats}`:
   a union-like struct where `kind` selects the meaningful fields (`kStateChanged`, `kHms`,
   `kDiagChanged`, `kDisconnected`, `kReconnected`, `kStats`). `kHms` fires once per change of the *set* of active codes
@@ -136,7 +139,7 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   per-level filtering.
 - `DeviceStats{packets, points, frames, imu_samples, bad_packets, dropped_packets (udp_cnt
   gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, pushes,
-  last_push_time_ns, time_offset_ns, time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
+  last_push_time_ns, time_offset_ns (re-measured after a sync loss), time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
   atomics written by the receive thread only.
 - `DeviceError{kind, optional<SessionError> session, optional<Key> key}` with kinds `kSession`,
   `kInvalidArgument`, `kInvalidState`, `kAlreadyRegistered` (same IP opened twice on one
@@ -426,6 +429,33 @@ write of an undefined input function is [unverified] (#11); the simulator answer
 | C++ | C |
 | --- | --- |
 | `set_func_io_config()` / `func_io_config()` | `livox_mid360_device_set_func_io_config(dev, const livox_mid360_func_io_config_t*, bool*)` / `..._func_io_config(dev, livox_mid360_func_io_config_t*)` |
+
+## Time synchronisation
+
+`Device::time_sync_status()` (issue #53) reads keys 0x8009–0x800C in one inquire into
+`TimeSyncStatus{local_time_ns, last_sync_time_ns, offset_ns, type}`. The fields are plain: a
+key the LiDAR omits or that fails to decode makes the whole call `kDecodeFailed` naming the
+key (`pushed_status()` keeps the same four keys as optionals for the tolerant flavour).
+`Device::set_gps_time(pps_time_ns)` is 0x0202, the host's GPS time of the last PPS edge (the
+IN0 / IN1 pins of the function IO config, #52); it is not validated and nothing is read back,
+so a caller that wants confirmation reads `time_sync_status()` (`type` becomes `kGps`, the
+simulator also shifts its clock by the difference).
+
+`TimestampPolicy` is not coupled to these keys. Each data packet says in `time_type` whether
+its stamp is synchronised, and `kHostOffsetOnce` acts on that per packet: synced stamps pass
+through, unsynced ones get the host offset, which is measured at the first unsynced
+point-cloud packet and again at the first unsynced packet after a synced stretch (the LiDAR
+clock jumped with the sync). `DeviceStats::time_offset_ns` follows each measurement.
+
+```cpp
+dev->set_gps_time(gps_ns_of_last_pps);
+if (auto s = dev->time_sync_status(); s && s->type == TimeSyncType::kGps) { /* synced */ }
+```
+
+| C++ | C |
+| --- | --- |
+| `time_sync_status()` | `livox_mid360_device_time_sync_status(dev, livox_mid360_time_sync_status_t*)` |
+| `set_gps_time()` | `livox_mid360_device_set_gps_time(dev, uint64_t)` |
 
 ## Detection mode, IMU and time filter
 

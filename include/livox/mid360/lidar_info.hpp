@@ -144,6 +144,17 @@ struct LidarStatus
   std::optional<std::array<HmsCode, 8>> hms_code;  ///< 0x8011, decoded slots
 };
 
+/// Time-sync state read by Device::time_sync_status() (issue #53): keys 0x8009–0x800C in
+/// one inquire. Plain fields: a key missing from the ACK fails the whole read.
+struct TimeSyncStatus
+{
+  std::uint64_t local_time_ns = 0;          ///< 0x8009 LiDAR clock now
+  std::uint64_t last_sync_time_ns = 0;      ///< 0x800A LiDAR time of the last sync, 0 = never
+  std::int64_t offset_ns = 0;               ///< 0x800B local - source
+  TimeSyncType type = TimeSyncType::kNone;  ///< 0x800C
+};
+[[nodiscard]] std::string to_string(const TimeSyncStatus & s);
+
 inline constexpr std::array<Key, 10> kStatusKeys{
   Key::kCurWorkState, Key::kCoreTemp,   Key::kPowerupCnt,   Key::kLocalTimeNow,
   Key::kLastSyncTime, Key::kTimeOffset, Key::kTimeSyncType, Key::kLidarDiagStatus,
