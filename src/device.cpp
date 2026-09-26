@@ -134,8 +134,7 @@ struct Device::Impl : detail::Receiver
 
   // --- pushed state (written by the receive thread under push_mutex) ------------
   mutable std::mutex push_mutex;
-  std::optional<WorkState> pushed_state;
-  std::array<HmsCode, 8> pushed_hms{};
+  std::optional<LidarStatus> pushed_status;
   std::array<std::uint32_t, 8> hms_sorted{};  ///< raw codes, sorted, for change detection
 
   [[nodiscard]] DeviceStats snapshot() const
@@ -198,9 +197,10 @@ struct Device::Impl : detail::Receiver
     }
   }
 
-  // 0x0102: only cur_work_state and hms_code are consumed (issue #7). The first push
-  // records the state without a kStateChanged; the HMS baseline is all-zero, so active
-  // codes in the first push do raise kHms. Slot order is ignored for change detection.
+  // 0x0102: the payload is kept as a LidarStatus (issue #41); cur_work_state and hms_code
+  // additionally raise events (issue #7). The first push records the state without a
+  // kStateChanged; the HMS baseline is all-zero, so active codes in the first push do raise
+  // kHms. Slot order is ignored for change detection.
   void on_push(const Datagram & d)
   {
     const auto frame = parse_command_frame(d.data);
@@ -222,41 +222,48 @@ struct Device::Impl : detail::Receiver
     std::optional<Event> hms_event;
     {
       const std::lock_guard lock(push_mutex);
-      if (const auto v = find_key(push->values, Key::kCurWorkState)) {
-        if (const auto st = decode_work_state(*v)) {
-          if (pushed_state && *pushed_state != *st) {
-            Event ev;
-            ev.kind = Event::Kind::kStateChanged;
-            ev.time_ns = d.recv_time_ns;
-            ev.old_state = *pushed_state;
-            ev.new_state = *st;
-            state_event = ev;
-          }
-          pushed_state = *st;
+      LidarStatus next = decode_status(push->values);
+      if (pushed_status) {
+        // Keep what an earlier push carried when this one lacks the key.
+        if (!next.cur_work_state) {
+          next.cur_work_state = pushed_status->cur_work_state;
+        }
+        if (!next.hms_code) {
+          next.hms_code = pushed_status->hms_code;
         }
       }
-      if (const auto v = find_key(push->values, Key::kHmsCode)) {
-        if (const auto raw = decode_hms_codes(*v)) {
-          for (std::size_t i = 0; i < raw->size(); ++i) {
-            pushed_hms[i] = decode_hms((*raw)[i]);
-          }
-          std::array<std::uint32_t, 8> sorted = *raw;
-          std::ranges::sort(sorted);
-          if (sorted != hms_sorted) {
-            hms_sorted = sorted;
-            Event ev;
-            ev.kind = Event::Kind::kHms;
-            ev.time_ns = d.recv_time_ns;
-            ev.hms = pushed_hms;
-            for (const HmsCode & c : pushed_hms) {
-              if (c.active() && c.level > ev.hms_level) {
-                ev.hms_level = c.level;
-              }
+      if (next.cur_work_state) {
+        const auto old = pushed_status ? pushed_status->cur_work_state : std::nullopt;
+        if (old && *old != *next.cur_work_state) {
+          Event ev;
+          ev.kind = Event::Kind::kStateChanged;
+          ev.time_ns = d.recv_time_ns;
+          ev.old_state = *old;
+          ev.new_state = *next.cur_work_state;
+          state_event = ev;
+        }
+      }
+      if (next.hms_code) {
+        std::array<std::uint32_t, 8> sorted{};
+        for (std::size_t i = 0; i < sorted.size(); ++i) {
+          sorted[i] = (*next.hms_code)[i].raw;
+        }
+        std::ranges::sort(sorted);
+        if (sorted != hms_sorted) {
+          hms_sorted = sorted;
+          Event ev;
+          ev.kind = Event::Kind::kHms;
+          ev.time_ns = d.recv_time_ns;
+          ev.hms = *next.hms_code;
+          for (const HmsCode & c : *next.hms_code) {
+            if (c.active() && c.level > ev.hms_level) {
+              ev.hms_level = c.level;
             }
-            hms_event = ev;
           }
+          hms_event = ev;
         }
       }
+      pushed_status = std::move(next);
     }
     if (rx_event_cb) {
       if (state_event) {
@@ -743,6 +750,24 @@ std::expected<DeviceIdentity, DeviceError> Device::identity(std::optional<Reques
   return decode_identity(r->values);
 }
 
+std::expected<LidarSettings, DeviceError> Device::settings(std::optional<RequestOptions> opts)
+{
+  auto r = inquire(kSettingsKeys, opts);
+  if (!r) {
+    return std::unexpected(r.error());
+  }
+  return decode_settings(r->values);
+}
+
+std::expected<LidarStatus, DeviceError> Device::status(std::optional<RequestOptions> opts)
+{
+  auto r = inquire(kStatusKeys, opts);
+  if (!r) {
+    return std::unexpected(r.error());
+  }
+  return decode_status(r->values);
+}
+
 std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts)
 {
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
@@ -776,16 +801,25 @@ void Device::disconnect() { impl_->declare_disconnected(DisconnectReason::kUser)
 
 DiscoveredDevice Device::info() const { return impl_->snapshot_info(); }
 
+std::optional<LidarStatus> Device::pushed_status() const
+{
+  const std::lock_guard lock(impl_->push_mutex);
+  return impl_->pushed_status;
+}
+
 std::optional<WorkState> Device::work_state() const
 {
   const std::lock_guard lock(impl_->push_mutex);
-  return impl_->pushed_state;
+  return impl_->pushed_status ? impl_->pushed_status->cur_work_state : std::nullopt;
 }
 
 std::array<HmsCode, 8> Device::hms() const
 {
   const std::lock_guard lock(impl_->push_mutex);
-  return impl_->pushed_hms;
+  if (impl_->pushed_status && impl_->pushed_status->hms_code) {
+    return *impl_->pushed_status->hms_code;
+  }
+  return {};
 }
 
 DeviceStats Device::stats() const { return impl_->snapshot(); }

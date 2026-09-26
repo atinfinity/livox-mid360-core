@@ -81,8 +81,9 @@ dev.reset();  // before ctx
    thread instead.
 4. **An exception escaping a callback terminates the process.** Catching it would leave the
    device state undefined and has no meaning across the C ABI.
-5. Observation methods (`stats()`, `work_state()`, `info()`) are thread-safe snapshots;
-   `identity()` is a synchronous inquire and follows the command rules above.
+5. Observation methods (`stats()`, `work_state()`, `hms()`, `pushed_status()`, `info()`) are
+   thread-safe snapshots; `identity()` / `settings()` / `status()` are synchronous inquires and
+   follow the command rules above.
 
 ## Callbacks
 
@@ -262,10 +263,31 @@ if (id) {
   from the ACK leaves its field empty / zero (`decode_identity()` never fails).
 - `identity()` is not cached: `info()` keeps the discovery data (serial, IP, `dev_type`) and is
   answered without a round trip.
+- `LidarSettings` (`settings()`, the 16 modelled writable keys `kSettingsKeys`): every field is
+  an `std::optional`; a key the LiDAR did not answer, or answered with a value the codec
+  rejects, stays empty and is not an error. `to_string()` prints the present keys in wire
+  order (`pcl_data_type=CARTESIAN32 lidar_ipcfg=192.168.1.12/255.255.255.0/192.168.1.1 ...`).
+- `LidarStatus` (`status()`, keys 0x8006–0x8011 `kStatusKeys`): same rules; `hms_code` holds
+  the decoded slots. `to_string()` prints `core_temp` in °C and only the active HMS codes
+  (`hms=[0x0103800a:warning]`).
+- `pushed_status()` is `decode_status()` of the last 0x0102 push, kept under the push lock and
+  returned without a round trip; `nullopt` before the first push. `work_state()` and `hms()`
+  are views of it. Keys missing from a push keep the value of an earlier push for
+  `cur_work_state` / `hms_code` (so the change events stay meaningful); the other fields
+  reflect the last push only. Which keys the real push carries is unverified (#11); the
+  simulator pushes all read-only keys.
+
+```cpp
+auto st = dev->status();                          // 0x0101; or dev->pushed_status()
+if (st && st->core_temp && *st->core_temp > 8000) { /* 80 °C */ }
+auto cfg = dev->settings();
+if (cfg && cfg->fov_cfg_en && cfg->fov_cfg_en->fov0) { /* FOV 0 in use */ }
+```
 
 | C++ | C |
 | --- | --- |
 | `identity()` | `livox_mid360_device_identity(dev, livox_mid360_identity_t*)` |
+| `settings()` / `status()` / `pushed_status()` | `livox_mid360_device_settings(dev, livox_mid360_settings_t*)` etc.; optionals become a `present` bit mask |
 
 ## Push handling
 
