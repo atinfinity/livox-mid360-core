@@ -123,7 +123,7 @@ build/tools/cli/livox-mid360-cli replay /tmp/sim.lvx2 --rate 0
 ```
 
 The ctest `cli_record_replay` does exactly that (2 s) and checks that the replayed packet
-count equals the recorded one and the frame count matches the file's frames within one.
+count equals the recorded one and the frame count matches the file's frames within two.
 
 ## Tests
 
