@@ -1,7 +1,25 @@
+# Verbatim copy of ament_clang_format's configuration (ROS 2 C++ style, issue #63):
+#   https://github.com/ament/ament_lint/blob/rolling/ament_clang_format/ament_clang_format/configuration/.clang-format
+#   at commit f9a654c0bea7 (2022-11-25); identical on jazzy and rolling. Re-diff by hand when
+#   the ROS 2 distribution targeted by livox-mid360-ros2 changes. Do not add local overrides:
+#   braces on every if/for/while body are enforced by clang-tidy, not here.
+---
+Language: Cpp
 BasedOnStyle: Google
+
+AccessModifierOffset: -2
+AlignAfterOpenBracket: AlwaysBreak
+BraceWrapping:
+  AfterClass: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterEnum: true
+BreakBeforeBraces: Custom
 ColumnLimit: 100
-IndentWidth: 2
+ConstructorInitializerIndentWidth: 0
+ContinuationIndentWidth: 2
 DerivePointerAlignment: false
-PointerAlignment: Left
-AllowShortFunctionsOnASingleLine: Inline
-IncludeBlocks: Regroup
+PointerAlignment: Middle
+ReflowComments: false
+...
