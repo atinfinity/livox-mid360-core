@@ -670,6 +670,16 @@ class EndToEndTest(unittest.TestCase):
         finally:
             host_log.close()
 
+    def test_control_lines_written_together_are_all_applied(self) -> None:
+        # Two lines in one write land in the pipe together; the second must not be
+        # left behind in a read buffer that select() never reports again.
+        self.send_control('{"cmd":"hms","codes":[34603011]}\n{"cmd":"status"}')
+        deadline = time.monotonic() + 3
+        while '"event":"status"' not in self.out.getvalue() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertIn('"event":"status"', self.out.getvalue())
+        self.assertEqual(self.s.model.hms[0], 34603011)
+
 
 if __name__ == '__main__':
     unittest.main()
