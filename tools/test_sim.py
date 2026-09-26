@@ -285,6 +285,8 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(kvs[sim.KEY_CUR_WORK_STATE], bytes([sim.WS_SELFCHECK]))
         self.assertEqual(struct.unpack('<8I', kvs[sim.KEY_HMS])[0], 0x02100003)
         self.assertEqual(kvs[sim.KEY_LOCAL_TIME], struct.pack('<Q', 123))
+        # Every read-only key is pushed [unverified].
+        self.assertEqual(sorted(kvs), sorted(range(0x8000, 0x800D)) + [0x800E, 0x8010, 0x8011])
 
 
 class PointSourceTest(unittest.TestCase):

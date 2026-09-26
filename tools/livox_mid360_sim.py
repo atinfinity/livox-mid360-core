@@ -340,7 +340,25 @@ class DeviceModel:
         return ro.get(key)
 
     def push_payload(self, now_ns: int) -> bytes:
-        keys = [KEY_CUR_WORK_STATE, KEY_DIAG_STATUS, KEY_HMS, KEY_SN, KEY_LOCAL_TIME]
+        # Every read-only key 0x8000-0x8011 [unverified: the real push key set, issue #11].
+        keys = [
+            KEY_SN,
+            KEY_PRODUCT_INFO,
+            KEY_VERSION_APP,
+            KEY_VERSION_LOADER,
+            KEY_VERSION_HW,
+            KEY_MAC,
+            KEY_CUR_WORK_STATE,
+            KEY_CORE_TEMP,
+            KEY_POWERUP_CNT,
+            KEY_LOCAL_TIME,
+            KEY_LAST_SYNC_TIME,
+            KEY_TIME_OFFSET,
+            KEY_TIME_SYNC_TYPE,
+            KEY_DIAG_STATUS,
+            KEY_FW_TYPE,
+            KEY_HMS,
+        ]
         kvs = [(k, self.read_key(k, now_ns)) for k in keys]
         return struct.pack('<HH', len(kvs), 0) + proto.encode_kv_list(kvs)
 

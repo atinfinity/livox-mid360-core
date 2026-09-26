@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "livox/mid360/mid360.hpp"
@@ -178,4 +180,227 @@ TEST_CASE("Device::identity fails when the LiDAR does not answer", "[lidar_info]
   auto id = dev->identity(RequestOptions{.timeout = 50ms, .attempts = 1});
   REQUIRE_FALSE(id.has_value());
   CHECK(id.error().kind == DeviceError::Kind::kSession);
+}
+
+// --- settings / status (issue #41) -------------------------------------------------------
+
+namespace
+{
+template <Key K>
+KeyValue kv(std::span<const std::byte> bytes)
+{
+  return {static_cast<std::uint16_t>(K), bytes};
+}
+}  // namespace
+
+TEST_CASE("to_string of the typed key values", "[lidar_info]")
+{
+  CHECK(
+    to_string(HostIpConfig{.ip = {192, 168, 1, 5}, .dst_port = 56301, .src_port = 56201}) ==
+    "192.168.1.5:56301<-56201");
+  CHECK(
+    to_string(LidarIpConfig{
+      .ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 0}, .gateway = {192, 168, 1, 1}}) ==
+    "192.168.1.12/255.255.255.0/192.168.1.1");
+  CHECK(
+    to_string(InstallAttitude{
+      .roll_deg = 1.5F, .pitch_deg = -2, .yaw_deg = 0, .x_mm = 10, .y_mm = 20, .z_mm = 30}) ==
+    "r1.5/p-2.0/y0.0/x10/y20/z30");
+  CHECK(
+    to_string(FovConfig{
+      .yaw_start_deg = 0, .yaw_stop_deg = 360, .pitch_start_deg = -7, .pitch_stop_deg = 52}) ==
+    "yaw0-360/pitch-7-52");
+  CHECK(to_string(FovEnable{.fov0 = true, .fov1 = false}) == "fov0:1,fov1:0");
+  CHECK(to_string(FuncIoConfig{.in0 = 0, .in1 = 0, .out0 = 1, .out1 = 2}) == "0/0/1/2");
+  CHECK(to_string(ImuSensorConfig{}) == "200Hz/4g/2000dps");
+  CHECK(
+    to_string(ImuSensorConfig{
+      .output_rate = ImuOutputRate::k50Hz,
+      .accel_range = ImuAccelRange::k32g,
+      .gyro_range = ImuGyroRange::k15_625dps}) == "50Hz/32g/15.625dps");
+  CHECK(
+    to_string(DiagStatus{.system = 0, .scan = 1, .ranging = 2, .communication = 3}) ==
+    "sys0/scan1/rng2/comm3");
+  CHECK(to_string(DetectMode::kSensitive) == "sensitive");
+  CHECK(to_string(TimeSyncType::kPtp) == "ptp");
+  CHECK(to_string(FwType::kApp) == "app");
+}
+
+TEST_CASE("decode_settings fills every key and skips bad ones", "[lidar_info]")
+{
+  const auto data_type = std::vector<std::byte>{std::byte{2}};
+  const auto pattern = std::vector<std::byte>{std::byte{0}};
+  const auto tgt = std::vector<std::byte>{std::byte{1}};
+  const auto on = std::vector<std::byte>{std::byte{1}};
+  const auto fov_en = std::vector<std::byte>{std::byte{3}};
+  const auto bad_detect = std::vector<std::byte>{std::byte{7}};
+  const auto fov = encode_fov_config(
+    FovConfig{.yaw_start_deg = 10, .yaw_stop_deg = 20, .pitch_start_deg = 0, .pitch_stop_deg = 5});
+  const auto imu = encode_imu_sensor_config(ImuSensorConfig{
+    .output_rate = ImuOutputRate::k500Hz,
+    .accel_range = ImuAccelRange::k8g,
+    .gyro_range = ImuGyroRange::k500dps});
+  const std::vector<KeyValue> kvs{
+    kv<Key::kPclDataType>(data_type), kv<Key::kPatternMode>(pattern),   kv<Key::kFovCfg1>(fov),
+    kv<Key::kFovCfgEn>(fov_en),       kv<Key::kDetectMode>(bad_detect), kv<Key::kWorkTgtMode>(tgt),
+    kv<Key::kImuDataEn>(on),          kv<Key::kTimeFilter>(on),         kv<Key::kImuSensorCfg>(imu),
+  };
+  const auto s = decode_settings(kvs);
+  CHECK(s.pcl_data_type == DataType::kCartesian16);
+  CHECK(s.pattern_mode == 0);
+  CHECK_FALSE(s.lidar_ipcfg.has_value());
+  CHECK_FALSE(s.fov_cfg0.has_value());
+  REQUIRE(s.fov_cfg1.has_value());
+  CHECK(s.fov_cfg1->yaw_stop_deg == 20);
+  REQUIRE(s.fov_cfg_en.has_value());
+  CHECK((s.fov_cfg_en->fov0 && s.fov_cfg_en->fov1));
+  CHECK_FALSE(s.detect_mode.has_value());  // 7 is out of range
+  CHECK(s.work_tgt_mode == WorkState::kSampling);
+  CHECK(s.imu_data_en == true);
+  CHECK(s.time_filter == true);
+  REQUIRE(s.imu_sensor_cfg.has_value());
+  CHECK(s.imu_sensor_cfg->gyro_range == ImuGyroRange::k500dps);
+  CHECK(
+    to_string(s) ==
+    "pcl_data_type=CARTESIAN16 pattern_mode=0 fov_cfg1=yaw10-20/pitch0-5 fov_cfg_en=fov0:1,fov1:1 "
+    "work_tgt_mode=SAMPLING imu_data_en=1 time_filter=1 imu_sensor_cfg=500Hz/8g/500dps");
+  CHECK(to_string(decode_settings({})).empty());
+}
+
+TEST_CASE("decode_status fills every key and formats the line", "[lidar_info]")
+{
+  const auto state = std::vector<std::byte>{std::byte{0x02}};
+  std::vector<std::byte> temp(4);
+  bytes::write_le<std::int32_t>(temp, 0, 3512);
+  std::vector<std::byte> cnt(4);
+  bytes::write_le<std::uint32_t>(cnt, 0, 7);
+  std::vector<std::byte> now(8);
+  bytes::write_le<std::uint64_t>(now, 0, 1'000'000'000);
+  std::vector<std::byte> offset(8);
+  bytes::write_le<std::int64_t>(offset, 0, -5);
+  const auto sync = std::vector<std::byte>{std::byte{2}};
+  std::vector<std::byte> diag(2);
+  bytes::write_le<std::uint16_t>(diag, 0, 0x0021);  // system 1, scan 2
+  const auto fw = std::vector<std::byte>{std::byte{1}};
+  std::vector<std::byte> hms(32);
+  bytes::write_le<std::uint32_t>(hms, 0, 0x0103800a);
+  bytes::write_le<std::uint32_t>(hms, 8, 0x0201800b);
+  const std::vector<KeyValue> kvs{
+    kv<Key::kCurWorkState>(state),   kv<Key::kCoreTemp>(temp),     kv<Key::kPowerupCnt>(cnt),
+    kv<Key::kLocalTimeNow>(now),     kv<Key::kTimeOffset>(offset), kv<Key::kTimeSyncType>(sync),
+    kv<Key::kLidarDiagStatus>(diag), kv<Key::kFwType>(fw),         kv<Key::kHmsCode>(hms),
+  };
+  const auto s = decode_status(kvs);
+  CHECK(s.cur_work_state == WorkState::kIdle);
+  CHECK(s.core_temp == 3512);
+  CHECK(s.powerup_cnt == 7);
+  CHECK(s.local_time_now == 1'000'000'000);
+  CHECK_FALSE(s.last_sync_time.has_value());
+  CHECK(s.time_offset == -5);
+  CHECK(s.time_sync_type == TimeSyncType::kGps);
+  REQUIRE(s.lidar_diag_status.has_value());
+  CHECK(s.lidar_diag_status->scan == 2);
+  CHECK(s.fw_type == FwType::kApp);
+  REQUIRE(s.hms_code.has_value());
+  CHECK((*s.hms_code)[0].raw == 0x0103800a);
+  CHECK((*s.hms_code)[2].raw == 0x0201800b);
+  CHECK(
+    to_string(s) ==
+    "cur_work_state=IDLE core_temp=35.12C powerup_cnt=7 local_time_now=1000000000 "
+    "time_offset=-5 time_sync_type=gps lidar_diag_status=sys1/scan2/rng0/comm0 fw_type=app "
+    "hms=[0x0103800a:" +
+      std::string(to_string(decode_hms(0x0103800a).level)) +
+      ",0x0201800b:" + std::string(to_string(decode_hms(0x0201800b).level)) + "]");
+  CHECK(to_string(decode_status({})).empty());
+}
+
+TEST_CASE("kSettingsKeys / kStatusKeys are the modelled keys", "[lidar_info]")
+{
+  CHECK(kSettingsKeys.size() == 16);
+  for (Key k : kSettingsKeys) {
+    CHECK(static_cast<std::uint16_t>(k) < 0x8000);
+  }
+  CHECK(kStatusKeys.front() == Key::kCurWorkState);
+  CHECK(kStatusKeys.back() == Key::kHmsCode);
+}
+
+TEST_CASE("Device::settings and status read every key from the simulator", "[lidar_info][sim]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP(f.err);
+  }
+  auto dev = f.open();
+  const auto s = dev->settings();
+  REQUIRE(s.has_value());
+  CHECK(s->pcl_data_type.has_value());
+  CHECK(s->pattern_mode.has_value());
+  CHECK(s->lidar_ipcfg.has_value());
+  CHECK(s->state_info_host_ipcfg.has_value());
+  CHECK(s->pointcloud_host_ipcfg.has_value());
+  CHECK(s->imu_host_ipcfg.has_value());
+  CHECK(s->install_attitude.has_value());
+  CHECK(s->fov_cfg0.has_value());
+  CHECK(s->fov_cfg1.has_value());
+  CHECK(s->fov_cfg_en.has_value());
+  CHECK(s->detect_mode.has_value());
+  CHECK(s->func_io_cfg.has_value());
+  CHECK(s->work_tgt_mode.has_value());
+  CHECK(s->imu_data_en.has_value());
+  CHECK(s->time_filter.has_value());
+  CHECK(s->imu_sensor_cfg.has_value());
+  // open() pointed the state-info push at this host.
+  CHECK(s->state_info_host_ipcfg->ip == std::array<std::uint8_t, 4>{127, 0, 0, 1});
+  CHECK_FALSE(to_string(*s).empty());
+
+  const auto st = dev->status();
+  REQUIRE(st.has_value());
+  CHECK(st->cur_work_state.has_value());
+  CHECK(st->core_temp == 3500);
+  CHECK(st->powerup_cnt.has_value());
+  CHECK(st->local_time_now.has_value());
+  CHECK(st->last_sync_time.has_value());
+  CHECK(st->time_offset.has_value());
+  CHECK(st->time_sync_type == TimeSyncType::kNone);
+  CHECK(st->lidar_diag_status.has_value());
+  CHECK(st->fw_type == FwType::kLoader);
+  REQUIRE(st->hms_code.has_value());
+  CHECK(to_string(*st).find("core_temp=35.00C") != std::string::npos);
+  CHECK(to_string(*st).find("hms=[]") != std::string::npos);
+}
+
+TEST_CASE("Device::pushed_status follows the simulator push", "[lidar_info][sim]")
+{
+  Fixture f;  // --push-rate 10
+  if (!f.sim) {
+    SKIP(f.err);
+  }
+  auto dev = f.open();
+  auto wait_for = [&](auto pred) {
+    const auto deadline = std::chrono::steady_clock::now() + 3s;
+    while (std::chrono::steady_clock::now() < deadline) {
+      if (auto p = dev->pushed_status(); p && pred(*p)) {
+        return true;
+      }
+      std::this_thread::sleep_for(20ms);
+    }
+    return false;
+  };
+  REQUIRE(wait_for([](const LidarStatus & p) { return p.cur_work_state.has_value(); }));
+  const auto first = *dev->pushed_status();
+  CHECK(first.core_temp == 3500);
+  CHECK(first.local_time_now.has_value());
+  CHECK(first.hms_code.has_value());
+  CHECK(first.lidar_diag_status.has_value());
+  CHECK(first.cur_work_state == dev->work_state());
+
+  REQUIRE(f.sim->control(R"({"cmd":"set_state","state":1})"));
+  CHECK(wait_for([](const LidarStatus & p) { return p.cur_work_state == WorkState::kSampling; }));
+  CHECK(dev->work_state() == WorkState::kSampling);
+
+  REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[17006602]})"));  // 0x0103800a
+  CHECK(wait_for(
+    [](const LidarStatus & p) { return p.hms_code && (*p.hms_code)[0].raw == 0x0103800a; }));
+  CHECK(dev->hms()[0].raw == 0x0103800a);
+  CHECK(to_string(*dev->pushed_status()).find("hms=[0x0103800a:") != std::string::npos);
 }
