@@ -3,6 +3,7 @@
 
 #include "livox/mid360/bytes.hpp"
 #include "livox/mid360/crc.hpp"
+#include "livox/mid360/frame.hpp"
 #include "livox/mid360/protocol.hpp"
 #include "test_util.hpp"
 
@@ -65,16 +66,72 @@ TEST_CASE("cartesian32 packet parse and decode", "[data]")
   CHECK(p0.z_mm == 91011);
   CHECK(p0.reflectivity == 200);
   auto tag = decode_tag(p0.tag);
-  CHECK(tag.adjacent_glue == 2);
-  CHECK(tag.particles == 1);
-  CHECK(tag.other == 1);
-  CHECK(tag.reserved == 0);
+  CHECK(tag.adjacent_glue == TagConfidence::kLow);
+  CHECK(tag.particles == TagConfidence::kMedium);
+  CHECK(tag.other == TagConfidence::kMedium);
+  CHECK(tag.reserved == TagConfidence::kHigh);
+  CHECK(p0.tag_info().particles == TagConfidence::kMedium);
   CHECK(decode_cartesian32(*v, 1).x_mm == 1);
   CHECK(decode_all_cartesian32(*v).size() == 2);
   CHECK(decode_all_cartesian16(*v).empty());  // wrong type -> empty
   // timestamps: 2 points, interval 1000 * 0.1us = 100us
   CHECK(sample_timestamp_ns(v->header, 0) == 1'000'000);
   CHECK(sample_timestamp_ns(v->header, 1) == 1'100'000);
+}
+
+TEST_CASE("tag accessors agree with decode_tag over every byte", "[data][tag]")
+{
+  for (unsigned b = 0; b < 256; ++b) {
+    const auto raw = static_cast<std::uint8_t>(b);
+    const TagInfo t = decode_tag(raw);
+    CHECK(static_cast<unsigned>(t.adjacent_glue) == (b & 3u));
+    CHECK(static_cast<unsigned>(t.particles) == ((b >> 2) & 3u));
+    CHECK(static_cast<unsigned>(t.other) == ((b >> 4) & 3u));
+    CHECK(static_cast<unsigned>(t.reserved) == ((b >> 6) & 3u));
+    Point p;
+    p.tag = raw;
+    CHECK(p.adjacent_glue() == t.adjacent_glue);
+    CHECK(p.particles() == t.particles);
+    CHECK(p.other() == t.other);
+    CHECK(p.tag_info().reserved == t.reserved);
+    CartesianPoint32 c32{};
+    c32.tag = raw;
+    CartesianPoint16 c16{};
+    c16.tag = raw;
+    SphericalPoint sp{};
+    sp.tag = raw;
+    CHECK(c32.tag_info().other == t.other);
+    CHECK(c16.tag_info().other == t.other);
+    CHECK(sp.tag_info().other == t.other);
+    // other / reserved never make a point noise
+    CHECK(
+      p.is_noise() ==
+      (t.adjacent_glue != TagConfidence::kHigh || t.particles != TagConfidence::kHigh));
+  }
+}
+
+TEST_CASE("is_noise thresholds and to_string", "[data][tag]")
+{
+  using enum TagConfidence;
+  for (unsigned glue = 0; glue < 3; ++glue) {
+    for (unsigned part = 0; part < 3; ++part) {
+      const auto raw = static_cast<std::uint8_t>(glue | (part << 2) | (2u << 4));  // other = low
+      Point p;
+      p.tag = raw;
+      CHECK(p.is_noise(kHigh) == (glue > 0 || part > 0));
+      CHECK(p.is_noise(kMedium) == (glue > 1 || part > 1));
+      CHECK_FALSE(p.is_noise(kLow));
+      CHECK(is_noise(raw, kMedium) == p.is_noise(kMedium));
+    }
+  }
+  CHECK(to_string(kHigh) == "high");
+  CHECK(to_string(kMedium) == "medium");
+  CHECK(to_string(kLow) == "low");
+  CHECK(to_string(kReserved) == "reserved");
+  CHECK(to_string(decode_tag(0x12)) == "glue=low particles=high other=medium");
+  CHECK(to_string(decode_tag(0xC0)) == "glue=high particles=high other=high reserved=reserved");
+  static_assert(decode_tag(0x09).particles == kLow);
+  static_assert(is_noise(0x04) && !is_noise(0x30));
 }
 
 TEST_CASE("per-point timestamp interpolation for 96 points", "[data]")

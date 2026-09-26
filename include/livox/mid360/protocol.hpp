@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "livox/mid360/export.hpp"
+#include "livox/mid360/tag.hpp"
 
 LIVOX_MID360_API_BEGIN
 namespace livox::mid360
@@ -244,6 +245,7 @@ struct CartesianPoint32
   std::int32_t x_mm, y_mm, z_mm;
   std::uint8_t reflectivity;
   std::uint8_t tag;
+  [[nodiscard]] constexpr TagInfo tag_info() const noexcept { return decode_tag(tag); }
 };
 
 struct CartesianPoint16
@@ -251,6 +253,7 @@ struct CartesianPoint16
   std::int16_t x_cm, y_cm, z_cm;  ///< unit 10 mm
   std::uint8_t reflectivity;
   std::uint8_t tag;
+  [[nodiscard]] constexpr TagInfo tag_info() const noexcept { return decode_tag(tag); }
 };
 
 struct SphericalPoint
@@ -260,6 +263,7 @@ struct SphericalPoint
   std::uint16_t phi_centideg;    ///< azimuth, [0, 36000], unit 0.01 deg
   std::uint8_t reflectivity;
   std::uint8_t tag;
+  [[nodiscard]] constexpr TagInfo tag_info() const noexcept { return decode_tag(tag); }
 };
 
 struct ImuSample
@@ -283,21 +287,6 @@ struct ImuSample
 /// Timestamp of the i-th sample: timestamp + i * time_interval / (dot_num - 1), in ns.
 /// time_interval is in 0.1 us (= 100 ns) units. Returns `timestamp` when dot_num <= 1.
 [[nodiscard]] std::uint64_t sample_timestamp_ns(const DataPacketHeader & h, std::size_t i) noexcept;
-
-/// Tag decoding (section "Tag Information"). Each 2-bit field: 0 high, 1 medium, 2 low, 3 reserved.
-struct TagInfo
-{
-  std::uint8_t adjacent_glue;  ///< bit 0-1: glue points between adjacent objects
-  std::uint8_t particles;      ///< bit 2-3: rain, fog, dust
-  std::uint8_t other;          ///< bit 4-5: other properties
-  std::uint8_t reserved;       ///< bit 6-7
-};
-[[nodiscard]] constexpr TagInfo decode_tag(std::uint8_t tag) noexcept
-{
-  return {
-    static_cast<std::uint8_t>(tag & 0x3u), static_cast<std::uint8_t>((tag >> 2) & 0x3u),
-    static_cast<std::uint8_t>((tag >> 4) & 0x3u), static_cast<std::uint8_t>((tag >> 6) & 0x3u)};
-}
 
 // ---------------------------------------------------------------------------
 // Key-value lists (0x0100 / 0x0101 / 0x0102 payloads)

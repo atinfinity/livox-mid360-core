@@ -17,6 +17,7 @@
 #include "livox/mid360/export.hpp"
 #include "livox/mid360/keys.hpp"
 #include "livox/mid360/protocol.hpp"
+#include "livox/mid360/tag.hpp"
 
 LIVOX_MID360_API_BEGIN
 namespace livox::mid360
@@ -30,9 +31,26 @@ struct Point
   float y = 0;
   float z = 0;
   std::uint8_t reflectivity = 0;  ///< 0-255
-  std::uint8_t tag = 0;           ///< raw tag byte; see decode_tag()
+  std::uint8_t tag = 0;           ///< raw tag byte; decoded by the accessors below (#34)
   std::uint8_t line = 0;          ///< Mid-360 has no physical lines: sample index % 4
   std::uint32_t offset_ns = 0;    ///< sample time - Frame::base_time_ns
+
+  [[nodiscard]] constexpr TagInfo tag_info() const noexcept { return decode_tag(tag); }
+  [[nodiscard]] constexpr TagConfidence adjacent_glue() const noexcept
+  {
+    return decode_tag(tag).adjacent_glue;
+  }
+  [[nodiscard]] constexpr TagConfidence particles() const noexcept
+  {
+    return decode_tag(tag).particles;
+  }
+  [[nodiscard]] constexpr TagConfidence other() const noexcept { return decode_tag(tag).other; }
+  /// Glue or particle confidence worse than `worst_accepted`; see is_noise(uint8_t, ...).
+  [[nodiscard]] constexpr bool is_noise(
+    TagConfidence worst_accepted = TagConfidence::kHigh) const noexcept
+  {
+    return livox::mid360::is_noise(tag, worst_accepted);
+  }
 };
 
 /// A group of points closed by FramePolicy. Owns its storage; delivered by value.

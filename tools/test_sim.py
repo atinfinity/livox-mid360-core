@@ -396,6 +396,16 @@ class PointSourceTest(unittest.TestCase):
             data = proto.pack_samples(dt, sim.PointSource(1).samples(dt, 96))
             self.assertEqual(len(data), 96 * proto.SAMPLE_SIZE[dt])
 
+    def test_tags_vary_per_field(self) -> None:
+        seen = {'adjacent_glue': set(), 'particles': set(), 'other': set()}
+        for s in sim.PointSource(1).samples(1, 960):
+            t = proto.decode_tag(s[4])
+            self.assertEqual(t['reserved'], 0)
+            for k in seen:
+                seen[k].add(t[k])
+        for k, v in seen.items():
+            self.assertEqual(v, {0, 1, 2}, k)
+
 
 class EndToEndTest(unittest.TestCase):
     """Runs the simulator in a thread with free ports and drives it over UDP."""

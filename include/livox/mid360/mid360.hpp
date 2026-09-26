@@ -19,5 +19,6 @@
 #include "livox/mid360/log.hpp"
 #include "livox/mid360/protocol.hpp"
 #include "livox/mid360/session.hpp"
+#include "livox/mid360/tag.hpp"
 #include "livox/mid360/transport.hpp"
 #include "livox/mid360/version.hpp"

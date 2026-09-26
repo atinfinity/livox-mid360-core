@@ -2,6 +2,7 @@
 // Context / Device (issue #6) against tools/livox_mid360_sim.py: registration, frame and IMU
 // delivery, drop counting, frame_cnt splitting and fallback, idle close, stop / destruction,
 // and 0x0102 push handling (issue #7): work_state(), hms(), kStateChanged / kHms events.
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -97,6 +98,8 @@ struct Recorder
   std::atomic<std::uint64_t> frames{0};
   std::atomic<std::uint64_t> points{0};
   std::atomic<std::uint64_t> frame_packets{0};  ///< sum of Frame::packets
+  std::array<std::atomic<std::uint8_t>, 3>
+    tag_seen{};  ///< bit v set when glue/particles/other == v (#34)
   std::atomic<std::uint64_t> imu{0};
   std::atomic<std::uint64_t> pcl_packets{0};  ///< on_packet, point cloud only
   std::atomic<std::uint64_t> imu_packets{0};
@@ -124,6 +127,12 @@ struct Recorder
                if (f.points.empty() || f.end_time_ns < f.base_time_ns) ok = false;
                for (const Point & p : f.points) {
                  if (p.line > 3 || p.offset_ns > f.end_time_ns - f.base_time_ns) ok = false;
+                 const TagInfo t = p.tag_info();
+                 if (t.reserved != TagConfidence::kHigh) ok = false;
+                 tag_seen[0] |=
+                   static_cast<std::uint8_t>(1u << static_cast<unsigned>(t.adjacent_glue));
+                 tag_seen[1] |= static_cast<std::uint8_t>(1u << static_cast<unsigned>(t.particles));
+                 tag_seen[2] |= static_cast<std::uint8_t>(1u << static_cast<unsigned>(t.other));
                }
                ++frames;
                points += f.points.size();
@@ -293,6 +302,9 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]")
 
   REQUIRE(wait_until([&] { return rec.frames >= 5 && rec.imu >= 10 && rec.stats_events >= 2; }));
   CHECK(rec.ok);
+  for (const auto & seen : rec.tag_seen) {  // the simulator varies every tag field (#34)
+    CHECK(seen.load() == 0b111);
+  }
   const DeviceStats s = dev->stats();
   CHECK(s.packets == rec.pcl_packets + rec.imu_packets);
   CHECK(s.frames >= rec.frames);
