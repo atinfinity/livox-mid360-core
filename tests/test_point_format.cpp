@@ -275,13 +275,12 @@ TEST_CASE("Device::set_frame_policy changes the frame period mid-stream", "[poin
 TEST_CASE(
   "Reconnect replays the last written point format, scan pattern and FOV", "[point_format][sim]")
 {
-  Fixture f;
+  Fixture f({"--reboot-silence", "0.3"});
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
   DeviceOptions o = Fixture::options();
-  o.session.request = {.timeout = 200ms, .attempts = 2};
-  o.reconnect.push_timeout = 500ms;
+  o.reconnect.push_timeout = 5000ms;  // the second host below must not trigger a reconnect
   o.reconnect.initial_backoff = 100ms;
   o.reconnect.max_backoff = 400ms;
   o.reconnect.discovery_timeout = 200ms;
@@ -302,7 +301,7 @@ TEST_CASE(
   REQUIRE_FALSE(dev->set_scan_pattern(ScanPattern::kRepetitive).has_value());
 
   // Something the Device does not see changes the LiDAR: a second host opens it with other
-  // values (and takes the push / point streams, which is what makes `dev` reconnect).
+  // values. `dev` keeps its session; the reboot() below is what makes it reconnect.
   {
     ContextOptions co;
     co.bind_address = {127, 0, 0, 1};
@@ -323,11 +322,15 @@ TEST_CASE(
       .fov1 = std::nullopt,
       .enable = FovEnable{.fov0 = false, .fov1 = false}};
     auto other = Device::open(**other_ctx, f.discovered(), oo);
-    REQUIRE(other.has_value());
+    if (!other) {
+      FAIL("second open: " << to_string(other.error()));
+    }
     CHECK((*other)->point_format().value() == DataType::kCartesian16);
     CHECK((*other)->fov()->fov0->yaw_start_deg == 100);
   }
-  REQUIRE(wait_until([&] { return rec.reconnected >= 1; }, 8s));
+  // The simulator keeps every setting across a reboot, so what comes back is the replay.
+  REQUIRE(dev->reboot().has_value());
+  REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 8s));
 
   CHECK(dev->point_format().value() == DataType::kSpherical);
   CHECK(dev->scan_pattern().value() == ScanPattern::kNonRepetitive);
