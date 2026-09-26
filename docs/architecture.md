@@ -237,26 +237,27 @@ sequenceDiagram
   participant Ctx as Context
   participant L as LiDAR
   participant App
-  RX->>Dev: tick(): now ≥ last push + push_timeout
-  Dev->>Dev: declare_disconnected(kPushTimeout)<br/>connected = false, discard frame, queue kDisconnected
+  RX->>Dev: tick() sees now >= last push + push_timeout
+  Dev->>Dev: declare_disconnected(kPushTimeout)
+  Note over Dev: connected = false, discard frame, queue kDisconnected
   Dev->>W: start (first time) or notify conn_cv
   Dev->>Ctx: poller.wake()
-  RX->>App: on_event(kDisconnected{reason})
+  RX->>App: on_event(kDisconnected)
   loop until connected or Device destroyed
     W->>W: attempt() under cmd_mutex
     W->>L: Session::connect(last endpoint, verify serial)
     alt no answer
       W->>L: discover(targets or broadcast, discovery_timeout)
-      L-->>W: ACK filtered by serial → maybe a new IP
+      L-->>W: ACK filtered by serial, maybe a new IP
       W->>Ctx: rekey(receiver, new ip)
     end
     W->>L: apply_host_setup (recorded at open)
-    W->>L: work_tgt_mode = SAMPLING + wait (if sampling was requested)
+    W->>L: work_tgt_mode = SAMPLING and wait (if sampling was requested)
     W->>Dev: rebase time offset, connected = true, queue kReconnected
     W->>Ctx: poller.wake()
-    W->>W: on failure: sleep backoff, double up to max_backoff
+    W->>W: on failure sleep backoff, double up to max_backoff
   end
-  RX->>App: on_event(kReconnected{attempts})
+  RX->>App: on_event(kReconnected)
 ```
 
 The same `attempt()` runs on the caller's thread for `Device::reconnect()` when automatic
@@ -267,11 +268,11 @@ out and the push is stale, `kRebootRequested`, `kUser`) enter the same path thro
 ```mermaid
 stateDiagram-v2
   [*] --> Connected: Device::open()
-  Connected --> Disconnected: push timeout / stale command timeout / reboot() / disconnect()
-  Disconnected --> Disconnected: attempt fails → backoff
-  Disconnected --> Connected: attempt succeeds (kReconnected)
-  Connected --> [*]: ~Device
-  Disconnected --> [*]: ~Device (stop_token cancels the attempt)
+  Connected --> Disconnected: push timeout, stale command timeout, reboot(), disconnect()
+  Disconnected --> Disconnected: attempt fails, backoff
+  Disconnected --> Connected: attempt succeeds, kReconnected
+  Connected --> [*]: Device destroyed
+  Disconnected --> [*]: Device destroyed, stop_token cancels the attempt
 ```
 
 While disconnected, commands fail fast with `kDisconnected`; pushes that still arrive are
