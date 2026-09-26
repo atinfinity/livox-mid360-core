@@ -263,7 +263,7 @@ struct Device::Impl : detail::Receiver
           hms_event = ev;
         }
       }
-      pushed_status = std::move(next);
+      pushed_status = next;
     }
     if (rx_event_cb) {
       if (state_event) {
@@ -810,16 +810,25 @@ std::optional<LidarStatus> Device::pushed_status() const
 std::optional<WorkState> Device::work_state() const
 {
   const std::lock_guard lock(impl_->push_mutex);
-  return impl_->pushed_status ? impl_->pushed_status->cur_work_state : std::nullopt;
+  const std::optional<LidarStatus> & pushed = impl_->pushed_status;
+  if (!pushed.has_value()) {
+    return std::nullopt;
+  }
+  return pushed.value().cur_work_state;
 }
 
 std::array<HmsCode, 8> Device::hms() const
 {
   const std::lock_guard lock(impl_->push_mutex);
-  if (impl_->pushed_status && impl_->pushed_status->hms_code) {
-    return *impl_->pushed_status->hms_code;
+  const std::optional<LidarStatus> & pushed = impl_->pushed_status;
+  if (!pushed.has_value()) {
+    return {};
   }
-  return {};
+  const std::optional<std::array<HmsCode, 8>> & hms = pushed.value().hms_code;
+  if (!hms.has_value()) {
+    return {};
+  }
+  return hms.value();
 }
 
 DeviceStats Device::stats() const { return impl_->snapshot(); }

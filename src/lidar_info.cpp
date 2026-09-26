@@ -32,7 +32,7 @@ void decode_opt(std::span<const KeyValue> kvs, std::optional<key_value_t<K>> & o
 }
 
 template <typename T, typename F>
-void append(std::string & out, std::string_view name, const std::optional<T> & v, F && fmt)
+void append(std::string & out, std::string_view name, const std::optional<T> & v, const F & fmt)
 {
   if (!v) {
     return;
