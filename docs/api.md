@@ -289,6 +289,42 @@ if (cfg && cfg->fov_cfg_en && cfg->fov_cfg_en->fov0) { /* FOV 0 in use */ }
 | `identity()` | `livox_mid360_device_identity(dev, livox_mid360_identity_t*)` |
 | `settings()` / `status()` / `pushed_status()` | `livox_mid360_device_settings(dev, livox_mid360_settings_t*)` etc.; optionals become a `present` bit mask |
 
+## FOV
+
+`Device::set_fov()` / `fov()` (issue #39) bundle the three FOV keys 0x0015 (`fov_cfg0`),
+0x0016 (`fov_cfg1`) and 0x0017 (`fov_cfg_en`) into `FovSettings`, three optionals. Both
+windows are always stored by the LiDAR; the enable mask says which of them crop the point
+cloud.
+
+```cpp
+FovSettings fov{
+  .fov0 = FovConfig{.yaw_start_deg = 0, .yaw_stop_deg = 90, .pitch_start_deg = -5,
+                    .pitch_stop_deg = 5, .rsvd = 0},
+  .fov1 = std::nullopt,                       // leave window 1 as stored
+  .enable = FovEnable{.fov0 = true, .fov1 = false}};
+auto r = dev->set_fov(fov);                   // one 0x0100 with 0x0015 and 0x0017
+if (!r && r.error().kind == DeviceError::Kind::kInvalidArgument) { /* r.error().key */ }
+auto cur = dev->fov();                        // one 0x0101 of the three keys
+if (cur) { LOG(to_string(*cur)); }            // fov0=yaw0-90/pitch-5-5 fov1=... enable=fov0:1,fov1:0
+```
+
+- `set_fov()` sends the present fields in one request, so the LiDAR applies all or none. It
+  validates before any I/O: no field at all → `kInvalidArgument` without `key`; a window
+  outside `fov_in_range()` (yaw in [0, 360), pitch in (-10, 60), the wiki ranges) →
+  `kInvalidArgument` with `key` naming the window. Equal or reversed start / stop values pass:
+  what the LiDAR makes of a wrapped or empty window is unverified (#11). `rsvd` is sent as
+  given. The codecs in `keys.hpp` stay pure; `set<Key::kFovCfg0>()` skips the range check.
+- `fov()` tolerates a key missing from the ACK (its field stays empty).
+- `HostSetup::fov` applies the same settings in the first 0x0100 of `Device::open()` (after
+  the host keys) and again on every reconnect, so a window survives a LiDAR reboot or a
+  cable pull. The same validation applies (`SessionError::kInvalidArgument` with `error_key`
+  0x0015 / 0x0016 through `DeviceError::session`), and `HostSetupResult::reboot_required`
+  covers it.
+
+| C++ | C |
+| --- | --- |
+| `set_fov()` / `fov()` | `livox_mid360_device_set_fov(dev, const livox_mid360_fov_t*)` / `..._fov(dev, livox_mid360_fov_t*)` with a `present` bit mask for the optionals |
+
 ## Push handling
 
 The LiDAR sends a 0x0102 info push about once per second to the host push port. The receive

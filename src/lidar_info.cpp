@@ -208,6 +208,15 @@ std::string to_string(const FovEnable & e)
   return std::string("fov0:") + (e.fov0 ? '1' : '0') + ",fov1:" + (e.fov1 ? '1' : '0');
 }
 
+std::string to_string(const FovSettings & s)
+{
+  std::string out;
+  append(out, "fov0", s.fov0, [](const FovConfig & f) { return to_string(f); });
+  append(out, "fov1", s.fov1, [](const FovConfig & f) { return to_string(f); });
+  append(out, "enable", s.enable, [](const FovEnable & e) { return to_string(e); });
+  return out;
+}
+
 std::string to_string(const FuncIoConfig & c)
 {
   return std::to_string(c.in0) + '/' + std::to_string(c.in1) + '/' + std::to_string(c.out0) + '/' +

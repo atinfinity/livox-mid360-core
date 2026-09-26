@@ -768,6 +768,69 @@ std::expected<LidarStatus, DeviceError> Device::status(std::optional<RequestOpti
   return decode_status(r->values);
 }
 
+std::expected<SetResult, DeviceError> Device::set_fov(
+  const FovSettings & fov, std::optional<RequestOptions> opts)
+{
+  if (!fov.fov0 && !fov.fov1 && !fov.enable) {
+    return std::unexpected(error(DeviceError::Kind::kInvalidArgument));
+  }
+  for (const auto & [window, key] :
+       {std::pair{&fov.fov0, Key::kFovCfg0}, std::pair{&fov.fov1, Key::kFovCfg1}}) {
+    if (window->has_value() && !fov_in_range(window->value())) {
+      DeviceError err = error(DeviceError::Kind::kInvalidArgument);
+      err.key = key;
+      return std::unexpected(err);
+    }
+  }
+  std::array<std::byte, 20> cfg0{};
+  std::array<std::byte, 20> cfg1{};
+  std::array<std::byte, 1> en{};
+  std::vector<KeyValue> kvs;
+  if (fov.fov0) {
+    cfg0 = encode_fov_config(*fov.fov0);
+    kvs.push_back({static_cast<std::uint16_t>(Key::kFovCfg0), cfg0});
+  }
+  if (fov.fov1) {
+    cfg1 = encode_fov_config(*fov.fov1);
+    kvs.push_back({static_cast<std::uint16_t>(Key::kFovCfg1), cfg1});
+  }
+  if (fov.enable) {
+    en = encode_fov_enable(*fov.enable);
+    kvs.push_back({static_cast<std::uint16_t>(Key::kFovCfgEn), en});
+  }
+  auto ack = configure(kvs, opts);
+  if (!ack) {
+    return std::unexpected(ack.error());
+  }
+  return SetResult{.reboot_required = ack->ret_code == RetCode::kParamRebootEffect};
+}
+
+std::expected<FovSettings, DeviceError> Device::fov(std::optional<RequestOptions> opts)
+{
+  static constexpr std::array<Key, 3> kKeys{Key::kFovCfg0, Key::kFovCfg1, Key::kFovCfgEn};
+  auto r = inquire(kKeys, opts);
+  if (!r) {
+    return std::unexpected(r.error());
+  }
+  FovSettings out;
+  if (const auto raw = find_key(r->values, Key::kFovCfg0)) {
+    if (auto v = decode_fov_config(*raw)) {
+      out.fov0 = *v;
+    }
+  }
+  if (const auto raw = find_key(r->values, Key::kFovCfg1)) {
+    if (auto v = decode_fov_config(*raw)) {
+      out.fov1 = *v;
+    }
+  }
+  if (const auto raw = find_key(r->values, Key::kFovCfgEn)) {
+    if (auto v = decode_fov_enable(*raw)) {
+      out.enable = *v;
+    }
+  }
+  return out;
+}
+
 std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> opts)
 {
   assert(!impl_->context.on_receive_thread() && "Device command called from a callback");
