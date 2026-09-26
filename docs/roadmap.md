@@ -58,7 +58,7 @@ The generic `Device::set<K>()` / `get<K>()` / `set_many` / `get_many` over `key_
 over them and only add what the raw key does not express (waits, combined keys, events).
 
 - #38 firmware type and version query (`Device::identity()`, `lidar_info.hpp`): **done**
-- #39 FOV configuration and enable (keys `0x0015` / `0x0016` / `0x0017`)
+- #39 FOV configuration and enable (`set_fov()` / `fov()`, `HostSetup::fov`): **done**
 - #40 coordinate format, scan pattern and point-cloud frame rate
 - #41 read-back of stored settings and live status (`settings()` / `status()` / `pushed_status()`): **done**
 - #46 detection mode (normal / sensitive, key `0x0018`)

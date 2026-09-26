@@ -191,6 +191,21 @@ struct FovEnable
   bool fov1 = false;
 };
 
+/// The three FOV keys together (issue #39): Device::set_fov() sends the present ones in one
+/// 0x0100, Device::fov() reads all three. Both windows stay stored while `enable` says which
+/// of them crop the point cloud.
+struct FovSettings
+{
+  std::optional<FovConfig> fov0;    ///< key 0x0015
+  std::optional<FovConfig> fov1;    ///< key 0x0016
+  std::optional<FovEnable> enable;  ///< key 0x0017
+};
+
+/// Wiki ranges for a FOV window: yaw in [0, 360), pitch in (-10, 60). Equal or reversed
+/// start / stop are accepted (a wrapped or empty window). The codecs do not check this;
+/// Device::set_fov() and HostSetup do.
+[[nodiscard]] bool fov_in_range(const FovConfig & f) noexcept;
+
 // ---------------------------------------------------------------------------
 // Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).
 // ---------------------------------------------------------------------------
