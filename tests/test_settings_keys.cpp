@@ -53,7 +53,7 @@ struct Fixture
     if (sim) {
       ContextOptions o;
       o.bind_address = {127, 0, 0, 1};
-      o.push_port = o.point_port = o.imu_port = 0;
+      o.push_port = o.point_port = o.imu_port = o.log_port = 0;
       auto c = Context::create(o);
       REQUIRE(c.has_value());
       context = std::move(*c);
@@ -347,7 +347,7 @@ TEST_CASE(
   {
     ContextOptions co;
     co.bind_address = {127, 0, 0, 1};
-    co.push_port = co.point_port = co.imu_port = 0;
+    co.push_port = co.point_port = co.imu_port = co.log_port = 0;
     auto other_ctx = Context::create(co);
     REQUIRE(other_ctx.has_value());
     DeviceOptions oo = Fixture::options();
