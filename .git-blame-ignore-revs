@@ -7,3 +7,6 @@
 
 # style: reformat the C++ tree with the ROS 2 clang-format configuration (#63)
 6d83e6a1be4a8eb206e9fcb767ac1c3793083c2f
+
+# style: reformat tools/ with the ROS 2 Python style (#64)
+15ba6ee5b0800a2f02bae532bec88dd9e16664f2
