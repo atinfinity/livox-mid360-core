@@ -222,7 +222,7 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 | `kPatternMode` 0x0001 | `std::uint8_t` | only 0 is documented |
 | `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `set_lidar_ip_config()`; `reboot_required` after a change (simulator behaviour, [unverified]) |
 | `kStateInfoHostIpCfg` / `kPointCloudHostIpCfg` / `kImuHostIpCfg` 0x0005–0x0007 | `HostIpConfig` | normally set by `open()` |
-| `kInstallAttitude` 0x0012 | `InstallAttitude` | |
+| `kInstallAttitude` 0x0012 | `InstallAttitude` | `set_install_attitude()`; host transform via `extrinsic_from()` |
 | `kFovCfg0` / `kFovCfg1` 0x0015 / 0x0016 | `FovConfig` | |
 | `kFovCfgEn` 0x0017 | `FovEnable{fov0, fov1}` | bits 0 / 1 |
 | `kDetectMode` 0x0018 | `DetectMode` | |
@@ -333,6 +333,32 @@ if (cur) { LOG(to_string(*cur)); }            // fov0=yaw0-90/pitch-5-5 fov1=...
 | C++ | C |
 | --- | --- |
 | `set_fov()` / `fov()` | `livox_mid360_device_set_fov(dev, const livox_mid360_fov_t*)` / `..._fov(dev, livox_mid360_fov_t*)` with a `present` bit mask for the optionals |
+
+## Install attitude and host-side extrinsic
+
+`Device::set_install_attitude(InstallAttitude)` / `install_attitude()` (issue #51) wrap key
+0x0012 (`roll_deg`, `pitch_deg`, `yaw_deg` as float degrees, `x_mm`, `y_mm`, `z_mm` as
+int32). `install_attitude_valid()` in `keys.hpp` is checked before any I/O
+(`kInvalidArgument` with `key` = 0x0012): the angles are finite and within ±180°. The
+value is only stored on the LiDAR; whether the firmware applies it to the emitted points,
+and in which convention, is [unverified] (#11). The SDK never transforms points by itself.
+
+To transform on the host, `frame.hpp` provides an opt-in extrinsic:
+
+```cpp
+const Extrinsic e = extrinsic_from(*dev->install_attitude());   // or any InstallAttitude
+dev->on_frame([e](Frame f) { apply(e, f); /* f.points are now p' = r * p + t */ });
+```
+
+`extrinsic_from()` builds `Rz(yaw) * Ry(pitch) * Rx(roll)` (intrinsic ZYX, right-handed,
+degrees) and a translation in metres (mm / 1000) added after the rotation, the
+livox_ros_driver2 convention. `apply()` transforms `x`, `y`, `z` in place and leaves
+reflectivity, tag, line and offset untouched; the `Frame&` overload covers `points`.
+
+| C++ | C |
+| --- | --- |
+| `set_install_attitude()` / `install_attitude()` | `livox_mid360_device_set_install_attitude(dev, const livox_mid360_install_attitude_t*, bool*)` / `..._install_attitude(dev, livox_mid360_install_attitude_t*)` |
+| `extrinsic_from()` / `apply()` | `livox_mid360_extrinsic_from(const livox_mid360_install_attitude_t*, livox_mid360_extrinsic_t*)` / `livox_mid360_extrinsic_apply(const livox_mid360_extrinsic_t*, livox_mid360_point_t*, size_t)` |
 
 ## Point format, scan pattern and frame policy
 

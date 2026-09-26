@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <limits>
+#include <vector>
 
 #include "livox/mid360/keys.hpp"
 #include "test_util.hpp"
@@ -96,6 +99,18 @@ TEST_CASE("install attitude and fov", "[keys]")
   CHECK(d->x_mm == 10);
   CHECK(d->y_mm == -20);
   CHECK(d->z_mm == 30);
+  // 1.5f = 0x3FC00000, -2.5f = 0xC0200000, 90.0f = 0x42B40000, little-endian, then int32 mm.
+  const std::vector<std::byte> golden =
+    bytes_of({0x00, 0x00, 0xC0, 0x3F, 0x00, 0x00, 0x20, 0xC0, 0x00, 0x00, 0xB4, 0x42,
+              0x0A, 0x00, 0x00, 0x00, 0xEC, 0xFF, 0xFF, 0xFF, 0x1E, 0x00, 0x00, 0x00});
+  CHECK(std::vector<std::byte>(e.begin(), e.end()) == golden);
+
+  CHECK(install_attitude_valid(a));
+  CHECK(install_attitude_valid({.roll_deg = -180.0F, .pitch_deg = 180.0F, .yaw_deg = 0.0F}));
+  CHECK_FALSE(install_attitude_valid({.roll_deg = 180.5F}));
+  CHECK_FALSE(install_attitude_valid({.pitch_deg = -181.0F}));
+  CHECK_FALSE(install_attitude_valid({.yaw_deg = std::numeric_limits<float>::infinity()}));
+  CHECK_FALSE(install_attitude_valid({.yaw_deg = std::numeric_limits<float>::quiet_NaN()}));
 
   FovConfig f{0, 359, -7, 52, 0};
   auto fd = decode_fov_config(encode_fov_config(f));
