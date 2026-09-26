@@ -317,8 +317,8 @@ TEST_CASE("Simulator crops the point cloud to the enabled windows", "[fov][sim]"
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
+  Recorder rec;  // outlives the Device: callbacks may run until the destructor returns
   auto dev = f.open();
-  Recorder rec;
   rec.attach(*dev);
   REQUIRE(
     dev
@@ -373,8 +373,8 @@ TEST_CASE("HostSetup::fov is applied at open and replayed after a reconnect", "[
 
   o.host_setup.fov = FovSettings{
     .fov0 = kFront, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = true, .fov1 = false}};
+  Recorder rec;  // outlives the Device
   auto dev = f.open(o);
-  Recorder rec;
   rec.attach(*dev);
   const auto got = dev->fov();
   REQUIRE(got.has_value());
