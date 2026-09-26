@@ -18,6 +18,7 @@
 #include "livox/mid360/keys.hpp"
 #include "livox/mid360/lidar_info.hpp"
 #include "livox/mid360/log.hpp"
+#include "livox/mid360/lvx2.hpp"
 #include "livox/mid360/protocol.hpp"
 #include "livox/mid360/session.hpp"
 #include "livox/mid360/tag.hpp"
