@@ -59,6 +59,10 @@ CMake options:
 "Top-level" is decided by `PROJECT_IS_TOP_LEVEL`, so consumers using `add_subdirectory` or
 `FetchContent` get no tests and no `-Werror` unless they opt in.
 
+The `CI`, `Lint` and `Coverage` workflows skip pushes and pull requests that only touch
+documentation (`*.md`, `docs/`, `LICENSE`), so a docs-only PR shows no checks. Any change to
+sources, tests, tools, CMake files or the workflows themselves runs the full matrix.
+
 To reproduce CI locally on any Docker host: `docker/check.sh [linux/arm64|linux/amd64]`. The
 platform defaults to the host's. On Apple Silicon `linux/arm64` runs natively; a non-native
 platform runs under QEMU emulation, where the script only does the Release builds, `ctest` and

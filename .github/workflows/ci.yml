@@ -3,7 +3,20 @@ name: CI
 on:
   push:
     branches: [main]
+    # Documentation-only changes skip this workflow (issue #59). Keep this list identical in
+    # ci.yml, lint.yml and coverage.yml. If required status checks are ever enabled on main,
+    # switch to an always-running gate job instead, or docs PRs will be stuck on "Expected".
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
 
 jobs:
   build-test:
