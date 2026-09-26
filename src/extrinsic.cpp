@@ -47,7 +47,7 @@ void apply(const Extrinsic & e, std::span<Point> points) noexcept
 
 void apply(const Extrinsic & e, Frame & frame) noexcept
 {
-  apply(e, std::span<Point>{frame.points});
+  livox::mid360::apply(e, std::span<Point>{frame.points});
 }
 
 }  // namespace livox::mid360

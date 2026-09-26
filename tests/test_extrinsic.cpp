@@ -41,15 +41,16 @@ TEST_CASE("extrinsic_from: single-axis rotations are right-handed", "[extrinsic]
 {
   Point p[1];
   p[0] = at(1, 0, 0);
-  apply(extrinsic_from({.yaw_deg = 90.0F}), std::span<Point>{p});  // x -> y about z
+  livox::mid360::apply(extrinsic_from({.yaw_deg = 90.0F}), std::span<Point>{p});  // x -> y about z
   check_point(p[0], 0, 1, 0);
 
   p[0] = at(1, 0, 0);
-  apply(extrinsic_from({.pitch_deg = 90.0F}), std::span<Point>{p});  // x -> -z about y
+  livox::mid360::apply(
+    extrinsic_from({.pitch_deg = 90.0F}), std::span<Point>{p});  // x -> -z about y
   check_point(p[0], 0, 0, -1);
 
   p[0] = at(0, 1, 0);
-  apply(extrinsic_from({.roll_deg = 90.0F}), std::span<Point>{p});  // y -> z about x
+  livox::mid360::apply(extrinsic_from({.roll_deg = 90.0F}), std::span<Point>{p});  // y -> z about x
   check_point(p[0], 0, 0, 1);
 }
 
@@ -60,7 +61,7 @@ TEST_CASE("extrinsic_from: ZYX order and translation in metres after the rotatio
   const Extrinsic e =
     extrinsic_from({.pitch_deg = 90.0F, .yaw_deg = 90.0F, .x_mm = 1000, .z_mm = -500});
   Point p[3] = {at(1, 0, 0), at(0, 1, 0), at(0, 0, 1)};
-  apply(e, std::span<Point>{p});
+  livox::mid360::apply(e, std::span<Point>{p});
   check_point(p[0], 1.0F, 0.0F, -1.5F);
   check_point(p[1], 0.0F, 0.0F, -0.5F);
   check_point(p[2], 1.0F, 1.0F, -0.5F);
@@ -76,7 +77,7 @@ TEST_CASE("apply(Frame&) transforms every point and nothing else", "[extrinsic]"
   f.index = 5;
   f.base_time_ns = 100;
   f.points = {at(1, 2, 3), at(-1, 0, 0.5F)};
-  apply(extrinsic_from({.x_mm = 10, .y_mm = 20, .z_mm = 30}), f);
+  livox::mid360::apply(extrinsic_from({.x_mm = 10, .y_mm = 20, .z_mm = 30}), f);
   check_point(f.points[0], 1.01F, 2.02F, 3.03F);
   check_point(f.points[1], -0.99F, 0.02F, 0.53F);
   CHECK(f.index == 5);
