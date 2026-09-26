@@ -382,7 +382,7 @@ class DeviceModel:
         return self.settings[KEY_IMU_EN][0] != 0
 
     def fov_windows(self) -> list[tuple[int, int, int, int]]:
-        """The enabled FOV windows as (yaw_start, yaw_stop, pitch_start, pitch_stop) degrees."""
+        """Return the enabled FOV windows as (yaw_start, yaw_stop, pitch_start, pitch_stop)."""
         mask = self.settings[KEY_FOV_EN][0]
         out = []
         for bit, key in ((1, KEY_FOV0), (2, KEY_FOV1)):
@@ -392,9 +392,11 @@ class DeviceModel:
 
     def keeps_point(self, data_type: int, sample: tuple) -> bool:
         """
-        [unverified] FOV cropping, see #11: no enabled window keeps everything; otherwise a
-        point stays when it lies inside any enabled window. Yaw is [start, stop) with
-        wrap-around when start > stop (start == stop is empty); pitch is [start, stop].
+        Decide whether a sample survives the [unverified] FOV cropping (see #11).
+
+        No enabled window keeps everything; otherwise a point stays when it lies inside any
+        enabled window. Yaw is [start, stop) with wrap-around when start > stop (start ==
+        stop is empty); pitch is [start, stop].
         """
         windows = self.fov_windows()
         if not windows:
@@ -778,8 +780,9 @@ class Simulator:
 
     def _cropped_samples(self, dt: int) -> list[tuple]:
         """
-        POINTS_PER_PACKET samples inside the enabled FOV windows, drawing up to
-        MAX_FOV_DRAWS batches; a packet ends up shorter only for a tiny window.
+        Draw POINTS_PER_PACKET samples inside the enabled FOV windows.
+
+        Up to MAX_FOV_DRAWS batches are drawn; a packet ends up shorter only for a tiny window.
         """
         m = self.model
         if not m.fov_windows():
