@@ -81,7 +81,7 @@ Methods:
 | `factory_reset()` | 0x0201 | `SimpleAck` |
 | `set_gps_time(ns)` | 0x0202 | `SimpleAck` |
 | `work_state()` | 0x0101 key 0x8006 | `WorkState` |
-| `wait_for_state(target, timeout)` | polls 0x8006 | `void`; `kUnexpectedState` on ERROR / UPGRADE |
+| `wait_for_state(target, timeout)` | polls 0x8006 | `void`; `kUnexpectedState` on ERROR / UPGRADE; polls through SELFCHECK / MOTORSTARTUP / READY |
 | `cancel()` | — | aborts the blocking call with `kCancelled` |
 
 Every command takes an optional `RequestOptions{timeout (per attempt), attempts}` that
@@ -108,7 +108,11 @@ if (r && r->reboot_required) {
 the LiDAR-side source ports 56200 / 56300 / 56400), `0x0000` and `0x001C`, then, when
 `work_tgt_mode` is set, a second `0x0100` with `0x001A` followed by `wait_for_state`
 (`wait_timeout` 0 skips the wait, `final_state` is then empty). Only SAMPLING / IDLE / READY
-can be requested. Arguments the LiDAR would never accept (that mode, or an empty `ip` on a
+can be requested. SAMPLING or READY requested from IDLE starts the motor
+(IDLE → MOTORSTARTUP → READY → SAMPLING, see
+[protocol_notes.md](protocol_notes.md#working-state)), so the wait takes at least the
+motor start-up time; the default `wait_timeout` of 10 s allows for that. The reverse path is
+immediate. Arguments the LiDAR would never accept (that mode, or an empty `ip` on a
 `0.0.0.0` bind) are reported as `kInvalidArgument` with `error_key` before anything is sent;
 everything else is the plain session error, so a rejected key shows up as `kLidarRejected`
 with `error_key`. `host_setup_key_values()` exposes the first request's key-value list for

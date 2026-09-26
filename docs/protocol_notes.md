@@ -48,9 +48,69 @@ diagram, is not acknowledged by the host.
 
 ## Working state
 
-Only `SAMPLING (1)`, `IDLE (2)` and `READY (9)` are valid for `work_tgt_mode`. Setting `1|9`
-from `IDLE` passes through `MOTORSTARTUP (6)`; the transition is observable via `cur_work_state`
-in the push. `decode_work_state()` rejects undocumented values.
+The protocol wiki (section 1.2.1.2.2) shows the LiDAR state machine as a figure
+([`Mid360_state_machine_english.png`](https://livox-wiki-en.readthedocs.io/en/latest/_images/Mid360_state_machine_english.png))
+next to the enumeration table. The figure, redrawn:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> SELFCHECK : power on
+    SELFCHECK --> work : self-check succeeded
+    SELFCHECK --> UPGRADE : need to upgrade
+    UPGRADE --> SELFCHECK : update succeeded
+    work --> UPGRADE : upgrade request
+    work --> ERROR : abnormal
+    ERROR --> work : abnormal disappearance
+    ERROR --> UPGRADE : upgrade request
+    UPGRADE --> ERROR : exception during upgrade
+
+    state work {
+        direction LR
+        [*] --> IDLE : enter idle
+        IDLE --> MOTORSTARTUP : target is 1 or 9
+        MOTORSTARTUP --> READY : scan module startup completed
+        READY --> SAMPLING : target is 1
+        SAMPLING --> READY : target is 2 or 9
+        READY --> IDLE : target is 2
+        READY --> MOTORSTARTUP : scan mode changed
+        SAMPLING --> MOTORSTARTUP : scan mode changed
+    }
+```
+
+| `cur_work_state` | Value | Requestable via `work_tgt_mode` | Meaning (figure) |
+|---|---|---|---|
+| `SAMPLING` | 1 | yes | scan module and laser on, point cloud and IMU streaming |
+| `IDLE` | 2 | yes | laser off (scan module off) |
+| `ERROR` | 4 | no | laser off, error reported (HMS) |
+| `SELFCHECK` | 5 | no | software / hardware self-check, firmware check |
+| `MOTORSTARTUP` | 6 | no | scan module warm-up (if required) and start |
+| `UPGRADE` | 8 | via the upgrade entry only | firmware update |
+| `READY` | 9 | yes | scan module on, laser off |
+
+Consequences for the SDK:
+
+- `IDLE → SAMPLING` passes through `MOTORSTARTUP` and `READY`; `SAMPLING → IDLE` passes
+  through `READY`; `READY ↔ SAMPLING` is direct. `wait_for_state()` polls through the
+  intermediate states, so `start_sampling()` from `IDLE` takes at least the motor start-up
+  time (unknown, see below).
+- `work_tgt_mode` is a stored parameter that the machine chases; `decode_work_state()` accepts
+  the seven values above and rejects everything else. `0x07` (`kLivoxLidarMotorStoping` in
+  the Livox-SDK2 enum, which is shared with the HAP) is not in the Mid-360 table and is
+  rejected too. Key `0x0020` (work mode after boot) exists for the HAP only (Livox-SDK2
+  changelog 1.2.5) and is not modelled.
+- After a reboot the LiDAR comes back through `SELFCHECK` and `IDLE` and then follows
+  `work_tgt_mode`, which is not persisted (default `SAMPLING`).
+
+Settled by the figure: the states, the edges and which targets are requestable. Still
+**unverified** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) and
+therefore assumptions in the simulator: the duration of `SELFCHECK` and `MOTORSTARTUP` and
+whether commands are answered during `SELFCHECK`; whether the pass-through `READY` is ever
+visible in the push; the return codes for a `work_tgt_mode` write of 4 / 5 / 6 / 8 (assumed
+`0x20`), of an undefined value (assumed `0x03`) and in `ERROR` / `UPGRADE` (assumed `0x02`);
+whether a write during `SELFCHECK` / `MOTORSTARTUP` is accepted and followed (assumed yes);
+whether `0x07` is ever reported; the persistence of `work_tgt_mode`; and whether a changed
+`pattern_mode` really restarts the motor ("scan mode changed" edge).
 
 ## Return code 0x21 (PARAM_REBOOT_EFFECT)
 
