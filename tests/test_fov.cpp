@@ -49,9 +49,9 @@ bool wait_until(const std::function<bool()> & pred, std::chrono::milliseconds ti
 /// (yaw, pitch) in degrees of a delivered point, yaw in [0, 360).
 std::pair<double, double> angles(const Point & p)
 {
-  const double x = static_cast<double>(p.x);
-  const double y = static_cast<double>(p.y);
-  const double z = static_cast<double>(p.z);
+  const auto x = static_cast<double>(p.x);
+  const auto y = static_cast<double>(p.y);
+  const auto z = static_cast<double>(p.z);
   double yaw = std::atan2(y, x) * 180.0 / M_PI;
   if (yaw < 0) {
     yaw += 360.0;
