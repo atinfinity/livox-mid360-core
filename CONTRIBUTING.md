@@ -28,8 +28,15 @@ work and project decisions are in [docs/roadmap.md](docs/roadmap.md).
 
 Style and static analysis are enforced by the `Lint` workflow (clang-format 19, clang-tidy 19,
 ruff). The configuration files `.clang-format`, `.clang-tidy` and `pyproject.toml` are shared
-with `livox-mid360-ros2` (`ament_clang_format --config`, `ament_flake8 --config`). Run the same
-checks locally with:
+with `livox-mid360-ros2` (`ament_clang_format --config`, `ament_flake8 --config`).
+
+C++ follows the [ROS 2 C++ style](https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#c):
+`.clang-format` is a verbatim copy of the configuration shipped with `ament_clang_format`
+(the commit is named in the file header) and is re-synced by hand, not by CI. On top of the
+formatter, clang-tidy's `readability-braces-around-statements` requires braces on every
+`if` / `for` / `while` body. Deviations from the ROS 2 rules: `#pragma once` instead of include
+guards (so cpplint is not used, #17), and no cpplint-style header/footer comments. Code blocks in
+the documentation follow the same style. Run the same checks locally with:
 
 ```sh
 scripts/lint.sh            # check (clang-tidy needs clang-19 and builds build-tidy/)
