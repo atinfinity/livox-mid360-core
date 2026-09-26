@@ -99,10 +99,12 @@ struct DeviceError
     kNotOpen,            ///< Device was closed (or never opened)
     kDisconnected,       ///< command refused: the Device is between kDisconnected and kReconnected
     kDecodeFailed,       ///< get<K>(): the ACK lacked `key` or its value did not decode (#57)
+    kIo,                 ///< file_log_handler(): the file could not be opened, see `errno_value`
   };
   Kind kind = Kind::kSession;
   std::optional<SessionError> session;  ///< kSession only
   std::optional<Key> key;  ///< kInvalidArgument (out-of-range FOV window) / kDecodeFailed
+  int errno_value = 0;     ///< kIo only
 };
 
 [[nodiscard]] std::string_view to_string(DeviceError::Kind kind) noexcept;

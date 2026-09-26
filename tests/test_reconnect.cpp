@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "livox/mid360/mid360.hpp"
+#include "log_capture.hpp"
 #include "sim_process.hpp"
 
 using namespace livox::mid360;
@@ -140,15 +141,18 @@ TEST_CASE("Reconnect: push timeout, automatic recovery, sampling resumes", "[sim
     SKIP("simulator unavailable: " << f.err);
   }
   Recorder rec;
+  ScopedLogCapture log(LogLevel::kInfo);
   auto dev = f.open();
   rec.attach(*dev);
   REQUIRE(dev->start_sampling().has_value());
   REQUIRE(wait_until([&] { return rec.frames >= 3; }));
   CHECK(dev->connected());
+  CHECK(log.count(LogLevel::kInfo, "opened") == 1);
 
   REQUIRE(f.sim->control(R"({"cmd":"silence","seconds":1.5})"));
   REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
   REQUIRE(wait_until([&] { return rec.disconnected == 1; }, 2s));
+  CHECK(log.count(LogLevel::kWarn, "disconnected: push_timeout") == 1);
   CHECK_FALSE(dev->connected());
   const auto down = rec.last(Event::Kind::kDisconnected);
   REQUIRE(down.has_value());
@@ -165,6 +169,13 @@ TEST_CASE("Reconnect: push timeout, automatic recovery, sampling resumes", "[sim
   const auto up = rec.last(Event::Kind::kReconnected);
   REQUIRE(up.has_value());
   CHECK(up->attempts >= 1);
+  CHECK(log.count(LogLevel::kInfo, "reconnect attempt") >= 1);
+  CHECK(log.count(LogLevel::kInfo, "host setup replayed") == 1);
+  CHECK(log.count(LogLevel::kInfo, "reconnected after") == 1);
+  // Every record from this Device carries its serial number.
+  for (const auto & entry : log.records()) {
+    CHECK(entry.serial_number == f.sim->sn());
+  }
   CHECK(to_string(*up) == "reconnected attempts=" + std::to_string(up->attempts));
   // Sampling was requested before the outage: data flows again without user action.
   const auto frames_after_reconnect = rec.frames.load();

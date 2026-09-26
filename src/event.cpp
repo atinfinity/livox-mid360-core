@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "livox/mid360/event.hpp"
 
+#include <cstring>
 #include <string>
 #include <string_view>
 
@@ -98,6 +99,8 @@ std::string_view to_string(DeviceError::Kind kind) noexcept
       return "disconnected";
     case DeviceError::Kind::kDecodeFailed:
       return "decode_failed";
+    case DeviceError::Kind::kIo:
+      return "io";
   }
   return "unknown";
 }
@@ -112,6 +115,10 @@ std::string to_string(const DeviceError & err)
   if (err.key) {
     out += ": key ";
     out += to_string(*err.key);
+  }
+  if (err.kind == DeviceError::Kind::kIo && err.errno_value != 0) {
+    out += ": ";
+    out += std::strerror(err.errno_value);
   }
   return out;
 }

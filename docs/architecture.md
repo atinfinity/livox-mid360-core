@@ -330,8 +330,9 @@ flowchart LR
 - Asynchronous conditions are **events**, not errors: `kDisconnected`, `kReconnected`,
   `kHms`, `kStateChanged`, `kStats`. Counters (`bad_packets`, `dropped_packets`,
   `unknown_source`, `late_acks`, ...) record what was silently dropped.
-- The library writes nothing to stdout or stderr. A diagnostic logging facility with a
-  caller-installed sink is planned in #42.
+- The library writes nothing to stdout or stderr on its own. The diagnostic trail (#42,
+  `log.hpp`) is off by default and goes only to the handler the application installs; see
+  [api.md](api.md#logging).
 
 ## 6. Performance model
 
@@ -397,8 +398,8 @@ items that touch this document most:
 - Typed parameter APIs on `Device`: firmware version (#38), FOV (#39), coordinate format /
   scan pattern / frame rate (#40), stored settings and live status read-back (#41), detection
   mode (#46), IMU enable and sensor config (#47).
-- Diagnostics: SDK logging with caller-installed sinks (#42); firmware log stream on port
-  56500, 0x03xx (#44).
+- Diagnostics: firmware log stream on port 56500, 0x03xx (#44); SDK logging (#42) is in
+  [api.md](api.md#logging).
 - Point tag accessors (#34), lvx2 record / replay CLI (#35), examples (#43), simulator
   state-machine fidelity (#45).
 - C ABI: the mapping table in [api.md](api.md#c-abi-mapping-phase-3); all output structs are

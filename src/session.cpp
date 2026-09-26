@@ -6,6 +6,7 @@
 #include <cstring>
 #include <utility>
 
+#include "log_detail.hpp"
 #include "session_detail.hpp"
 
 namespace livox::mid360
@@ -382,6 +383,8 @@ std::expected<RawAck, SessionError> Session::request(
     }
     if (attempt > 1) {
       ++stats_.retries;
+      LIVOX_LOG(
+        LogLevel::kDebug, serial_, "command {:#06x} retry {}/{}", cmd_id, attempt, attempts);
     }
     if (auto r = socket_.send_to(*frame, lidar_); !r) {
       return std::unexpected(transport_error(r.error(), cmd_id, attempt));

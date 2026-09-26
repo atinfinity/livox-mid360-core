@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "context_impl.hpp"
+#include "log_detail.hpp"
 
 namespace livox::mid360
 {
@@ -121,6 +122,9 @@ void Context::Impl::run()
 
     const auto ready = poller.wait(timeout);
     if (!ready) {
+      if (ready.error().code != TransportErrorCode::kInterrupted) {
+        LIVOX_LOG(LogLevel::kError, {}, "poll failed: {}", to_string(ready.error()));
+      }
       continue;  // EINTR or similar; the loop re-evaluates `stop`
     }
     for (const ReadyEvent & ev : *ready) {
@@ -149,6 +153,9 @@ void Context::Impl::run()
         }
         const auto n = socket->recv_batch(batch);
         if (!n) {
+          if (n.error().code != TransportErrorCode::kWouldBlock) {
+            LIVOX_LOG(LogLevel::kError, {}, "recv failed: {}", to_string(n.error()));
+          }
           break;
         }
         datagrams.fetch_add(*n, std::memory_order_relaxed);
@@ -158,6 +165,9 @@ void Context::Impl::run()
             std::ranges::find_if(snapshot, [&](const Entry & e) { return e.ip == d.from.ip; });
           if (it == snapshot.end()) {
             unknown_source.fetch_add(1, std::memory_order_relaxed);
+            LIVOX_LOG(
+              LogLevel::kDebug, {}, "datagram from unknown source {}:{}", ip_to_string(d.from.ip),
+              d.from.port);
             continue;
           }
           it->receiver->on_datagram(port, d);
