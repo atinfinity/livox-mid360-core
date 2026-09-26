@@ -12,7 +12,9 @@
 #include <expected>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "livox/mid360/export.hpp"
@@ -177,10 +179,31 @@ struct DiagStatus
   std::uint8_t communication;  ///< bit 12-15
 };
 
+enum class FwType : std::uint8_t
+{  ///< key 0x8010
+  kLoader = 0,
+  kApp = 1
+};
+
+struct FovEnable
+{  ///< key 0x0017 bitmask: bit 0 enables fov_cfg0, bit 1 enables fov_cfg1
+  bool fov0 = false;
+  bool fov1 = false;
+};
+
 // ---------------------------------------------------------------------------
 // Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).
 // ---------------------------------------------------------------------------
 [[nodiscard]] std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept;
+[[nodiscard]] std::array<std::byte, 1> encode_bool(bool v) noexcept;
+[[nodiscard]] std::array<std::byte, 1> encode_fov_enable(FovEnable e) noexcept;
+/// u8 enums (DataType, DetectMode, WorkState, ...).
+template <typename E>
+  requires std::is_enum_v<E> && std::is_same_v<std::underlying_type_t<E>, std::uint8_t>
+[[nodiscard]] std::array<std::byte, 1> encode_enum_u8(E v) noexcept
+{
+  return encode_u8(static_cast<std::uint8_t>(v));
+}
 [[nodiscard]] std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig & c) noexcept;
 [[nodiscard]] std::array<std::byte, 12> encode_lidar_ip_config(const LidarIpConfig & c) noexcept;
 [[nodiscard]] std::array<std::byte, 24> encode_install_attitude(const InstallAttitude & a) noexcept;
@@ -221,6 +244,19 @@ struct DiagStatus
   std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<WorkState, KeyError> decode_work_state(
   std::span<const std::byte> v) noexcept;
+/// u8 0 / 1; anything else is kOutOfRange.
+[[nodiscard]] std::expected<bool, KeyError> decode_bool(std::span<const std::byte> v) noexcept;
+/// key 0x0000: 1, 2 or 3 (0 = IMU is not a point-cloud data type).
+[[nodiscard]] std::expected<DataType, KeyError> decode_data_type(
+  std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<DetectMode, KeyError> decode_detect_mode(
+  std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<TimeSyncType, KeyError> decode_time_sync_type(
+  std::span<const std::byte> v) noexcept;
+[[nodiscard]] std::expected<FwType, KeyError> decode_fw_type(std::span<const std::byte> v) noexcept;
+/// key 0x0017; bits above bit 1 are kOutOfRange.
+[[nodiscard]] std::expected<FovEnable, KeyError> decode_fov_enable(
+  std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<DiagStatus, KeyError> decode_diag_status(
   std::span<const std::byte> v) noexcept;
 [[nodiscard]] std::expected<std::array<std::uint32_t, 8>, KeyError> decode_hms_codes(
@@ -231,6 +267,122 @@ struct DiagStatus
 /// Finds the first entry with `key` in a parsed list.
 [[nodiscard]] std::optional<std::span<const std::byte>> find_key(
   std::span<const KeyValue> kvs, Key key) noexcept;
+
+// ---------------------------------------------------------------------------
+// key_traits<K> (issue #57): the C++ type of each key and its codec, used by
+// Device::set<K>() / get<K>(). Writable keys have `encode` (bytes for a KeyValue) and
+// `decode`; read-only keys only `decode`. Keys of the Mid-360S / 360L (kSpeedMode,
+// kPcFreqMod) have no traits on purpose (project decision, docs/roadmap.md).
+// ---------------------------------------------------------------------------
+template <Key K>
+struct key_traits;  // primary template: undefined for keys without a typed mapping
+
+/// Satisfied by every key that has key_traits.
+template <Key K>
+concept typed_key = requires { typename key_traits<K>::value_type; };
+/// Satisfied by keys that may be written with Device::set<K>().
+template <Key K>
+concept writable_key = typed_key<K> && !is_read_only(K);
+
+template <Key K>
+using key_value_t = typename key_traits<K>::value_type;
+
+namespace detail
+{
+template <typename T, auto Enc, auto Dec>
+struct WritableTraits
+{
+  using value_type = T;
+  static constexpr bool writable = true;
+  [[nodiscard]] static auto encode(const T & v) noexcept { return Enc(v); }
+  [[nodiscard]] static std::expected<T, KeyError> decode(std::span<const std::byte> v) noexcept
+  {
+    return Dec(v);
+  }
+};
+template <typename T, auto Dec>
+struct ReadOnlyTraits
+{
+  using value_type = T;
+  static constexpr bool writable = false;
+  [[nodiscard]] static std::expected<T, KeyError> decode(std::span<const std::byte> v) noexcept
+  {
+    return Dec(v);
+  }
+};
+[[nodiscard]] inline std::expected<std::string, KeyError> decode_string_owned(
+  std::span<const std::byte> v) noexcept
+{
+  return std::string(decode_string(v));
+}
+}  // namespace detail
+
+// clang-format off
+template <> struct key_traits<Key::kPclDataType>
+: detail::WritableTraits<DataType, encode_enum_u8<DataType>, decode_data_type> {};
+template <> struct key_traits<Key::kPatternMode>
+: detail::WritableTraits<std::uint8_t, encode_u8, decode_u8> {};
+template <> struct key_traits<Key::kLidarIpCfg>
+: detail::WritableTraits<LidarIpConfig, encode_lidar_ip_config, decode_lidar_ip_config> {};
+template <> struct key_traits<Key::kStateInfoHostIpCfg>
+: detail::WritableTraits<HostIpConfig, encode_host_ip_config, decode_host_ip_config> {};
+template <> struct key_traits<Key::kPointCloudHostIpCfg>
+: detail::WritableTraits<HostIpConfig, encode_host_ip_config, decode_host_ip_config> {};
+template <> struct key_traits<Key::kImuHostIpCfg>
+: detail::WritableTraits<HostIpConfig, encode_host_ip_config, decode_host_ip_config> {};
+template <> struct key_traits<Key::kInstallAttitude>
+: detail::WritableTraits<InstallAttitude, encode_install_attitude, decode_install_attitude> {};
+template <> struct key_traits<Key::kFovCfg0>
+: detail::WritableTraits<FovConfig, encode_fov_config, decode_fov_config> {};
+template <> struct key_traits<Key::kFovCfg1>
+: detail::WritableTraits<FovConfig, encode_fov_config, decode_fov_config> {};
+template <> struct key_traits<Key::kFovCfgEn>
+: detail::WritableTraits<FovEnable, encode_fov_enable, decode_fov_enable> {};
+template <> struct key_traits<Key::kDetectMode>
+: detail::WritableTraits<DetectMode, encode_enum_u8<DetectMode>, decode_detect_mode> {};
+template <> struct key_traits<Key::kFuncIoCfg>
+: detail::WritableTraits<FuncIoConfig, encode_func_io_config, decode_func_io_config> {};
+template <> struct key_traits<Key::kWorkTgtMode>
+: detail::WritableTraits<WorkState, encode_enum_u8<WorkState>, decode_work_state> {};
+template <> struct key_traits<Key::kImuDataEn>
+: detail::WritableTraits<bool, encode_bool, decode_bool> {};
+template <> struct key_traits<Key::kTimeFilter>
+: detail::WritableTraits<bool, encode_bool, decode_bool> {};
+template <> struct key_traits<Key::kImuSensorCfg>
+: detail::WritableTraits<ImuSensorConfig, encode_imu_sensor_config, decode_imu_sensor_config> {};
+template <> struct key_traits<Key::kSn>
+: detail::ReadOnlyTraits<std::string, detail::decode_string_owned> {};
+template <> struct key_traits<Key::kProductInfo>
+: detail::ReadOnlyTraits<std::string, detail::decode_string_owned> {};
+template <> struct key_traits<Key::kVersionApp>
+: detail::ReadOnlyTraits<Version, decode_version> {};
+template <> struct key_traits<Key::kVersionLoader>
+: detail::ReadOnlyTraits<Version, decode_version> {};
+template <> struct key_traits<Key::kVersionHardware>
+: detail::ReadOnlyTraits<Version, decode_version> {};
+template <> struct key_traits<Key::kMac>
+: detail::ReadOnlyTraits<std::array<std::uint8_t, 6>, decode_mac> {};
+template <> struct key_traits<Key::kCurWorkState>
+: detail::ReadOnlyTraits<WorkState, decode_work_state> {};
+template <> struct key_traits<Key::kCoreTemp>  // raw 0.01 degC units, not converted
+: detail::ReadOnlyTraits<std::int32_t, decode_i32> {};
+template <> struct key_traits<Key::kPowerupCnt>
+: detail::ReadOnlyTraits<std::uint32_t, decode_u32> {};
+template <> struct key_traits<Key::kLocalTimeNow>
+: detail::ReadOnlyTraits<std::uint64_t, decode_u64> {};
+template <> struct key_traits<Key::kLastSyncTime>
+: detail::ReadOnlyTraits<std::uint64_t, decode_u64> {};
+template <> struct key_traits<Key::kTimeOffset>
+: detail::ReadOnlyTraits<std::int64_t, decode_i64> {};
+template <> struct key_traits<Key::kTimeSyncType>
+: detail::ReadOnlyTraits<TimeSyncType, decode_time_sync_type> {};
+template <> struct key_traits<Key::kLidarDiagStatus>
+: detail::ReadOnlyTraits<DiagStatus, decode_diag_status> {};
+template <> struct key_traits<Key::kFwType>
+: detail::ReadOnlyTraits<FwType, decode_fw_type> {};
+template <> struct key_traits<Key::kHmsCode>
+: detail::ReadOnlyTraits<std::array<std::uint32_t, 8>, decode_hms_codes> {};
+// clang-format on
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END

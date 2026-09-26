@@ -63,6 +63,7 @@ RET_PARAM_NOT_SUPPORT, RET_PARAM_READ_ONLY, RET_PARAM_INVALID_LEN, RET_OUT_OF_RA
     0x23,
     0x03,
 )
+RET_PARAM_REBOOT_EFFECT = 0x21  # accepted, takes effect after reboot (kParamRebootEffect)
 PROVISIONAL_DEV_TYPE = 9  # [unverified] see docs/protocol_notes.md / #11
 
 KEY_PCL_DATA_TYPE, KEY_PATTERN_MODE, KEY_LIDAR_IPCFG = 0x0000, 0x0001, 0x0004
@@ -288,14 +289,19 @@ class DeviceModel:
                     return RET_PARAM_NOT_SUPPORT, key
                 if value[0] not in WS_REQUESTABLE:
                     return RET_OUT_OF_RANGE, key
+        ret = RET_OK
         for key, value in kvs:
             changed = self.settings.get(key) != bytes(value)
             self.settings[key] = bytes(value)
             if key == KEY_PATTERN_MODE and changed and self.work_state in (WS_READY, WS_SAMPLING):
                 # "Scan mode changed" edge of the figure: the scan module restarts.
                 self._enter_timed(WS_MOTORSTARTUP, now)
+            if key == KEY_LIDAR_IPCFG and changed:
+                # [unverified] the wiki lists 0x21 without naming the keys; the LiDAR's own
+                # address is the obvious candidate (#11, #50).
+                ret = RET_PARAM_REBOOT_EFFECT
         self._follow_target(now)
-        return RET_OK, 0
+        return ret, 0
 
     def inquire(self, keys: list[int], now_ns: int) -> tuple[int, list[tuple[int, bytes]]]:
         out = []

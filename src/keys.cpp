@@ -142,6 +142,11 @@ std::optional<std::size_t> key_value_length(Key k) noexcept
 
 // ---- encoders --------------------------------------------------------------
 std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept { return {std::byte{v}}; }
+std::array<std::byte, 1> encode_bool(bool v) noexcept { return encode_u8(v ? 1 : 0); }
+std::array<std::byte, 1> encode_fov_enable(FovEnable e) noexcept
+{
+  return encode_u8(static_cast<std::uint8_t>((e.fov0 ? 1u : 0u) | (e.fov1 ? 2u : 0u)));
+}
 
 std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig & c) noexcept
 {
@@ -345,6 +350,64 @@ std::expected<WorkState, KeyError> decode_work_state(std::span<const std::byte> 
     default:
       return std::unexpected(KeyError::kOutOfRange);
   }
+}
+
+namespace
+{
+/// u8 in [0, max] cast to E.
+template <typename E>
+std::expected<E, KeyError> decode_enum_u8(std::span<const std::byte> v, std::uint8_t max) noexcept
+{
+  auto u = decode_u8(v);
+  if (!u) {
+    return std::unexpected(u.error());
+  }
+  if (*u > max) {
+    return std::unexpected(KeyError::kOutOfRange);
+  }
+  return static_cast<E>(*u);
+}
+}  // namespace
+
+std::expected<bool, KeyError> decode_bool(std::span<const std::byte> v) noexcept
+{
+  return decode_enum_u8<bool>(v, 1);
+}
+
+std::expected<DataType, KeyError> decode_data_type(std::span<const std::byte> v) noexcept
+{
+  auto d = decode_enum_u8<DataType>(v, 3);
+  if (d && *d == DataType::kImu) {
+    return std::unexpected(KeyError::kOutOfRange);
+  }
+  return d;
+}
+
+std::expected<DetectMode, KeyError> decode_detect_mode(std::span<const std::byte> v) noexcept
+{
+  return decode_enum_u8<DetectMode>(v, 1);
+}
+
+std::expected<TimeSyncType, KeyError> decode_time_sync_type(std::span<const std::byte> v) noexcept
+{
+  return decode_enum_u8<TimeSyncType>(v, 2);
+}
+
+std::expected<FwType, KeyError> decode_fw_type(std::span<const std::byte> v) noexcept
+{
+  return decode_enum_u8<FwType>(v, 1);
+}
+
+std::expected<FovEnable, KeyError> decode_fov_enable(std::span<const std::byte> v) noexcept
+{
+  auto u = decode_u8(v);
+  if (!u) {
+    return std::unexpected(u.error());
+  }
+  if ((*u & ~0x03u) != 0) {
+    return std::unexpected(KeyError::kOutOfRange);
+  }
+  return FovEnable{.fov0 = (*u & 1u) != 0, .fov1 = (*u & 2u) != 0};
 }
 
 std::expected<DiagStatus, KeyError> decode_diag_status(std::span<const std::byte> v) noexcept
