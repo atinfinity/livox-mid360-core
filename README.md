@@ -15,36 +15,12 @@ protocol specification only. It targets **Ubuntu 24.04 and later** and the **bas
 
 ## Status
 
-**v0.1 — phase 1: protocol layer.** Pure functions with no I/O:
-
-- CRC-16/CCITT-FALSE and CRC-32, `constexpr`, with check vectors
-- Control command frames (24-byte header, seq/CRC validation, 1400-byte limit): parse + build
-- Point-cloud / IMU data packets (36-byte header, data types 0–3, per-point timestamp interpolation, tag decoding)
-- Key-value lists for `0x0100` configure / `0x0101` inquire / `0x0102` push, typed encoders/decoders for every documented key
-- HMS diagnostic-code decoding with the official description table
-- A Python reference implementation (`tools/`) and byte-exact golden vectors shared by both
-- UDP transport (`transport.hpp`): non-blocking IPv4 sockets, batched receive (`recvmmsg` on
-  Linux) with kernel receive timestamps, and a `poll`-based `Poller` with cross-thread wake-up
-- A LiDAR simulator (`tools/livox_mid360_sim.py`, stdlib-only Python) that answers commands,
-  runs the work-state machine and streams point-cloud/IMU/push packets, with a JSON control
-  channel for fault injection; the C++ tests spawn it for an end-to-end smoke test
-- Session layer (`session.hpp`): broadcast/unicast discovery, synchronous command round-trips
-  with seq-matched retries and timeouts, typed configure/inquire/reboot helpers, work-state
-  polling and cross-thread cancellation. No threads; tested against the simulator
-
-- Device layer (`context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`, docs/api.md): a
-  `Context` owns the three host receive sockets and one receive thread (`recvmmsg`, dispatch
-  by source IP); a `Device` wraps a `Session`, applies the host setup and delivers parsed
-  packets, assembled `Frame`s (frame counter or time window, udp_cnt drop counting, timestamp
-  policies) and IMU samples through callbacks, plus stats, work-state and HMS events parsed
-  from the 0x0102 push. `BoundedQueue<T>` hands them to another thread. Tested against the
-  simulator
-
-Reconnection after a cable pull or reboot is automatic (`ReconnectOptions`, #8) and several
-LiDARs share one `Context` (`Context::find()` by serial number).
-
-Not yet implemented (phase 3): C ABI, ROS 2 (`livox-mid360-ros2`, separate repository). Logging (`0x03xx`) and firmware
-upgrade (`0x04xx`) commands are intentionally out of scope.
+Version 0.1.0: phase 1 is complete. The protocol, UDP transport, session and device layers
+are implemented and tested end to end against the bundled LiDAR simulator, including
+automatic reconnection and multi-device operation. Phase 2 (typed configuration and status
+APIs, diagnostics, samples, hardware verification) is in progress and phase 3 (C ABI, ROS 2)
+has not started. Firmware upgrade commands (`0x04xx`) are out of scope. The full item list
+with tracking issues is in [docs/roadmap.md](docs/roadmap.md).
 
 ## Requirements
 
@@ -195,7 +171,7 @@ include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transpo
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator
-docs/                   architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md
+docs/                   roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 

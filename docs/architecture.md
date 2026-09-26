@@ -391,6 +391,9 @@ flowchart LR
 
 ## 8. Roadmap pointers
 
+The full status and plan, with tracking issues per item, is in [roadmap.md](roadmap.md). The
+items that touch this document most:
+
 - Typed parameter APIs on `Device`: firmware version (#38), FOV (#39), coordinate format /
   scan pattern / frame rate (#40), stored settings and live status read-back (#41), detection
   mode (#46), IMU enable and sensor config (#47).
