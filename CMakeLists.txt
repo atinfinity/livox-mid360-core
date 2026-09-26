@@ -59,6 +59,7 @@ add_library(mid360_core
   src/crc.cpp
   src/protocol.cpp
   src/keys.cpp
+  src/lidar_info.cpp
   src/hms.cpp
   src/session.cpp
   src/config.cpp

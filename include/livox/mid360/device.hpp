@@ -36,6 +36,7 @@
 #include "livox/mid360/export.hpp"
 #include "livox/mid360/frame.hpp"
 #include "livox/mid360/keys.hpp"
+#include "livox/mid360/lidar_info.hpp"
 #include "livox/mid360/protocol.hpp"
 #include "livox/mid360/session.hpp"
 #include "livox/mid360/transport.hpp"
@@ -133,6 +134,11 @@ public:
   std::expected<InquireResult, DeviceError> inquire(
     std::span<const Key> keys, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<void, DeviceError> reboot(std::optional<RequestOptions> opts = std::nullopt);
+
+  // --- aggregated read-back (issues #38 / #41): one 0x0101 each, not cached.
+  /// Keys 0x8000-0x8005. Missing keys leave their field empty; see decode_identity().
+  std::expected<DeviceIdentity, DeviceError> identity(
+    std::optional<RequestOptions> opts = std::nullopt);
 
   // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
   /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()
