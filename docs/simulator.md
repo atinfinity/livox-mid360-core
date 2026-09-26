@@ -23,6 +23,8 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--bind` | `0.0.0.0` | address to bind; also reported as `lidar_ip` in the discovery ACK (127.0.0.1 when unspecified) |
 | `--base-port` | 56000 | discovery port; cmd, push, pcl, imu follow at +100, +200, +300, +400. `0` picks free ports |
 | `--sn` | `SIM0000000000001` | serial number (≤ 16 chars) |
+| `--product-info` | `MID360-SIM` | key 0x8001 (≤ 64 chars) |
+| `--version-app` / `--version-loader` / `--version-hardware` | `0.0.0.1` | keys 0x8002–0x8004 as `a.b.c.d` |
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
