@@ -242,10 +242,26 @@ std::string to_string(const ImuSensorConfig & c)
          std::string(to_string(c.gyro_range));
 }
 
+std::string_view to_string(DiagLevel level) noexcept
+{
+  switch (level) {
+    case DiagLevel::kNormal:
+      return "normal";
+    case DiagLevel::kWarning:
+      return "warning";
+    case DiagLevel::kError:
+      return "error";
+    case DiagLevel::kSafetyError:
+      return "safety_error";
+  }
+  return "unknown";
+}
+
 std::string to_string(const DiagStatus & d)
 {
-  return "sys" + std::to_string(d.system) + "/scan" + std::to_string(d.scan) + "/rng" +
-         std::to_string(d.ranging) + "/comm" + std::to_string(d.communication);
+  const auto n = [](DiagLevel l) { return std::to_string(static_cast<unsigned>(l)); };
+  return "sys" + n(d.system) + "/scan" + n(d.scan) + "/rng" + n(d.ranging) + "/comm" +
+         n(d.communication);
 }
 
 LidarSettings decode_settings(std::span<const KeyValue> kvs) noexcept

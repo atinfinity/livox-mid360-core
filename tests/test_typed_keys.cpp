@@ -235,7 +235,7 @@ TEST_CASE("Device::get<K>: every read-only key decodes", "[device][keys][sim]")
   CHECK(*sync_type == TimeSyncType::kNone);
   auto diag = dev->get<Key::kLidarDiagStatus>();
   REQUIRE(diag.has_value());
-  CHECK(diag->system == 0);
+  CHECK(diag->system == DiagLevel::kNormal);
   auto fw = dev->get<Key::kFwType>();
   REQUIRE(fw.has_value());
   CHECK(*fw == FwType::kLoader);

@@ -344,6 +344,21 @@ class DeviceModelTest(unittest.TestCase):
         ret, kvs = self.m.inquire([sim.KEY_TIME_OFFSET, sim.KEY_TIME_SYNC_TYPE], 0)
         self.assertEqual(struct.unpack('<q', dict(kvs)[sim.KEY_TIME_OFFSET])[0], 600)
 
+    def test_set_status_updates_pushed_keys(self) -> None:
+        self.assertEqual(
+            self.m.set_status({'diag': 0x0021, 'core_temp': 4321, 'bogus': 1}), ['bogus']
+        )
+        kvs = dict(proto.parse_info_push(self.m.push_payload(5)))
+        self.assertEqual(struct.unpack('<H', kvs[sim.KEY_DIAG_STATUS])[0], 0x0021)
+        self.assertEqual(struct.unpack('<i', kvs[sim.KEY_CORE_TEMP])[0], 4321)
+        self.m.set_gps_time(ns=1_000, now_ns=400)
+        kvs = dict(proto.parse_info_push(self.m.push_payload(5)))
+        self.assertEqual(struct.unpack('<Q', kvs[sim.KEY_LAST_SYNC_TIME])[0], 400)
+        self.assertEqual(self.m.set_status({'omit_keys': [sim.KEY_CORE_TEMP]}), [])
+        kvs = dict(proto.parse_info_push(self.m.push_payload(5)))
+        self.assertNotIn(sim.KEY_CORE_TEMP, kvs)
+        self.assertIn(sim.KEY_DIAG_STATUS, kvs)
+
     def test_push_payload_parses(self) -> None:
         self.m.hms = [0x02100003] + [0] * 7
         kvs = dict(proto.parse_info_push(self.m.push_payload(123)))
@@ -494,6 +509,17 @@ class EndToEndTest(unittest.TestCase):
         ack = self.request(sim.CMD_PARAM_INQUIRE, proto.encode_param_inquire([sim.KEY_HMS]), cmd)
         ret, kvs = proto.parse_param_inquire_ack(ack.data)
         self.assertEqual(struct.unpack('<8I', dict(kvs)[sim.KEY_HMS])[0], 0x02100003)
+
+        self.send_control('{"cmd":"set_status","diag":33,"core_temp":4321}')
+        time.sleep(0.1)
+        ack = self.request(
+            sim.CMD_PARAM_INQUIRE,
+            proto.encode_param_inquire([sim.KEY_DIAG_STATUS, sim.KEY_CORE_TEMP]),
+            cmd,
+        )
+        ret, kvs = proto.parse_param_inquire_ack(ack.data)
+        self.assertEqual(struct.unpack('<H', dict(kvs)[sim.KEY_DIAG_STATUS])[0], 33)
+        self.assertEqual(struct.unpack('<i', dict(kvs)[sim.KEY_CORE_TEMP])[0], 4321)
 
         self.send_control('{"cmd":"drop_ack","count":1}')
         time.sleep(0.1)

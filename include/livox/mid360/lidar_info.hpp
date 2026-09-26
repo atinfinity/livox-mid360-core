@@ -70,6 +70,8 @@ inline constexpr std::array<Key, 6> kIdentityKeys{
 /// `<rate>/<accel>/<gyro>`, e.g. `200Hz/4g/2000dps`
 [[nodiscard]] std::string to_string(const ImuSensorConfig & c);
 /// `sys<n>/scan<n>/rng<n>/comm<n>`
+[[nodiscard]] std::string_view to_string(DiagLevel level) noexcept;
+/// `sys<n>/scan<n>/rng<n>/comm<n>` with the numeric level of each subsystem.
 [[nodiscard]] std::string to_string(const DiagStatus & d);
 
 // --- settings (issue #41) ---------------------------------------------------------------
@@ -123,6 +125,9 @@ inline constexpr std::array<Key, 16> kSettingsKeys{
 /// Device::status() (inquire) or Device::pushed_status() (last push).
 struct LidarStatus
 {
+  /// Host time (CLOCK_REALTIME ns) at which the ACK or push behind this snapshot was
+  /// received; 0 when decoded from a bare key-value list (issue #56).
+  std::uint64_t time_ns = 0;
   std::optional<WorkState> cur_work_state;         ///< 0x8006
   std::optional<std::int32_t> core_temp;           ///< 0x8007, 0.01 degC units
   std::optional<std::uint32_t> powerup_cnt;        ///< 0x8008

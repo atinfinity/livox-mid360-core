@@ -429,9 +429,18 @@ std::expected<DiagStatus, KeyError> decode_diag_status(std::span<const std::byte
   if (!u) {
     return std::unexpected(u.error());
   }
+  const unsigned raw = *u;
+  const auto nibble = [raw](unsigned shift) { return (raw >> shift) & 0xFU; };
+  for (const unsigned shift : {0U, 4U, 8U, 12U}) {
+    if (nibble(shift) > 3U) {
+      return std::unexpected(KeyError::kOutOfRange);
+    }
+  }
   return DiagStatus{
-    static_cast<std::uint8_t>(*u & 0xF), static_cast<std::uint8_t>((*u >> 4) & 0xF),
-    static_cast<std::uint8_t>((*u >> 8) & 0xF), static_cast<std::uint8_t>((*u >> 12) & 0xF)};
+    .system = static_cast<DiagLevel>(nibble(0)),
+    .scan = static_cast<DiagLevel>(nibble(4)),
+    .ranging = static_cast<DiagLevel>(nibble(8)),
+    .communication = static_cast<DiagLevel>(nibble(12))};
 }
 
 std::expected<std::array<std::uint32_t, 8>, KeyError> decode_hms_codes(
