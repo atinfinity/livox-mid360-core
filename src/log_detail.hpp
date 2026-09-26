@@ -33,12 +33,12 @@ inline constexpr std::size_t kLogMessageCapacity = 256;
 /// Formats into a stack buffer (no allocation) and emits. Callers check log_enabled() first.
 template <class... Args>
 void log(
-  LogLevel level, std::string_view serial_number, std::format_string<Args...> fmt,
-  Args &&... args)
+  LogLevel level, std::string_view serial_number, std::format_string<Args...> fmt, Args &&... args)
 {
   std::array<char, kLogMessageCapacity> buf{};
   const auto r = std::format_to_n(buf.data(), buf.size(), fmt, std::forward<Args>(args)...);
-  const auto n = std::min(static_cast<std::size_t>(std::max(r.size, std::ptrdiff_t{0})), buf.size());
+  const auto n =
+    std::min(static_cast<std::size_t>(std::max(r.size, std::ptrdiff_t{0})), buf.size());
   log_emit(level, serial_number, std::string_view(buf.data(), n));
 }
 
@@ -48,7 +48,7 @@ LIVOX_MID360_API_END
 
 /// `LIVOX_LOG(level, serial, fmt, args...)`: the arguments are evaluated only when enabled.
 /// An expression (not a statement) so that it is usable anywhere and needs no do/while.
-#define LIVOX_LOG(level, serial, ...)                                              \
-  (::livox::mid360::detail::log_enabled(level)                                     \
-     ? ::livox::mid360::detail::log(level, serial, __VA_ARGS__)                    \
+#define LIVOX_LOG(level, serial, ...)                           \
+  (::livox::mid360::detail::log_enabled(level)                  \
+     ? ::livox::mid360::detail::log(level, serial, __VA_ARGS__) \
      : void())
