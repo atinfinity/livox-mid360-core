@@ -218,6 +218,55 @@ TEST_CASE(
   CHECK(dev->stats().reconnects == 1);
 }
 
+TEST_CASE("Reconnect: set_lidar_ip_config + reboot lands on the new address", "[sim][reconnect]")
+{
+  // The simulator moves to 127.0.0.2 on reboot (docs/simulator.md); macOS needs the alias.
+  if (!UdpSocket::open(Endpoint{{127, 0, 0, 2}, 0}).has_value()) {
+    SKIP("127.0.0.2 is not configured on the loopback interface");
+  }
+  Fixture f({"--reboot-silence", "0.3"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  DeviceOptions o = Fixture::options();
+  o.reconnect.discovery_port = f.sim->ports().discovery;  // ephemeral, not 56000
+  auto dev = f.open(o);
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 3; }));
+
+  const auto before = dev->lidar_ip_config();
+  REQUIRE(before.has_value());
+  CHECK(before->ip == Ipv4{127, 0, 0, 1});
+
+  const auto bad = dev->set_lidar_ip_config({.ip = {}, .netmask = {255, 0, 0, 0}, .gateway = {}});
+  REQUIRE_FALSE(bad.has_value());
+  CHECK(bad.error().kind == DeviceError::Kind::kInvalidArgument);
+  CHECK(bad.error().key == Key::kLidarIpCfg);
+
+  const LidarIpConfig moved{.ip = {127, 0, 0, 2}, .netmask = {255, 0, 0, 0}, .gateway = {}};
+  const auto r = dev->set_lidar_ip_config(moved);
+  REQUIRE(r.has_value());
+  CHECK(r->reboot_required);
+  const auto again = dev->set_lidar_ip_config(moved);
+  REQUIRE(again.has_value());
+  CHECK_FALSE(again->reboot_required);  // unchanged value [unverified on hardware]
+  CHECK(dev->lidar_ip_config()->ip == moved.ip);
+  CHECK(dev->info().ip == Ipv4{127, 0, 0, 1});  // nothing moves before the reboot
+
+  REQUIRE(dev->reboot().has_value());
+  REQUIRE(wait_until([&] { return rec.disconnected == 1; }, 1s));
+  REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 10s));
+  CHECK(dev->info().ip == Ipv4{127, 0, 0, 2});
+  CHECK(f.context->find(f.sim->sn()) == dev.get());
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }, 5s));
+  const auto frames_after = rec.frames.load();
+  REQUIRE(wait_until([&] { return rec.frames >= frames_after + 3; }));  // data from the new ip
+  CHECK(dev->lidar_ip_config()->ip == moved.ip);
+  CHECK(dev->stats().reconnects == 1);
+}
+
 TEST_CASE(
   "Reconnect: a lost ACK alone is not a disconnect, a stale push plus timeout is",
   "[sim][reconnect]")

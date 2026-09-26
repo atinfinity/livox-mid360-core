@@ -220,7 +220,7 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 | --- | --- | --- |
 | `kPclDataType` 0x0000 | `DataType` | 1–3; `kImu` (0) is out of range |
 | `kPatternMode` 0x0001 | `std::uint8_t` | only 0 is documented |
-| `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `reboot_required` after a change (simulator behaviour, [unverified]) |
+| `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `set_lidar_ip_config()`; `reboot_required` after a change (simulator behaviour, [unverified]) |
 | `kStateInfoHostIpCfg` / `kPointCloudHostIpCfg` / `kImuHostIpCfg` 0x0005–0x0007 | `HostIpConfig` | normally set by `open()` |
 | `kInstallAttitude` 0x0012 | `InstallAttitude` | |
 | `kFovCfg0` / `kFovCfg1` 0x0015 / 0x0016 | `FovConfig` | |
@@ -429,6 +429,37 @@ dev->set_time_filter(true);
 | `set_imu_sensor_config()` / `imu_sensor_config()` | `livox_mid360_device_set_imu_sensor_config(dev, const livox_mid360_imu_sensor_config_t*)` / `..._imu_sensor_config(dev, livox_mid360_imu_sensor_config_t*)` |
 | `set_time_filter()` / `time_filter()` | `livox_mid360_device_set_time_filter(dev, bool)` / `..._time_filter(dev, bool*)` |
 
+## LiDAR network config
+
+`Device::set_lidar_ip_config(LidarIpConfig)` / `lidar_ip_config()` (issue #50) wrap key
+0x0004 (`ip`, `netmask`, `gateway`). `lidar_ip_config_valid()` in `keys.hpp` is checked
+before any I/O (`kInvalidArgument` with `key` = 0x0004): the address is neither unspecified,
+broadcast nor the subnet's network / broadcast address, the mask is a contiguous prefix of 1
+to 30 bits, and the gateway is 0.0.0.0 or inside the subnet and different from the address.
+The LiDAR answers a change with `ret_code` 0x21, surfaced as `SetResult::reboot_required`
+exactly as received (whether an unchanged value also answers 0x21 is [unverified], #11); the
+SDK never reboots on its own.
+
+```cpp
+auto r = dev->set_lidar_ip_config({.ip = {192, 168, 1, 12},
+                                   .netmask = {255, 255, 255, 0},
+                                   .gateway = {192, 168, 1, 1}});
+if (r && r->reboot_required) {
+  dev->reboot();   // kDisconnected{kRebootRequested}, then kReconnected at the new address
+}
+```
+
+After `reboot()` the ordinary reconnection (below) applies: the old endpoint fails, discovery
+is filtered by serial and the Device is re-keyed to the new IP. The Device remembers the
+address it configured and unicasts discovery to `{that ip, ReconnectOptions::discovery_port}`
+(56000 by default) before the user's `discovery_targets` / broadcast, so a move to a subnet
+that broadcast does not reach still recovers. The point / IMU / push destinations are the
+host's and are replayed unchanged.
+
+| C++ | C |
+| --- | --- |
+| `set_lidar_ip_config()` / `lidar_ip_config()` | `livox_mid360_device_set_lidar_ip_config(dev, const livox_mid360_lidar_ip_config_t*, bool* reboot_required)` / `..._lidar_ip_config(dev, livox_mid360_lidar_ip_config_t*)` |
+
 ## Push handling
 
 The LiDAR sends a 0x0102 info push about once per second to the host push port. The receive
@@ -486,7 +517,8 @@ not reset). Callbacks stay frozen for the whole period when sampling had been re
 
 1. `Session::connect` to the last known command endpoint with the serial number verified
    (a cable pull keeps the address, so this is fast and does not broadcast);
-2. otherwise `discover()` (`discovery_targets` unicast, or broadcast; `discovery_timeout`)
+2. otherwise `discover()` (first the address `set_lidar_ip_config()` configured, if any,
+   then `discovery_targets` unicast, or broadcast; `discovery_timeout` each)
    filtered by the original serial number — a reboot or DHCP may have moved the LiDAR, and
    the serial, not the IP, is its identity. A new IP re-registers the Device with the Context;
    an IP held by another Device fails the attempt (`kAlreadyRegistered`) and it is retried;
