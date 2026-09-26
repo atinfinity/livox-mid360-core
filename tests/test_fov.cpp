@@ -408,6 +408,7 @@ TEST_CASE("Device::time_sync_status and set_gps_time through the simulator", "[s
 
   // A key that does not decode fails the whole read, naming the key.
   REQUIRE(f.sim->control(R"({"cmd":"set_status","bad_time_offset":1})"));  // 0x800B, 4 bytes
+  REQUIRE(f.sim->sync());  // applied before the next query
   const auto partial = dev->time_sync_status();
   REQUIRE_FALSE(partial.has_value());
   CHECK(partial.error().kind == DeviceError::Kind::kDecodeFailed);
