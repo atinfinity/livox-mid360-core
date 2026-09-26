@@ -42,6 +42,12 @@ struct HostSetup
   /// reconnect restores them. Out-of-range window → kInvalidArgument with its key. Empty:
   /// leave the stored FOV alone.
   std::optional<FovSettings> fov;
+  /// Detection mode (key 0x0018, issue #46), time filter (key 0x0026, issue #54) and IMU
+  /// sensor config (key 0x002B, issue #47). Empty: leave the stored value alone. The IMU
+  /// config key is missing on older firmware, so an absent optional is the safe default.
+  std::optional<DetectMode> detect_mode;
+  std::optional<bool> time_filter;
+  std::optional<ImuSensorConfig> imu_sensor_config;
   /// After setting `work_tgt_mode`, poll 0x8006 until it is observed. 0: return right after
   /// the ACK.
   std::chrono::milliseconds wait_timeout{10000};

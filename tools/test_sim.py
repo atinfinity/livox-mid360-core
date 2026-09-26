@@ -211,6 +211,30 @@ class DeviceModelTest(unittest.TestCase):
         )
         self.assertEqual(self.m.settings[sim.KEY_PATTERN_MODE], b'\x00')
 
+    def test_settings_keys_range_checks(self) -> None:
+        for key in (sim.KEY_DETECT_MODE, sim.KEY_TIME_FILTER, sim.KEY_IMU_EN):
+            self.assertEqual(self.m.configure([(key, b'\x01')]), (sim.RET_OK, 0))
+            self.assertEqual(self.m.configure([(key, b'\x02')]), (sim.RET_OUT_OF_RANGE, key))
+            self.assertEqual(self.m.settings[key], b'\x01')
+        key = sim.KEY_IMU_SENSOR_CFG
+        self.assertEqual(self.m.configure([(key, b'\x01\x03\x07')]), (sim.RET_OK, 0))
+        self.assertEqual(self.m.imu_rate, 500.0)
+        for bad in (b'\x04\x00\x00', b'\x00\x04\x00', b'\x00\x00\x08'):
+            self.assertEqual(self.m.configure([(key, bad)]), (sim.RET_OUT_OF_RANGE, key))
+        self.assertEqual(self.m.settings[key], b'\x01\x03\x07')
+        for rate, hz in ((b'\x00', 200.0), (b'\x02', 100.0), (b'\x03', 50.0)):
+            self.m.configure([(key, rate + b'\x00\x00')])
+            self.assertEqual(self.m.imu_rate, hz)
+
+    def test_imu_cfg_unsupported_firmware(self) -> None:
+        m = sim.DeviceModel(imu_cfg_unsupported=True)
+        key = sim.KEY_IMU_SENSOR_CFG
+        self.assertEqual(m.configure([(key, b'\x01\x00\x00')]), (sim.RET_PARAM_NOT_SUPPORT, key))
+        self.assertEqual(m.inquire([key], 0), (sim.RET_PARAM_NOT_SUPPORT, [(key, b'')]))
+        self.assertEqual(m.imu_rate, 200.0)
+        # The other keys are untouched.
+        self.assertEqual(m.inquire([sim.KEY_IMU_EN], 0), (sim.RET_OK, [(sim.KEY_IMU_EN, b'\x00')]))
+
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
         self.assertEqual(
             self.m.configure([(sim.KEY_SN, b'x' * 16)]), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN)

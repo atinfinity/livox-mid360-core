@@ -30,9 +30,10 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
 | `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, #11) |
-| `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and 200 pkt/s IMU rates |
+| `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and the IMU rate (200 pkt/s unless `0x002B` selects another) |
 | `--push-rate` | 1.0 | 0x0102 push rate in Hz, not affected by `--rate-multiplier` |
 | `--drop-rate` | 0 | fraction of point-cloud packets silently dropped (`udp_cnt` still advances) |
+| `--imu-cfg-unsupported` | | emulate firmware without key `0x002B`: its write, read and any inquire naming it answer `0x20` |
 | `--no-quit-on-eof` | | keep running when stdin closes (default: quit) |
 | `--verbose` | | log to stderr |
 
@@ -85,8 +86,11 @@ The process is driven over its standard streams so that any test harness can use
   `pcl_data_type` outside 1–3 → `0x03`, `pattern_mode` 1 / 2 → `0x20` and any other non-zero
   value → `0x03` (the base Mid-360 only scans non-repetitively, [unverified] which code, #11),
   a FOV window (`0x0015` / `0x0016`) with yaw
-  outside [0, 360) or pitch outside (-10, 60) → `0x03`. All keys are applied only if none failed; the ACK's
-  `error_key` names the offender. A *changed* `lidar_ipcfg` is stored and answered with `0x21`
+  outside [0, 360) or pitch outside (-10, 60) → `0x03`, `detect_mode` / `time_filter` /
+  `imu_data_en` above 1 → `0x03`, an `imu_sensor_cfg` byte past its last enumerator (rate
+  > 3, accel > 3, gyro > 7) → `0x03`. All keys are applied only if none failed; the ACK's
+  `error_key` names the offender. A rejected `0x0101` inquire (unknown key) answers the
+  return code with the offending key as a single zero-length entry. A *changed* `lidar_ipcfg` is stored and answered with `0x21`
   (reboot required, [unverified] which keys the LiDAR does this for, #11); writing the current
   value back is a plain `0x00`. Value lengths mirror `key_value_length()` in `keys.cpp`.
 - **State machine** the figure in [protocol_notes.md](protocol_notes.md#working-state):
@@ -101,7 +105,7 @@ The process is driven over its standard streams so that any test harness can use
   setting except `work_tgt_mode`; factory reset restores `factory_settings()`. All durations
   and the return codes are assumptions ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 - **Streaming** while SAMPLING: point-cloud packets of 96 points in the configured
-  `pcl_data_type` at 2000 pkt/s to the host in key `0x0006`, IMU packets at 200 pkt/s to the
+  `pcl_data_type` at 2000 pkt/s to the host in key `0x0006`, IMU packets at the `0x002B` rate (200 pkt/s by default) to the
   host in `0x0007` when `imu_data_en = 1`, and a `0x0102` push once per second to the host in
   `0x0005`. Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps are
   `time.time_ns()` plus the GPS offset from 0x0202. The scheduler bounds catch-up bursts to
@@ -143,6 +147,10 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
 | Unknown key | ret `0x20` | same |
+| `0x0101` inquire with an unknown key | ret `0x20`, `key_num` 1 and the offending key with length 0 | wiki does not describe a failed inquire ACK |
+| `detect_mode` / `time_filter` / `imu_data_en` values > 1 | ret `0x03` | wiki gives the codes, not which one |
+| `imu_sensor_cfg` | per-byte range → `0x03`; accepted rate switches the IMU stream to 200 / 500 / 100 / 50 pkt/s at once (and `time_interval`); factory default `0/0/0`; `--imu-cfg-unsupported` → `0x20` on write and read | the wiki gives no default, no firmware version and does not say whether the rate change is immediate |
+| `time_filter` | stored only; the simulator has no time source to roll back | wiki describes the rollback behaviour, not testable here |
 | `lidar_ipcfg` write | ret `0x21` (reboot required) when the value changes | wiki lists `0x21` but not when the firmware uses it |
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |

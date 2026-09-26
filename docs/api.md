@@ -356,18 +356,69 @@ if (auto p = dev->set_scan_pattern(ScanPattern::kRepetitive); !p) { /* kLidarRej
 ```
 
 **Reconnect replay rule.** The `HostSetup` replayed after a reconnect is not frozen at
-`open()`: every key it models (0x0000, 0x0001, 0x0015, 0x0016, 0x0017) that a later
-successful 0x0100 carried, whether through `set_point_format()`, `set_fov()`, `set<K>()` or a
-raw `configure()`, overwrites the stored copy. A reconnect therefore restores the last value
-the Device successfully wrote, not the value passed at open. Keys `HostSetup` does not model
-(detect mode, install attitude, ...) are still not replayed; that is the LiDAR's own
-persistence.
+`open()`: every key it models (0x0000, 0x0001, 0x0015, 0x0016, 0x0017, 0x0018, 0x001C,
+0x0026, 0x002B) that a later successful 0x0100 carried, whether through `set_point_format()`,
+`set_fov()`, `set_detect_mode()`, `set<K>()` or a raw `configure()`, overwrites the stored
+copy. A reconnect therefore restores the last value the Device successfully wrote, not the
+value passed at open. Keys `HostSetup` does not model (install attitude, function IO, ...)
+are still not replayed; that is the LiDAR's own persistence.
 
 | C++ | C |
 | --- | --- |
 | `set_point_format()` / `point_format()` | `livox_mid360_device_set_point_format(dev, int)` / `..._point_format(dev, int*)` |
 | `set_scan_pattern()` / `scan_pattern()` | `livox_mid360_device_set_scan_pattern(dev, int)` / `..._scan_pattern(dev, int*)` |
 | `set_frame_policy()` / `frame_policy()` | `livox_mid360_device_set_frame_policy(dev, const livox_mid360_frame_policy_t*)` / `..._frame_policy(dev, livox_mid360_frame_policy_t*)` |
+
+## Detection mode, IMU and time filter
+
+Issues #46, #47 and #54 add thin wrappers over `set<K>()` / `get<K>()` for four stored
+settings; each setter returns the LiDAR's `SetResult` and each accepted write is folded into
+the replayed `HostSetup` (rule above), whose new optionals `detect_mode`, `time_filter` and
+`imu_sensor_config` also let `open()` write them:
+
+- `Device::set_detect_mode(DetectMode)` / `detect_mode()`: key 0x0018, `kNormal` (0) /
+  `kSensitive` (1). A value outside the enum is `kInvalidArgument` with `key` = 0x0018 before
+  any I/O.
+- `Device::set_imu_enabled(bool)` / `imu_enabled()`: key 0x001C, the same key
+  `HostSetup::imu_enable` writes at open. Disabling stops the IMU stream at the LiDAR; the
+  `on_imu` callback simply stops being called.
+- `Device::set_imu_sensor_config(const ImuSensorConfig &)` / `imu_sensor_config()`: key
+  0x002B, output rate (200 / 500 / 100 / 50 Hz), accelerometer range (±4 g … ±32 g) and
+  gyroscope range (±2000 dps … ±15.625 dps). A field past its last enumerator is
+  `kInvalidArgument` with `key` = 0x002B before any I/O. Changing the output rate changes the
+  IMU packet rate the host receives (`DeviceStats::imu_samples` grows 2.5× faster at 500 Hz)
+  and the `time_interval` in each IMU packet; nothing in the receive path assumes 200 Hz.
+- `Device::set_time_filter(bool)` / `time_filter()`: key 0x0026. Per the wiki, with 0 a time
+  rollback in the sync source interrupts the point cloud, with 1 (GPS-sync abnormal-time
+  filtering) it does not. The SDK only stores the bit.
+
+Key 0x002B is absent on older firmware ([unverified] which version added it, #11). No
+distinct error kind exists for that: the LiDAR rejects the write, the read and any batched
+inquire naming the key with `ret_code` 0x20, which surfaces as the ordinary `kSession` /
+`kLidarRejected` error. `settings()` drops such a key and asks again, so
+`LidarSettings::imu_sensor_cfg` is simply empty there.
+
+```cpp
+dev->set_detect_mode(DetectMode::kSensitive);
+dev->set_imu_sensor_config({.output_rate = ImuOutputRate::k500Hz,
+                            .accel_range = ImuAccelRange::k8g,
+                            .gyro_range = ImuGyroRange::k1000dps});
+if (auto r = dev->imu_sensor_config(); !r) {
+  const auto & e = r.error();
+  if (e.kind == DeviceError::Kind::kSession && e.session->kind == SessionErrorKind::kLidarRejected &&
+      e.session->ret_code == RetCode::kParamNotSupport) {
+    // firmware without key 0x002B: the IMU runs at its fixed 200 Hz
+  }
+}
+dev->set_time_filter(true);
+```
+
+| C++ | C |
+| --- | --- |
+| `set_detect_mode()` / `detect_mode()` | `livox_mid360_device_set_detect_mode(dev, int)` / `..._detect_mode(dev, int*)` |
+| `set_imu_enabled()` / `imu_enabled()` | `livox_mid360_device_set_imu_enabled(dev, bool)` / `..._imu_enabled(dev, bool*)` |
+| `set_imu_sensor_config()` / `imu_sensor_config()` | `livox_mid360_device_set_imu_sensor_config(dev, const livox_mid360_imu_sensor_config_t*)` / `..._imu_sensor_config(dev, livox_mid360_imu_sensor_config_t*)` |
+| `set_time_filter()` / `time_filter()` | `livox_mid360_device_set_time_filter(dev, bool)` / `..._time_filter(dev, bool*)` |
 
 ## Push handling
 
