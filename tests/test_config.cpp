@@ -17,14 +17,17 @@ using namespace std::chrono_literals;
 
 #define GOLDEN(name) span_of(golden::name, golden::name##_len)
 
-namespace {
-struct Fixture {
+namespace
+{
+struct Fixture
+{
   std::optional<SimProcess> sim;
   std::string err;
 
   Fixture() { sim = SimProcess::start(err, {"--startup-delay", "1"}); }
 
-  [[nodiscard]] Session connect(Ipv4 bind = {127, 0, 0, 1}) const {
+  [[nodiscard]] Session connect(Ipv4 bind = {127, 0, 0, 1}) const
+  {
     SessionOptions o;
     o.host_command_port = 0;
     o.bind_address = bind;
@@ -34,12 +37,14 @@ struct Fixture {
   }
 };
 
-bool same(std::span<const std::byte> a, std::span<const std::byte> b) {
+bool same(std::span<const std::byte> a, std::span<const std::byte> b)
+{
   return std::ranges::equal(a, b);
 }
 }  // namespace
 
-TEST_CASE("host_setup_key_values: matches the golden 0x0100 request", "[config][golden]") {
+TEST_CASE("host_setup_key_values: matches the golden 0x0100 request", "[config][golden]")
+{
   // Defaults + host 192.168.1.5 are exactly what gen_golden_vectors.py encodes as
   // param_config_req (keys 0x0005, 0x0006, 0x0007, 0x0000, 0x001C, seq 2).
   const HostSetup setup;
@@ -50,7 +55,7 @@ TEST_CASE("host_setup_key_values: matches the golden 0x0100 request", "[config][
   CHECK(kvs.values[2].key == 0x0007);
   CHECK(kvs.values[3].key == 0x0000);
   CHECK(kvs.values[4].key == 0x001C);
-  for (const auto& kv : kvs.values) {
+  for (const auto & kv : kvs.values) {
     CHECK(kv.value.data() >= kvs.storage.data());
     CHECK(kv.value.data() + kv.value.size() <= kvs.storage.data() + kvs.storage.size());
   }
@@ -64,7 +69,8 @@ TEST_CASE("host_setup_key_values: matches the golden 0x0100 request", "[config][
   CHECK(same(encode_param_config_request(held.values), data));
 }
 
-TEST_CASE("host_setup_key_values: ports, data type and imu flag are encoded", "[config]") {
+TEST_CASE("host_setup_key_values: ports, data type and imu flag are encoded", "[config]")
+{
   HostSetup setup;
   setup.push_port = 1;
   setup.point_port = 2;
@@ -84,9 +90,12 @@ TEST_CASE("host_setup_key_values: ports, data type and imu flag are encoded", "[
   CHECK(decode_u8(kvs.values[4].value).value() == 0);
 }
 
-TEST_CASE("apply_host_setup: success path reaches the requested state", "[sim][config]") {
+TEST_CASE("apply_host_setup: success path reaches the requested state", "[sim][config]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
 
   HostSetup setup;
@@ -129,9 +138,12 @@ TEST_CASE("apply_host_setup: success path reaches the requested state", "[sim][c
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("apply_host_setup: ip defaults to the session's local address", "[sim][config]") {
+TEST_CASE("apply_host_setup: ip defaults to the session's local address", "[sim][config]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Session s = f.connect();
   const HostSetup setup;  // no ip, no work mode
   REQUIRE(apply_host_setup(s, setup).has_value());
@@ -144,11 +156,15 @@ TEST_CASE("apply_host_setup: ip defaults to the session's local address", "[sim]
   CHECK(f.sim->stop() == 0);
 }
 
-TEST_CASE("apply_host_setup: rejections and invalid arguments", "[sim][config]") {
+TEST_CASE("apply_host_setup: rejections and invalid arguments", "[sim][config]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
 
-  SECTION("LiDAR rejects the data type with error_key") {
+  SECTION("LiDAR rejects the data type with error_key")
+  {
     Session s = f.connect();
     HostSetup setup;
     setup.pcl_data_type = static_cast<DataType>(0);
@@ -159,7 +175,8 @@ TEST_CASE("apply_host_setup: rejections and invalid arguments", "[sim][config]")
     CHECK(r.error().error_key == 0x0000);
     CHECK(r.error().cmd_id == 0x0100);
   }
-  SECTION("work mode that cannot be requested") {
+  SECTION("work mode that cannot be requested")
+  {
     Session s = f.connect();
     HostSetup setup;
     setup.work_tgt_mode = WorkState::kError;
@@ -171,7 +188,8 @@ TEST_CASE("apply_host_setup: rejections and invalid arguments", "[sim][config]")
     CHECK(to_string(r.error()) == "invalid_argument cmd 0x0100 after 0 attempt(s): key 0x001a");
     CHECK(s.stats().requests == before);  // nothing was sent
   }
-  SECTION("0.0.0.0 bind without an explicit ip") {
+  SECTION("0.0.0.0 bind without an explicit ip")
+  {
     Session s = f.connect({0, 0, 0, 0});
     const HostSetup setup;
     const auto before = s.stats().requests;

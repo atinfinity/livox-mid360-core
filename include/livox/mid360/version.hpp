@@ -9,8 +9,9 @@
 #define LIVOX_MID360_CORE_VERSION_STRING "0.1.0"
 // NOLINTEND(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 
-namespace livox::mid360 {
-inline constexpr const char* kVersionString = LIVOX_MID360_CORE_VERSION_STRING;
+namespace livox::mid360
+{
+inline constexpr const char * kVersionString = LIVOX_MID360_CORE_VERSION_STRING;
 /// Protocol document revision this implementation was written against.
-inline constexpr const char* kProtocolDocRevision = "v1.4.12 (2026-09-21)";
+inline constexpr const char * kProtocolDocRevision = "v1.4.12 (2026-09-21)";
 }  // namespace livox::mid360

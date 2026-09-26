@@ -29,7 +29,8 @@
 #include "livox/mid360/session.hpp"
 #include "livox/mid360/transport.hpp"
 
-namespace {
+namespace
+{
 using namespace livox::mid360;
 using namespace std::chrono_literals;
 
@@ -38,19 +39,22 @@ constexpr std::uint8_t kFlagFixup = 1;
 constexpr std::uint8_t kFlagBadPrefix = 2;
 constexpr std::uint8_t kFlagCancel = 4;
 
-struct Harness {
+struct Harness
+{
   UdpSocket peer;
   std::optional<Session> session;
   std::uint32_t next_seq = 1;
   std::uint64_t datagrams_sent = 0;  ///< cumulative, replies may outlive one call
 
-  static Harness& instance() {
+  static Harness & instance()
+  {
     static Harness h = make();
     return h;
   }
 
- private:
-  static Harness make() {
+private:
+  static Harness make()
+  {
     Harness h;
     auto peer = UdpSocket::open(Endpoint::loopback(0));
     fuzz::require(peer.has_value());
@@ -71,21 +75,24 @@ struct Harness {
 };
 
 /// Overwrite seq_num and recompute the header CRC so the frame can match the pending request.
-void fixup(std::vector<std::byte>& frame, std::uint32_t seq) {
+void fixup(std::vector<std::byte> & frame, std::uint32_t seq)
+{
   if (frame.size() < kCommandHeaderSize) return;
   std::memcpy(frame.data() + 4, &seq, sizeof(seq));
   const auto crc = crc::crc16_ccitt_false(std::span<const std::byte>{frame.data(), 18});
   std::memcpy(frame.data() + 18, &crc, sizeof(crc));
 }
 
-bool inside(std::span<const std::byte> view, const std::vector<std::byte>& owner) {
+bool inside(std::span<const std::byte> view, const std::vector<std::byte> & owner)
+{
   if (view.empty()) return true;
-  const auto* b = owner.data();
+  const auto * b = owner.data();
   return view.data() >= b && view.data() + view.size() <= b + owner.size();
 }
 
 /// Drain the requests the session sent to the peer; each must be a well formed request frame.
-std::size_t drain_requests(const UdpSocket& peer, std::uint32_t seq, std::uint16_t cmd_id) {
+std::size_t drain_requests(const UdpSocket & peer, std::uint32_t seq, std::uint16_t cmd_id)
+{
   std::array<std::byte, kMaxDatagramSize> buf{};
   std::size_t n = 0;
   while (true) {
@@ -97,17 +104,18 @@ std::size_t drain_requests(const UdpSocket& peer, std::uint32_t seq, std::uint16
     const auto v = parse_command_frame(d->data);
     fuzz::require(v.has_value());
     fuzz::require(v->header.seq_num == seq && v->header.cmd_id == cmd_id);
-    fuzz::require(v->header.cmd_type == CmdType::kReq &&
-                  v->header.sender_type == SenderType::kHost);
+    fuzz::require(
+      v->header.cmd_type == CmdType::kReq && v->header.sender_type == SenderType::kHost);
     ++n;
   }
 }
 
 template <typename T>
-std::optional<SessionError> check_result(const std::expected<T, SessionError>& r,
-                                         std::uint16_t cmd_id) {
+std::optional<SessionError> check_result(
+  const std::expected<T, SessionError> & r, std::uint16_t cmd_id)
+{
   if (r) return std::nullopt;
-  const auto& e = r.error();
+  const auto & e = r.error();
   fuzz::require(e.cmd_id == cmd_id);
   fuzz::require(e.kind != SessionErrorKind::kTransport);  // never on loopback
   fuzz::require(e.kind != SessionErrorKind::kUnexpectedState);
@@ -115,10 +123,11 @@ std::optional<SessionError> check_result(const std::expected<T, SessionError>& r
 }
 }  // namespace
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t * data, std::size_t size)
+{
   if (size < 3) return 0;
-  auto& h = Harness::instance();
-  Session& s = *h.session;
+  auto & h = Harness::instance();
+  Session & s = *h.session;
 
   const std::uint8_t op = data[0] % 8;
   const std::uint8_t flags = data[1];
@@ -157,7 +166,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   if ((flags & kFlagBadPrefix) != 0) {
     replies.push_back({std::byte{0xAA}, std::byte{0x00}, std::byte{0x18}});  // truncated header
   }
-  const auto* bytes = reinterpret_cast<const std::byte*>(data);
+  const auto * bytes = reinterpret_cast<const std::byte *>(data);
   for (std::size_t i = 0; i < kMaxDatagrams && pos < size; ++i) {
     std::size_t len = static_cast<std::size_t>(data[pos]);
     ++pos;
@@ -170,7 +179,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   if (h.next_seq == 0) h.next_seq = 1;
   const SessionStats before = s.stats();
   const Endpoint to = s.local_endpoint();
-  for (auto& r : replies) {
+  for (auto & r : replies) {
     if (r.empty()) continue;
     if ((flags & kFlagFixup) != 0 && r.size() > 3) fixup(r, seq);
     fuzz::require(h.peer.send_to(r, to).has_value());
@@ -204,8 +213,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
       const auto r = s.configure(kvs, ro);
       err = check_result(r, cmd_id);
       if (r) {
-        fuzz::require(r->ret_code == RetCode::kSuccess ||
-                      r->ret_code == RetCode::kParamRebootEffect);
+        fuzz::require(
+          r->ret_code == RetCode::kSuccess || r->ret_code == RetCode::kParamRebootEffect);
       }
       break;
     }
@@ -215,9 +224,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
       err = check_result(r, cmd_id);
       if (r) {
         fuzz::require(r->ret_code == RetCode::kSuccess);
-        for (const auto& kv : r->values) fuzz::require(inside(kv.value, r->raw));
+        for (const auto & kv : r->values) fuzz::require(inside(kv.value, r->raw));
         const InquireResult moved = std::move(*r);
-        for (const auto& kv : moved.values) fuzz::require(inside(kv.value, moved.raw));
+        for (const auto & kv : moved.values) fuzz::require(inside(kv.value, moved.raw));
       }
       break;
     }
@@ -250,8 +259,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     fuzz::require(after.retries == before.retries + attempts - 1);
     fuzz::require(after.timeouts == before.timeouts + 1 && sent == attempts);
   } else {
-    fuzz::require(!err || err->kind == SessionErrorKind::kBadResponse ||
-                  err->kind == SessionErrorKind::kLidarRejected);
+    fuzz::require(
+      !err || err->kind == SessionErrorKind::kBadResponse ||
+      err->kind == SessionErrorKind::kLidarRejected);
     fuzz::require(sent >= 1 && sent <= attempts && after.timeouts == before.timeouts);
     fuzz::require(after.retries == before.retries + sent - 1);
   }

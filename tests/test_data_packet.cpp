@@ -8,12 +8,13 @@
 
 using namespace livox::mid360;
 
-namespace {
+namespace
+{
 // Builds a data packet the way the LiDAR would.
-std::vector<std::byte> make_packet(DataType type, std::uint16_t dot_num,
-                                   std::span<const std::byte> samples, std::uint64_t ts,
-                                   std::uint16_t time_interval, std::uint16_t udp_cnt = 0,
-                                   TimeType tt = TimeType::kNoSync) {
+std::vector<std::byte> make_packet(
+  DataType type, std::uint16_t dot_num, std::span<const std::byte> samples, std::uint64_t ts,
+  std::uint16_t time_interval, std::uint16_t udp_cnt = 0, TimeType tt = TimeType::kNoSync)
+{
   std::vector<std::byte> p(kDataPacketHeaderSize + samples.size());
   bytes::write_le<std::uint8_t>(p, 0, 0);
   bytes::write_le<std::uint16_t>(p, 1, static_cast<std::uint16_t>(p.size()));
@@ -30,16 +31,18 @@ std::vector<std::byte> make_packet(DataType type, std::uint16_t dot_num,
 }
 }  // namespace
 
-TEST_CASE("sample sizes", "[data]") {
+TEST_CASE("sample sizes", "[data]")
+{
   STATIC_CHECK(sample_size(DataType::kImu) == 24);
   STATIC_CHECK(sample_size(DataType::kCartesian32) == 14);
   STATIC_CHECK(sample_size(DataType::kCartesian16) == 8);
   STATIC_CHECK(sample_size(DataType::kSpherical) == 10);
-  STATIC_CHECK(kDataPacketHeaderSize + std::size_t{96} * 14 ==
-               1380);  // fits in one MTU-sized UDP payload
+  STATIC_CHECK(
+    kDataPacketHeaderSize + std::size_t{96} * 14 == 1380);  // fits in one MTU-sized UDP payload
 }
 
-TEST_CASE("cartesian32 packet parse and decode", "[data]") {
+TEST_CASE("cartesian32 packet parse and decode", "[data]")
+{
   std::vector<std::byte> s(std::size_t{14} * 2);
   bytes::write_le<std::int32_t>(s, 0, -1234);
   bytes::write_le<std::int32_t>(s, 4, 5678);
@@ -74,7 +77,8 @@ TEST_CASE("cartesian32 packet parse and decode", "[data]") {
   CHECK(sample_timestamp_ns(v->header, 1) == 1'100'000);
 }
 
-TEST_CASE("per-point timestamp interpolation for 96 points", "[data]") {
+TEST_CASE("per-point timestamp interpolation for 96 points", "[data]")
+{
   DataPacketHeader h;
   h.dot_num = 96;
   h.timestamp_ns = 10;
@@ -86,7 +90,8 @@ TEST_CASE("per-point timestamp interpolation for 96 points", "[data]") {
   CHECK(sample_timestamp_ns(h, 0) == 10);
 }
 
-TEST_CASE("cartesian16 and spherical decode", "[data]") {
+TEST_CASE("cartesian16 and spherical decode", "[data]")
+{
   std::vector<std::byte> s16(8);
   bytes::write_le<std::int16_t>(s16, 0, -100);
   bytes::write_le<std::int16_t>(s16, 2, 200);
@@ -120,10 +125,13 @@ TEST_CASE("cartesian16 and spherical decode", "[data]") {
   CHECK(q.tag == 2);
 }
 
-TEST_CASE("imu packet decode", "[data]") {
+TEST_CASE("imu packet decode", "[data]")
+{
   std::vector<std::byte> s(24);
   const float vals[6] = {0.1f, -0.2f, 0.3f, 0.0f, 0.0f, 1.0f};
-  for (std::size_t i = 0; i < 6; ++i) bytes::write_le<float>(s, 4 * i, vals[i]);
+  for (std::size_t i = 0; i < 6; ++i) {
+    bytes::write_le<float>(s, 4 * i, vals[i]);
+  }
   const auto pkt = make_packet(DataType::kImu, 1, s, 77, 0);
   auto v = parse_data_packet(pkt);
   REQUIRE(v);
@@ -135,7 +143,8 @@ TEST_CASE("imu packet decode", "[data]") {
   CHECK(decode_all_imu(*v).size() == 1);
 }
 
-TEST_CASE("data packet validation errors", "[data]") {
+TEST_CASE("data packet validation errors", "[data]")
+{
   std::vector<std::byte> s(14);
   auto ok = make_packet(DataType::kCartesian32, 1, s, 5, 5);
   CHECK(parse_data_packet(std::span(ok).first(20)).error() == ParseError::kTooShort);

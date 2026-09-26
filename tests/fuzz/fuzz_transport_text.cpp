@@ -8,9 +8,10 @@
 #include "fuzz_check.hpp"
 #include "livox/mid360/transport.hpp"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t * data, std::size_t size)
+{
   using namespace livox::mid360;
-  const std::string_view text{reinterpret_cast<const char*>(data), size};
+  const std::string_view text{reinterpret_cast<const char *>(data), size};
   if (const auto ep = parse_endpoint(text)) {
     const auto again = parse_endpoint(to_string(*ep));
     fuzz::require(again.has_value() && *again == *ep);

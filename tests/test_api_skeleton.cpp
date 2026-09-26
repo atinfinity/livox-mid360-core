@@ -27,7 +27,8 @@ static_assert(std::is_nothrow_move_constructible_v<Frame>);
 static_assert(!std::is_copy_constructible_v<Device> && !std::is_move_constructible_v<Device>);
 static_assert(!std::is_copy_constructible_v<Context> && !std::is_move_constructible_v<Context>);
 
-TEST_CASE("BoundedQueue drops the oldest on overflow and wakes on close") {
+TEST_CASE("BoundedQueue drops the oldest on overflow and wakes on close")
+{
   BoundedQueue<int> q(2);
   q.push(1);
   q.push(2);
@@ -45,7 +46,8 @@ TEST_CASE("BoundedQueue drops the oldest on overflow and wakes on close") {
   CHECK(q.size() == 0);
 }
 
-TEST_CASE("BoundedQueue moves move-only items") {
+TEST_CASE("BoundedQueue moves move-only items")
+{
   BoundedQueue<Frame> q;
   Frame f;
   f.points.resize(3);

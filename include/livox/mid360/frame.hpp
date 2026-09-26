@@ -16,11 +16,13 @@
 #include "livox/mid360/protocol.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 /// One return, same semantics as livox_ros_driver2's CustomPoint. Spherical packets are
 /// converted to Cartesian before they reach a Frame.
-struct Point {
+struct Point
+{
   float x = 0;  ///< metres, LiDAR frame
   float y = 0;
   float z = 0;
@@ -31,7 +33,8 @@ struct Point {
 };
 
 /// A group of points closed by FramePolicy. Owns its storage; delivered by value.
-struct Frame {
+struct Frame
+{
   std::uint32_t index = 0;         ///< +1 per delivered frame, per Device
   std::uint64_t base_time_ns = 0;  ///< time of the first point (after timestamp policy)
   std::uint64_t end_time_ns = 0;   ///< time of the last point
@@ -45,14 +48,17 @@ struct Frame {
 
 /// One IMU packet (the LiDAR sends one sample per packet at 200 Hz) with its time. Not part
 /// of a Frame. `sample` is the protocol-layer ImuSample (gyro rad/s, acc g).
-struct ImuData {
+struct ImuData
+{
   std::uint64_t time_ns = 0;  ///< after timestamp policy
   ImuSample sample{};
 };
 
 /// How a Device cuts the packet stream into Frames (#6).
-struct FramePolicy {
-  enum class Mode : std::uint8_t {
+struct FramePolicy
+{
+  enum class Mode : std::uint8_t
+  {
     kFrameCounter,  ///< close on a change of header frame_cnt; a jump still closes one frame
     kTimeWindow,    ///< close every `window` of point time (livox_ros_driver2 publish period)
   };
@@ -61,7 +67,8 @@ struct FramePolicy {
 };
 
 /// How point/IMU timestamps are produced from the packet timestamp (#6).
-enum class TimestampPolicy : std::uint8_t {
+enum class TimestampPolicy : std::uint8_t
+{
   kLidar,           ///< packet timestamp as is (use with PTP / GPS synchronisation)
   kHostOffsetOnce,  ///< default: LiDAR time + (host - LiDAR) measured once at the first packet
   kHostReceive,     ///< kernel receive time of the packet
@@ -72,15 +79,19 @@ enum class TimestampPolicy : std::uint8_t {
 /// and counts it in `dropped()`. Not part of Device: connect it yourself, e.g.
 ///   BoundedQueue<Frame> q;  device.on_frame([&](Frame&& f) { q.push(std::move(f)); });
 template <class T>
-class BoundedQueue {
- public:
+class BoundedQueue
+{
+public:
   explicit BoundedQueue(std::size_t capacity = 8) : capacity_(capacity) {}
 
   /// Producer side (receive thread). Never blocks.
-  void push(T&& item) {
+  void push(T && item)
+  {
     {
       std::lock_guard lock(mutex_);
-      if (closed_) return;
+      if (closed_) {
+        return;
+      }
       if (items_.size() >= capacity_) {
         items_.pop_front();
         ++dropped_;
@@ -91,19 +102,22 @@ class BoundedQueue {
   }
 
   /// Consumer side. Empty after `timeout` or once closed and drained.
-  [[nodiscard]] std::optional<T> pop(std::chrono::nanoseconds timeout) {
+  [[nodiscard]] std::optional<T> pop(std::chrono::nanoseconds timeout)
+  {
     std::unique_lock lock(mutex_);
     cv_.wait_for(lock, timeout, [this] { return closed_ || !items_.empty(); });
     return take();
   }
 
-  [[nodiscard]] std::optional<T> try_pop() {
+  [[nodiscard]] std::optional<T> try_pop()
+  {
     std::lock_guard lock(mutex_);
     return take();
   }
 
   /// Wakes every waiting pop(); later pushes are ignored, queued items can still be popped.
-  void close() {
+  void close()
+  {
     {
       std::lock_guard lock(mutex_);
       closed_ = true;
@@ -111,19 +125,24 @@ class BoundedQueue {
     cv_.notify_all();
   }
 
-  [[nodiscard]] std::uint64_t dropped() const {
+  [[nodiscard]] std::uint64_t dropped() const
+  {
     std::lock_guard lock(mutex_);
     return dropped_;
   }
-  [[nodiscard]] std::size_t size() const {
+  [[nodiscard]] std::size_t size() const
+  {
     std::lock_guard lock(mutex_);
     return items_.size();
   }
   [[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
 
- private:
-  std::optional<T> take() {
-    if (items_.empty()) return std::nullopt;
+private:
+  std::optional<T> take()
+  {
+    if (items_.empty()) {
+      return std::nullopt;
+    }
     std::optional<T> out{std::move(items_.front())};
     items_.pop_front();
     return out;

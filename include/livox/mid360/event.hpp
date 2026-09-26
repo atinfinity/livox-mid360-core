@@ -16,10 +16,12 @@
 #include "livox/mid360/session.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 /// Counters of one Device, snapshot via Device::stats(). Monotonic since open().
-struct DeviceStats {
+struct DeviceStats
+{
   std::uint64_t packets = 0;              ///< data packets accepted (point cloud + IMU)
   std::uint64_t points = 0;               ///< samples delivered in Frames
   std::uint64_t frames = 0;               ///< Frames delivered
@@ -39,13 +41,15 @@ struct DeviceStats {
 };
 
 /// Counters of the shared receive side, snapshot via Context::stats().
-struct ContextStats {
+struct ContextStats
+{
   std::uint64_t datagrams = 0;       ///< received on the three sockets
   std::uint64_t unknown_source = 0;  ///< dropped: source IP not registered by any Device
 };
 
 /// Why a Device left the connected state (Event::reason, issue #8).
-enum class DisconnectReason : std::uint8_t {
+enum class DisconnectReason : std::uint8_t
+{
   kNone = 0,
   kPushTimeout,      ///< no 0x0102 push for ReconnectOptions::push_timeout
   kCommandTimeout,   ///< a command timed out while the push was already stale
@@ -54,8 +58,10 @@ enum class DisconnectReason : std::uint8_t {
 };
 
 /// One notification. `kind` selects which fields are meaningful; the rest are default.
-struct Event {
-  enum class Kind : std::uint8_t {
+struct Event
+{
+  enum class Kind : std::uint8_t
+  {
     kStateChanged,  ///< `old_state` -> `new_state` seen in a 0x0102 push
     kHms,           ///< the set of active `hms` codes changed; see `hms_level`
     kDisconnected,  ///< see `reason` (#8); commands fail with kDisconnected until kReconnected
@@ -75,11 +81,13 @@ struct Event {
 
 [[nodiscard]] std::string_view to_string(Event::Kind kind) noexcept;
 [[nodiscard]] std::string_view to_string(DisconnectReason reason) noexcept;
-[[nodiscard]] std::string to_string(const Event& event);
+[[nodiscard]] std::string to_string(const Event & event);
 
 /// Errors of Context / Device. Session-level failures are wrapped, not re-encoded.
-struct DeviceError {
-  enum class Kind : std::uint8_t {
+struct DeviceError
+{
+  enum class Kind : std::uint8_t
+  {
     kSession,            ///< see `session`
     kInvalidArgument,    ///< option rejected before any I/O
     kInvalidState,       ///< e.g. callback set while running, command from a callback
@@ -92,7 +100,7 @@ struct DeviceError {
 };
 
 [[nodiscard]] std::string_view to_string(DeviceError::Kind kind) noexcept;
-[[nodiscard]] std::string to_string(const DeviceError& err);
+[[nodiscard]] std::string to_string(const DeviceError & err);
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END

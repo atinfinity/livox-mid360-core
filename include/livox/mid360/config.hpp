@@ -16,13 +16,15 @@
 #include "livox/mid360/session.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 /// What the LiDAR needs to know about this host. Sent as one 0x0100 request (keys 0x0005,
 /// 0x0006, 0x0007, 0x0000, 0x001C in that order) followed, when `work_tgt_mode` is set, by a
 /// second one with 0x001A. Keys not listed here (0x0004 lidar ipcfg, FOV, attitude, ...) are
 /// left to Session::configure.
-struct HostSetup {
+struct HostSetup
+{
   /// Host address the LiDAR sends to. Empty: the session socket's local address, which must
   /// then not be 0.0.0.0 (bind to a specific interface) → kInvalidArgument otherwise.
   std::optional<Ipv4> ip;
@@ -39,7 +41,8 @@ struct HostSetup {
   std::chrono::milliseconds wait_timeout{10000};
 };
 
-struct HostSetupResult {
+struct HostSetupResult
+{
   /// One of the ACKs returned 0x21: the LiDAR applies the change after a reboot.
   bool reboot_required = false;
   /// Set when `work_tgt_mode` was requested and `wait_timeout` was non-zero.
@@ -49,24 +52,26 @@ struct HostSetupResult {
 /// The 0x0100 payload of the first request, without the session: `values` are views into
 /// `storage`, so the struct must outlive its use. Pure; useful for tests and for callers that
 /// drive Session::configure themselves.
-struct HostSetupKeyValues {
+struct HostSetupKeyValues
+{
   std::vector<std::byte> storage;
   std::vector<KeyValue> values;  ///< views into `storage`
 
   HostSetupKeyValues() = default;
-  HostSetupKeyValues(HostSetupKeyValues&&) noexcept = default;
-  HostSetupKeyValues& operator=(HostSetupKeyValues&&) noexcept = default;
-  HostSetupKeyValues(const HostSetupKeyValues&) = delete;
-  HostSetupKeyValues& operator=(const HostSetupKeyValues&) = delete;
+  HostSetupKeyValues(HostSetupKeyValues &&) noexcept = default;
+  HostSetupKeyValues & operator=(HostSetupKeyValues &&) noexcept = default;
+  HostSetupKeyValues(const HostSetupKeyValues &) = delete;
+  HostSetupKeyValues & operator=(const HostSetupKeyValues &) = delete;
   ~HostSetupKeyValues() = default;
 };
 
-[[nodiscard]] HostSetupKeyValues host_setup_key_values(const HostSetup& setup, const Ipv4& host_ip);
+[[nodiscard]] HostSetupKeyValues host_setup_key_values(
+  const HostSetup & setup, const Ipv4 & host_ip);
 
 /// Apply `setup` through `session`. Errors are the session's: kLidarRejected carries the
 /// `error_key` the LiDAR complained about; kTimeout / kUnexpectedState come from the wait.
 [[nodiscard]] std::expected<HostSetupResult, SessionError> apply_host_setup(
-    Session& session, const HostSetup& setup, std::optional<RequestOptions> opts = std::nullopt);
+  Session & session, const HostSetup & setup, std::optional<RequestOptions> opts = std::nullopt);
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END

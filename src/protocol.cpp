@@ -7,7 +7,8 @@
 #include "livox/mid360/bytes.hpp"
 #include "livox/mid360/crc.hpp"
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 using bytes::read_le;
 using bytes::write_le;
@@ -15,7 +16,8 @@ using bytes::write_le;
 // ---------------------------------------------------------------------------
 // to_string
 // ---------------------------------------------------------------------------
-std::string_view to_string(RetCode c) noexcept {
+std::string_view to_string(RetCode c) noexcept
+{
   switch (c) {
     case RetCode::kSuccess:
       return "SUCCESS";
@@ -49,7 +51,8 @@ std::string_view to_string(RetCode c) noexcept {
   return "UNKNOWN";
 }
 
-std::string_view to_string(WorkState s) noexcept {
+std::string_view to_string(WorkState s) noexcept
+{
   switch (s) {
     case WorkState::kSampling:
       return "SAMPLING";
@@ -69,7 +72,8 @@ std::string_view to_string(WorkState s) noexcept {
   return "UNKNOWN";
 }
 
-std::string_view to_string(DataType t) noexcept {
+std::string_view to_string(DataType t) noexcept
+{
   switch (t) {
     case DataType::kImu:
       return "IMU";
@@ -83,7 +87,8 @@ std::string_view to_string(DataType t) noexcept {
   return "UNKNOWN";
 }
 
-std::string_view to_string(TimeType t) noexcept {
+std::string_view to_string(TimeType t) noexcept
+{
   switch (t) {
     case TimeType::kNoSync:
       return "NO_SYNC";
@@ -95,7 +100,8 @@ std::string_view to_string(TimeType t) noexcept {
   return "UNKNOWN";
 }
 
-std::string_view to_string(ParseError e) noexcept {
+std::string_view to_string(ParseError e) noexcept
+{
   switch (e) {
     case ParseError::kTooShort:
       return "too short";
@@ -121,7 +127,8 @@ std::string_view to_string(ParseError e) noexcept {
   return "unknown";
 }
 
-std::string_view to_string(CmdId id) noexcept {
+std::string_view to_string(CmdId id) noexcept
+{
   switch (id) {
     case CmdId::kDiscovery:
       return "DISCOVERY";
@@ -145,9 +152,14 @@ std::string_view to_string(CmdId id) noexcept {
 // Command frame
 // ---------------------------------------------------------------------------
 std::expected<CommandFrameView, ParseError> parse_command_frame(
-    std::span<const std::byte> frame) noexcept {
-  if (frame.size() < kCommandHeaderSize) return std::unexpected(ParseError::kTooShort);
-  if (read_le<std::uint8_t>(frame, 0) != kCommandSof) return std::unexpected(ParseError::kBadSof);
+  std::span<const std::byte> frame) noexcept
+{
+  if (frame.size() < kCommandHeaderSize) {
+    return std::unexpected(ParseError::kTooShort);
+  }
+  if (read_le<std::uint8_t>(frame, 0) != kCommandSof) {
+    return std::unexpected(ParseError::kBadSof);
+  }
   if (read_le<std::uint8_t>(frame, 1) != kProtocolVersion) {
     return std::unexpected(ParseError::kBadVersion);
   }
@@ -169,15 +181,22 @@ std::expected<CommandFrameView, ParseError> parse_command_frame(
   }
   const auto data = frame.subspan(kCommandHeaderSize, h.length - kCommandHeaderSize);
   const std::uint32_t expected_crc32 = data.empty() ? 0u : crc::crc32(data);
-  if (expected_crc32 != h.crc32) return std::unexpected(ParseError::kBadCrc32);
+  if (expected_crc32 != h.crc32) {
+    return std::unexpected(ParseError::kBadCrc32);
+  }
   return CommandFrameView{h, data};
 }
 
 std::expected<std::size_t, EncodeError> encode_command_frame(
-    std::span<std::byte> out, const CommandFrameSpec& spec) noexcept {
-  if (spec.data.size() > kCommandDataMaxSize) return std::unexpected(EncodeError::kDataTooLarge);
+  std::span<std::byte> out, const CommandFrameSpec & spec) noexcept
+{
+  if (spec.data.size() > kCommandDataMaxSize) {
+    return std::unexpected(EncodeError::kDataTooLarge);
+  }
   const std::size_t total = command_frame_size(spec.data.size());
-  if (out.size() < total) return std::unexpected(EncodeError::kBufferTooSmall);
+  if (out.size() < total) {
+    return std::unexpected(EncodeError::kBufferTooSmall);
+  }
 
   write_le<std::uint8_t>(out, 0, kCommandSof);
   write_le<std::uint8_t>(out, 1, kProtocolVersion);
@@ -198,22 +217,30 @@ std::expected<std::size_t, EncodeError> encode_command_frame(
 }
 
 std::expected<std::vector<std::byte>, EncodeError> build_command_frame(
-    const CommandFrameSpec& spec) {
+  const CommandFrameSpec & spec)
+{
   std::vector<std::byte> buf(command_frame_size(spec.data.size()));
   auto r = encode_command_frame(buf, spec);
-  if (!r) return std::unexpected(r.error());
+  if (!r) {
+    return std::unexpected(r.error());
+  }
   return buf;
 }
 
 // ---------------------------------------------------------------------------
 // Data packet
 // ---------------------------------------------------------------------------
-std::expected<DataPacketView, ParseError> parse_data_packet(std::span<const std::byte> packet,
-                                                            bool verify_crc) noexcept {
-  if (packet.size() < kDataPacketHeaderSize) return std::unexpected(ParseError::kTooShort);
+std::expected<DataPacketView, ParseError> parse_data_packet(
+  std::span<const std::byte> packet, bool verify_crc) noexcept
+{
+  if (packet.size() < kDataPacketHeaderSize) {
+    return std::unexpected(ParseError::kTooShort);
+  }
   DataPacketHeader h;
   h.version = read_le<std::uint8_t>(packet, 0);
-  if (h.version != kProtocolVersion) return std::unexpected(ParseError::kBadVersion);
+  if (h.version != kProtocolVersion) {
+    return std::unexpected(ParseError::kBadVersion);
+  }
   h.length = read_le<std::uint16_t>(packet, 1);
   if (h.length < kDataPacketHeaderSize || h.length > packet.size()) {
     return std::unexpected(ParseError::kLengthMismatch);
@@ -223,7 +250,9 @@ std::expected<DataPacketView, ParseError> parse_data_packet(std::span<const std:
   h.udp_cnt = read_le<std::uint16_t>(packet, 7);
   h.frame_cnt = read_le<std::uint8_t>(packet, 9);
   const auto raw_type = read_le<std::uint8_t>(packet, 10);
-  if (raw_type > 3) return std::unexpected(ParseError::kUnknownDataType);
+  if (raw_type > 3) {
+    return std::unexpected(ParseError::kUnknownDataType);
+  }
   h.data_type = static_cast<DataType>(raw_type);
   h.time_type = static_cast<TimeType>(read_le<std::uint8_t>(packet, 11));
   std::memcpy(h.reserved.data(), packet.data() + 12, 12);
@@ -237,65 +266,87 @@ std::expected<DataPacketView, ParseError> parse_data_packet(std::span<const std:
   if (verify_crc) {
     // CRC covers timestamp (8 bytes at offset 28) followed by data: contiguous on the wire.
     const auto covered = packet.subspan(28, 8 + data.size());
-    if (crc::crc32(covered) != h.crc32) return std::unexpected(ParseError::kBadCrc32);
+    if (crc::crc32(covered) != h.crc32) {
+      return std::unexpected(ParseError::kBadCrc32);
+    }
   }
   return DataPacketView{h, data};
 }
 
-CartesianPoint32 decode_cartesian32(const DataPacketView& p, std::size_t i) noexcept {
+CartesianPoint32 decode_cartesian32(const DataPacketView & p, std::size_t i) noexcept
+{
   const std::size_t o = i * 14;
-  return {read_le<std::int32_t>(p.data, o), read_le<std::int32_t>(p.data, o + 4),
-          read_le<std::int32_t>(p.data, o + 8), read_le<std::uint8_t>(p.data, o + 12),
-          read_le<std::uint8_t>(p.data, o + 13)};
+  return {
+    read_le<std::int32_t>(p.data, o), read_le<std::int32_t>(p.data, o + 4),
+    read_le<std::int32_t>(p.data, o + 8), read_le<std::uint8_t>(p.data, o + 12),
+    read_le<std::uint8_t>(p.data, o + 13)};
 }
 
-CartesianPoint16 decode_cartesian16(const DataPacketView& p, std::size_t i) noexcept {
+CartesianPoint16 decode_cartesian16(const DataPacketView & p, std::size_t i) noexcept
+{
   const std::size_t o = i * 8;
-  return {read_le<std::int16_t>(p.data, o), read_le<std::int16_t>(p.data, o + 2),
-          read_le<std::int16_t>(p.data, o + 4), read_le<std::uint8_t>(p.data, o + 6),
-          read_le<std::uint8_t>(p.data, o + 7)};
+  return {
+    read_le<std::int16_t>(p.data, o), read_le<std::int16_t>(p.data, o + 2),
+    read_le<std::int16_t>(p.data, o + 4), read_le<std::uint8_t>(p.data, o + 6),
+    read_le<std::uint8_t>(p.data, o + 7)};
 }
 
-SphericalPoint decode_spherical(const DataPacketView& p, std::size_t i) noexcept {
+SphericalPoint decode_spherical(const DataPacketView & p, std::size_t i) noexcept
+{
   const std::size_t o = i * 10;
-  return {read_le<std::uint32_t>(p.data, o), read_le<std::uint16_t>(p.data, o + 4),
-          read_le<std::uint16_t>(p.data, o + 6), read_le<std::uint8_t>(p.data, o + 8),
-          read_le<std::uint8_t>(p.data, o + 9)};
+  return {
+    read_le<std::uint32_t>(p.data, o), read_le<std::uint16_t>(p.data, o + 4),
+    read_le<std::uint16_t>(p.data, o + 6), read_le<std::uint8_t>(p.data, o + 8),
+    read_le<std::uint8_t>(p.data, o + 9)};
 }
 
-ImuSample decode_imu(const DataPacketView& p, std::size_t i) noexcept {
+ImuSample decode_imu(const DataPacketView & p, std::size_t i) noexcept
+{
   const std::size_t o = i * 24;
   return {read_le<float>(p.data, o),      read_le<float>(p.data, o + 4),
           read_le<float>(p.data, o + 8),  read_le<float>(p.data, o + 12),
           read_le<float>(p.data, o + 16), read_le<float>(p.data, o + 20)};
 }
 
-namespace {
+namespace
+{
 template <typename T, typename F>
-std::vector<T> decode_all(const DataPacketView& p, DataType expect, const F& f) {
+std::vector<T> decode_all(const DataPacketView & p, DataType expect, const F & f)
+{
   std::vector<T> out;
-  if (p.header.data_type != expect) return out;
+  if (p.header.data_type != expect) {
+    return out;
+  }
   out.reserve(p.header.dot_num);
-  for (std::size_t i = 0; i < p.header.dot_num; ++i) out.push_back(f(p, i));
+  for (std::size_t i = 0; i < p.header.dot_num; ++i) {
+    out.push_back(f(p, i));
+  }
   return out;
 }
 }  // namespace
 
-std::vector<CartesianPoint32> decode_all_cartesian32(const DataPacketView& p) {
+std::vector<CartesianPoint32> decode_all_cartesian32(const DataPacketView & p)
+{
   return decode_all<CartesianPoint32>(p, DataType::kCartesian32, decode_cartesian32);
 }
-std::vector<CartesianPoint16> decode_all_cartesian16(const DataPacketView& p) {
+std::vector<CartesianPoint16> decode_all_cartesian16(const DataPacketView & p)
+{
   return decode_all<CartesianPoint16>(p, DataType::kCartesian16, decode_cartesian16);
 }
-std::vector<SphericalPoint> decode_all_spherical(const DataPacketView& p) {
+std::vector<SphericalPoint> decode_all_spherical(const DataPacketView & p)
+{
   return decode_all<SphericalPoint>(p, DataType::kSpherical, decode_spherical);
 }
-std::vector<ImuSample> decode_all_imu(const DataPacketView& p) {
+std::vector<ImuSample> decode_all_imu(const DataPacketView & p)
+{
   return decode_all<ImuSample>(p, DataType::kImu, decode_imu);
 }
 
-std::uint64_t sample_timestamp_ns(const DataPacketHeader& h, std::size_t i) noexcept {
-  if (h.dot_num <= 1 || i == 0) return h.timestamp_ns;
+std::uint64_t sample_timestamp_ns(const DataPacketHeader & h, std::size_t i) noexcept
+{
+  if (h.dot_num <= 1 || i == 0) {
+    return h.timestamp_ns;
+  }
   const std::uint64_t span_ns = static_cast<std::uint64_t>(h.time_interval) * 100u;
   return h.timestamp_ns + span_ns * i / (static_cast<std::uint64_t>(h.dot_num) - 1u);
 }
@@ -304,25 +355,33 @@ std::uint64_t sample_timestamp_ns(const DataPacketHeader& h, std::size_t i) noex
 // Key-value lists
 // ---------------------------------------------------------------------------
 std::expected<std::vector<KeyValue>, ParseError> parse_key_value_list(
-    std::span<const std::byte> in, std::size_t key_num) noexcept {
+  std::span<const std::byte> in, std::size_t key_num) noexcept
+{
   std::vector<KeyValue> out;
   out.reserve(key_num);
   std::size_t off = 0;
   for (std::size_t n = 0; n < key_num; ++n) {
-    if (in.size() - off < 4) return std::unexpected(ParseError::kTruncated);
+    if (in.size() - off < 4) {
+      return std::unexpected(ParseError::kTruncated);
+    }
     const auto key = read_le<std::uint16_t>(in, off);
     const auto len = read_le<std::uint16_t>(in, off + 2);
     off += 4;
-    if (in.size() - off < len) return std::unexpected(ParseError::kTruncated);
+    if (in.size() - off < len) {
+      return std::unexpected(ParseError::kTruncated);
+    }
     out.push_back({key, in.subspan(off, len)});
     off += len;
   }
-  if (off != in.size()) return std::unexpected(ParseError::kKeyNumMismatch);
+  if (off != in.size()) {
+    return std::unexpected(ParseError::kKeyNumMismatch);
+  }
   return out;
 }
 
-void append_key_value_list(std::vector<std::byte>& out, std::span<const KeyValue> kvs) {
-  for (const auto& kv : kvs) {
+void append_key_value_list(std::vector<std::byte> & out, std::span<const KeyValue> kvs)
+{
+  for (const auto & kv : kvs) {
     const std::size_t o = out.size();
     out.resize(o + 4 + kv.value.size());
     write_le<std::uint16_t>(out, o, kv.key);
@@ -331,7 +390,8 @@ void append_key_value_list(std::vector<std::byte>& out, std::span<const KeyValue
   }
 }
 
-std::vector<std::byte> encode_param_config_request(std::span<const KeyValue> kvs) {
+std::vector<std::byte> encode_param_config_request(std::span<const KeyValue> kvs)
+{
   std::vector<std::byte> out(4);
   write_le<std::uint16_t>(out, 0, static_cast<std::uint16_t>(kvs.size()));
   write_le<std::uint16_t>(out, 2, 0);
@@ -339,39 +399,46 @@ std::vector<std::byte> encode_param_config_request(std::span<const KeyValue> kvs
   return out;
 }
 
-std::vector<std::byte> encode_param_inquire_request(std::span<const std::uint16_t> keys) {
+std::vector<std::byte> encode_param_inquire_request(std::span<const std::uint16_t> keys)
+{
   std::vector<std::byte> out(4 + 2 * keys.size());
   write_le<std::uint16_t>(out, 0, static_cast<std::uint16_t>(keys.size()));
   write_le<std::uint16_t>(out, 2, 0);
-  for (std::size_t i = 0; i < keys.size(); ++i) write_le<std::uint16_t>(out, 4 + 2 * i, keys[i]);
+  for (std::size_t i = 0; i < keys.size(); ++i) {
+    write_le<std::uint16_t>(out, 4 + 2 * i, keys[i]);
+  }
   return out;
 }
 
-std::vector<std::byte> encode_reboot_request(std::uint16_t timeout_ms) {
+std::vector<std::byte> encode_reboot_request(std::uint16_t timeout_ms)
+{
   std::vector<std::byte> out(2);
   write_le<std::uint16_t>(out, 0, timeout_ms);
   return out;
 }
 
-std::vector<std::byte> encode_factory_reset_request() {
-  return std::vector<std::byte>(16);
-}
+std::vector<std::byte> encode_factory_reset_request() { return std::vector<std::byte>(16); }
 
-std::vector<std::byte> encode_set_gps_timestamp_request(std::uint64_t pps_time_ns) {
+std::vector<std::byte> encode_set_gps_timestamp_request(std::uint64_t pps_time_ns)
+{
   std::vector<std::byte> out(9);
   write_le<std::uint8_t>(out, 0, 2);
   write_le<std::uint64_t>(out, 1, pps_time_ns);
   return out;
 }
 
-std::string_view DiscoveryAck::serial_number_view() const noexcept {
-  const auto* const end = std::find(serial_number.begin(), serial_number.end(), '\0');
+std::string_view DiscoveryAck::serial_number_view() const noexcept
+{
+  const auto * const end = std::find(serial_number.begin(), serial_number.end(), '\0');
   return {serial_number.data(), static_cast<std::size_t>(end - serial_number.begin())};
 }
 
 std::expected<DiscoveryAck, ParseError> parse_discovery_ack(
-    std::span<const std::byte> data) noexcept {
-  if (data.size() < 24) return std::unexpected(ParseError::kTruncated);
+  std::span<const std::byte> data) noexcept
+{
+  if (data.size() < 24) {
+    return std::unexpected(ParseError::kTruncated);
+  }
   DiscoveryAck a{};
   a.ret_code = static_cast<RetCode>(read_le<std::uint8_t>(data, 0));
   a.dev_type = read_le<std::uint8_t>(data, 1);
@@ -382,34 +449,50 @@ std::expected<DiscoveryAck, ParseError> parse_discovery_ack(
 }
 
 std::expected<ParamConfigAck, ParseError> parse_param_config_ack(
-    std::span<const std::byte> data) noexcept {
-  if (data.size() < 3) return std::unexpected(ParseError::kTruncated);
-  return ParamConfigAck{static_cast<RetCode>(read_le<std::uint8_t>(data, 0)),
-                        read_le<std::uint16_t>(data, 1)};
+  std::span<const std::byte> data) noexcept
+{
+  if (data.size() < 3) {
+    return std::unexpected(ParseError::kTruncated);
+  }
+  return ParamConfigAck{
+    static_cast<RetCode>(read_le<std::uint8_t>(data, 0)), read_le<std::uint16_t>(data, 1)};
 }
 
 std::expected<ParamInquireAck, ParseError> parse_param_inquire_ack(
-    std::span<const std::byte> data) noexcept {
-  if (data.size() < 3) return std::unexpected(ParseError::kTruncated);
+  std::span<const std::byte> data) noexcept
+{
+  if (data.size() < 3) {
+    return std::unexpected(ParseError::kTruncated);
+  }
   ParamInquireAck a;
   a.ret_code = static_cast<RetCode>(read_le<std::uint8_t>(data, 0));
   const auto key_num = read_le<std::uint16_t>(data, 1);
   auto kvs = parse_key_value_list(data.subspan(3), key_num);
-  if (!kvs) return std::unexpected(kvs.error());
+  if (!kvs) {
+    return std::unexpected(kvs.error());
+  }
   a.values = std::move(*kvs);
   return a;
 }
 
-std::expected<InfoPush, ParseError> parse_info_push(std::span<const std::byte> data) noexcept {
-  if (data.size() < 4) return std::unexpected(ParseError::kTruncated);
+std::expected<InfoPush, ParseError> parse_info_push(std::span<const std::byte> data) noexcept
+{
+  if (data.size() < 4) {
+    return std::unexpected(ParseError::kTruncated);
+  }
   const auto key_num = read_le<std::uint16_t>(data, 0);
   auto kvs = parse_key_value_list(data.subspan(4), key_num);
-  if (!kvs) return std::unexpected(kvs.error());
+  if (!kvs) {
+    return std::unexpected(kvs.error());
+  }
   return InfoPush{std::move(*kvs)};
 }
 
-std::expected<SimpleAck, ParseError> parse_simple_ack(std::span<const std::byte> data) noexcept {
-  if (data.empty()) return std::unexpected(ParseError::kTruncated);
+std::expected<SimpleAck, ParseError> parse_simple_ack(std::span<const std::byte> data) noexcept
+{
+  if (data.empty()) {
+    return std::unexpected(ParseError::kTruncated);
+  }
   return SimpleAck{static_cast<RetCode>(read_le<std::uint8_t>(data, 0))};
 }
 

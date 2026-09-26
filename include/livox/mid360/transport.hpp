@@ -24,38 +24,42 @@
 #include "livox/mid360/export.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 // ---------------------------------------------------------------------------
 // Endpoint
 // ---------------------------------------------------------------------------
 
 /// IPv4 address + UDP port. Mid-360 is IPv4 only.
-struct Endpoint {
+struct Endpoint
+{
   std::array<std::uint8_t, 4> ip{};
   std::uint16_t port = 0;
 
   [[nodiscard]] static constexpr Endpoint any(std::uint16_t p) { return {{0, 0, 0, 0}, p}; }
   [[nodiscard]] static constexpr Endpoint loopback(std::uint16_t p) { return {{127, 0, 0, 1}, p}; }
-  [[nodiscard]] static constexpr Endpoint broadcast(std::uint16_t p) {
+  [[nodiscard]] static constexpr Endpoint broadcast(std::uint16_t p)
+  {
     return {{255, 255, 255, 255}, p};
   }
 
-  friend constexpr bool operator==(const Endpoint&, const Endpoint&) = default;
+  friend constexpr bool operator==(const Endpoint &, const Endpoint &) = default;
 };
 
 /// Parse "a.b.c.d" (port = 0) or "a.b.c.d:port". Returns nullopt on malformed input.
 [[nodiscard]] std::optional<Endpoint> parse_endpoint(std::string_view text);
 /// Format as "a.b.c.d:port".
-[[nodiscard]] std::string to_string(const Endpoint& ep);
+[[nodiscard]] std::string to_string(const Endpoint & ep);
 /// Format only the address part, "a.b.c.d".
-[[nodiscard]] std::string ip_to_string(const std::array<std::uint8_t, 4>& ip);
+[[nodiscard]] std::string ip_to_string(const std::array<std::uint8_t, 4> & ip);
 
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
-enum class TransportErrorCode : std::uint8_t {
+enum class TransportErrorCode : std::uint8_t
+{
   kSocketCreate,
   kBind,
   kSetOption,
@@ -73,15 +77,16 @@ enum class TransportErrorCode : std::uint8_t {
 
 [[nodiscard]] std::string_view to_string(TransportErrorCode code);
 
-struct TransportError {
+struct TransportError
+{
   TransportErrorCode code = TransportErrorCode::kOther;
   int errno_value = 0;  ///< Original errno, 0 if not applicable.
 
-  friend constexpr bool operator==(const TransportError&, const TransportError&) = default;
+  friend constexpr bool operator==(const TransportError &, const TransportError &) = default;
 };
 
 /// Human readable "code (strerror)" text.
-[[nodiscard]] std::string to_string(const TransportError& err);
+[[nodiscard]] std::string to_string(const TransportError & err);
 
 // ---------------------------------------------------------------------------
 // Datagram
@@ -89,7 +94,8 @@ struct TransportError {
 
 /// One received UDP datagram. `data` points into the caller-provided buffer and is
 /// trimmed to the received length.
-struct Datagram {
+struct Datagram
+{
   std::span<std::byte> data;
   Endpoint from;
   /// Host receive time in nanoseconds since the Unix epoch (CLOCK_REALTIME). On Linux
@@ -106,7 +112,8 @@ inline constexpr std::size_t kMaxDatagramSize = 1500;
 // UdpSocket
 // ---------------------------------------------------------------------------
 
-struct SocketOptions {
+struct SocketOptions
+{
   bool reuse_address = true;
   bool broadcast = false;
   /// Requested SO_RCVBUF in bytes; 0 leaves the OS default untouched. The kernel may
@@ -118,16 +125,17 @@ struct SocketOptions {
 };
 
 /// Non-blocking IPv4 UDP socket. Move-only; closes the descriptor on destruction.
-class UdpSocket {
- public:
+class UdpSocket
+{
+public:
   [[nodiscard]] static std::expected<UdpSocket, TransportError> open(
-      Endpoint bind_to, const SocketOptions& options = {});
+    Endpoint bind_to, const SocketOptions & options = {});
 
   UdpSocket() = default;
-  UdpSocket(UdpSocket&& other) noexcept;
-  UdpSocket& operator=(UdpSocket&& other) noexcept;
-  UdpSocket(const UdpSocket&) = delete;
-  UdpSocket& operator=(const UdpSocket&) = delete;
+  UdpSocket(UdpSocket && other) noexcept;
+  UdpSocket & operator=(UdpSocket && other) noexcept;
+  UdpSocket(const UdpSocket &) = delete;
+  UdpSocket & operator=(const UdpSocket &) = delete;
   ~UdpSocket();
 
   [[nodiscard]] bool is_open() const noexcept { return fd_ >= 0; }
@@ -139,22 +147,22 @@ class UdpSocket {
   [[nodiscard]] std::expected<std::size_t, TransportError> recv_buffer_bytes() const;
 
   /// Send one datagram. Returns bytes sent (always data.size() for UDP on success).
-  [[nodiscard]] std::expected<std::size_t, TransportError> send_to(std::span<const std::byte> data,
-                                                                   const Endpoint& to) const;
+  [[nodiscard]] std::expected<std::size_t, TransportError> send_to(
+    std::span<const std::byte> data, const Endpoint & to) const;
 
   /// Receive up to `out.size()` datagrams without blocking. Each out[i].data must point
   /// to a caller-owned buffer on entry; on return it is trimmed to the received size and
   /// `from` / `recv_time_ns` are filled. Returns the number of datagrams received, or
   /// kWouldBlock when nothing is pending.
   [[nodiscard]] std::expected<std::size_t, TransportError> recv_batch(
-      std::span<Datagram> out) const;
+    std::span<Datagram> out) const;
 
   /// Convenience: receive a single datagram into `buffer`.
   [[nodiscard]] std::expected<Datagram, TransportError> recv_one(std::span<std::byte> buffer) const;
 
   void close() noexcept;
 
- private:
+private:
   int fd_ = -1;
   Endpoint local_{};
 };
@@ -163,7 +171,8 @@ class UdpSocket {
 // Poller
 // ---------------------------------------------------------------------------
 
-struct ReadyEvent {
+struct ReadyEvent
+{
   std::uint64_t tag = 0;
   bool readable = false;
   bool error = false;
@@ -171,19 +180,21 @@ struct ReadyEvent {
 
 /// Waits for readability on a set of sockets. One Poller per receive thread. wake()
 /// may be called from any thread to interrupt wait().
-class Poller {
- public:
+class Poller
+{
+public:
   [[nodiscard]] static std::expected<Poller, TransportError> create();
 
   Poller() = default;
-  Poller(Poller&& other) noexcept;
-  Poller& operator=(Poller&& other) noexcept;
-  Poller(const Poller&) = delete;
-  Poller& operator=(const Poller&) = delete;
+  Poller(Poller && other) noexcept;
+  Poller & operator=(Poller && other) noexcept;
+  Poller(const Poller &) = delete;
+  Poller & operator=(const Poller &) = delete;
   ~Poller();
 
   /// Register a socket. `tag` is returned in ReadyEvent; tags must be unique.
-  [[nodiscard]] std::expected<void, TransportError> add(const UdpSocket& socket, std::uint64_t tag);
+  [[nodiscard]] std::expected<void, TransportError> add(
+    const UdpSocket & socket, std::uint64_t tag);
   /// Unregister by tag. Unknown tags are ignored.
   void remove(std::uint64_t tag);
   [[nodiscard]] std::size_t size() const noexcept { return entries_.size(); }
@@ -192,15 +203,16 @@ class Poller {
   /// elapses. Returns the ready events (empty on timeout or wake). A negative timeout
   /// blocks indefinitely.
   [[nodiscard]] std::expected<std::span<const ReadyEvent>, TransportError> wait(
-      std::chrono::milliseconds timeout);
+    std::chrono::milliseconds timeout);
 
   /// Interrupt a pending or future wait(). Thread-safe.
   void wake() const noexcept;
   /// True if the last wait() returned because of wake().
   [[nodiscard]] bool woken() const noexcept { return woken_; }
 
- private:
-  struct Entry {
+private:
+  struct Entry
+  {
     int fd;
     std::uint64_t tag;
   };

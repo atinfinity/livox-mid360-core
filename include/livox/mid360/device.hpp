@@ -39,10 +39,12 @@
 #include "livox/mid360/transport.hpp"
 
 LIVOX_MID360_API_BEGIN
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 /// Disconnect detection and automatic recovery (issue #8).
-struct ReconnectOptions {
+struct ReconnectOptions
+{
   bool enabled = true;  ///< false: only detect; recover with Device::reconnect()
   /// No accepted 0x0102 push for this long → kDisconnected. The LiDAR pushes about once per
   /// second. A command timeout counts as a disconnect only when the last push is older than
@@ -56,7 +58,8 @@ struct ReconnectOptions {
   std::vector<Endpoint> discovery_targets;
 };
 
-struct DeviceOptions {
+struct DeviceOptions
+{
   /// Ports, data type and IMU enable. `ip` and the ports are taken from the Context;
   /// `work_tgt_mode` is ignored (use start_sampling()).
   HostSetup host_setup;
@@ -71,31 +74,33 @@ struct DeviceOptions {
 };
 
 /// Per-packet metadata handed to on_packet together with the non-owning DataPacketView.
-struct ReceiveInfo {
+struct ReceiveInfo
+{
   std::uint64_t host_time_ns = 0;  ///< kernel receive timestamp
   Endpoint source;
 };
 
-using PacketCallback = std::function<void(const DataPacketView&, const ReceiveInfo&)>;
-using FrameCallback = std::function<void(Frame&&)>;
-using ImuCallback = std::function<void(const ImuData&)>;
-using EventCallback = std::function<void(const Event&)>;
+using PacketCallback = std::function<void(const DataPacketView &, const ReceiveInfo &)>;
+using FrameCallback = std::function<void(Frame &&)>;
+using ImuCallback = std::function<void(const ImuData &)>;
+using EventCallback = std::function<void(const Event &)>;
 
-class Device {
- public:
+class Device
+{
+public:
   /// Registers with the Context (kAlreadyRegistered when another Device has the same IP),
   /// connects the Session and applies `opts.host_setup` pointed at the command socket's
   /// local address (or `host_setup.ip`) and the Context's ports. Does not change the work mode.
   [[nodiscard]] static std::expected<std::unique_ptr<Device>, DeviceError> open(
-      Context& context, const DiscoveredDevice& device, const DeviceOptions& opts = {});
+    Context & context, const DiscoveredDevice & device, const DeviceOptions & opts = {});
 
   /// Unregisters from the Context (waits for an in-flight callback to return) and drops the
   /// Session. The LiDAR keeps streaming; call stop_sampling() first if that matters.
   ~Device();
-  Device(const Device&) = delete;
-  Device& operator=(const Device&) = delete;
-  Device(Device&&) = delete;
-  Device& operator=(Device&&) = delete;
+  Device(const Device &) = delete;
+  Device & operator=(const Device &) = delete;
+  Device(Device &&) = delete;
+  Device & operator=(Device &&) = delete;
 
   // --- callbacks: one per kind, settable while sampling has not been requested (before
   // start_sampling() or after stop_sampling()); otherwise kInvalidState. Pass an empty
@@ -109,13 +114,13 @@ class Device {
   /// work_tgt_mode = SAMPLING, then wait for cur_work_state (host_setup.wait_timeout).
   /// Idempotent. Callbacks are frozen from the first successful call on.
   std::expected<void, DeviceError> start_sampling(
-      std::optional<RequestOptions> opts = std::nullopt);
+    std::optional<RequestOptions> opts = std::nullopt);
   /// work_tgt_mode = IDLE, then wait. A partial frame is discarded, not delivered.
   std::expected<void, DeviceError> stop_sampling(std::optional<RequestOptions> opts = std::nullopt);
   std::expected<ParamConfigAck, DeviceError> configure(
-      std::span<const KeyValue> values, std::optional<RequestOptions> opts = std::nullopt);
+    std::span<const KeyValue> values, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<InquireResult, DeviceError> inquire(
-      std::span<const std::uint16_t> keys, std::optional<RequestOptions> opts = std::nullopt);
+    std::span<const std::uint16_t> keys, std::optional<RequestOptions> opts = std::nullopt);
   std::expected<void, DeviceError> reboot(std::optional<RequestOptions> opts = std::nullopt);
   /// Interrupts a blocking command from another thread (not serialised).
   void cancel() noexcept;
@@ -142,7 +147,7 @@ class Device {
   [[nodiscard]] DeviceStats stats() const;
   [[nodiscard]] SessionStats session_stats() const;
 
- private:
+private:
   struct Impl;
   explicit Device(std::unique_ptr<Impl> impl);
   std::unique_ptr<Impl> impl_;

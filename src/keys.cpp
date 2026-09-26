@@ -6,12 +6,14 @@
 
 #include "livox/mid360/bytes.hpp"
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
 using bytes::read_le;
 using bytes::write_le;
 
-std::string_view to_string(Key k) noexcept {
+std::string_view to_string(Key k) noexcept
+{
   switch (k) {
     case Key::kPclDataType:
       return "pcl_data_type";
@@ -85,7 +87,8 @@ std::string_view to_string(Key k) noexcept {
   return "unknown";
 }
 
-std::optional<std::size_t> key_value_length(Key k) noexcept {
+std::optional<std::size_t> key_value_length(Key k) noexcept
+{
   switch (k) {
     case Key::kPclDataType:
     case Key::kPatternMode:
@@ -138,11 +141,10 @@ std::optional<std::size_t> key_value_length(Key k) noexcept {
 }
 
 // ---- encoders --------------------------------------------------------------
-std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept {
-  return {std::byte{v}};
-}
+std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept { return {std::byte{v}}; }
 
-std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig& c) noexcept {
+std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig & c) noexcept
+{
   std::array<std::byte, 8> o{};
   std::memcpy(o.data(), c.ip.data(), 4);
   write_le<std::uint16_t>(o, 4, c.dst_port);
@@ -150,7 +152,8 @@ std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig& c) noexcept {
   return o;
 }
 
-std::array<std::byte, 12> encode_lidar_ip_config(const LidarIpConfig& c) noexcept {
+std::array<std::byte, 12> encode_lidar_ip_config(const LidarIpConfig & c) noexcept
+{
   std::array<std::byte, 12> o{};
   std::memcpy(o.data(), c.ip.data(), 4);
   std::memcpy(o.data() + 4, c.netmask.data(), 4);
@@ -158,7 +161,8 @@ std::array<std::byte, 12> encode_lidar_ip_config(const LidarIpConfig& c) noexcep
   return o;
 }
 
-std::array<std::byte, 24> encode_install_attitude(const InstallAttitude& a) noexcept {
+std::array<std::byte, 24> encode_install_attitude(const InstallAttitude & a) noexcept
+{
   std::array<std::byte, 24> o{};
   write_le<float>(o, 0, a.roll_deg);
   write_le<float>(o, 4, a.pitch_deg);
@@ -169,7 +173,8 @@ std::array<std::byte, 24> encode_install_attitude(const InstallAttitude& a) noex
   return o;
 }
 
-std::array<std::byte, 20> encode_fov_config(const FovConfig& f) noexcept {
+std::array<std::byte, 20> encode_fov_config(const FovConfig & f) noexcept
+{
   std::array<std::byte, 20> o{};
   write_le<std::int32_t>(o, 0, f.yaw_start_deg);
   write_le<std::int32_t>(o, 4, f.yaw_stop_deg);
@@ -179,46 +184,62 @@ std::array<std::byte, 20> encode_fov_config(const FovConfig& f) noexcept {
   return o;
 }
 
-std::array<std::byte, 4> encode_func_io_config(const FuncIoConfig& c) noexcept {
+std::array<std::byte, 4> encode_func_io_config(const FuncIoConfig & c) noexcept
+{
   return {std::byte{c.in0}, std::byte{c.in1}, std::byte{c.out0}, std::byte{c.out1}};
 }
 
-std::array<std::byte, 3> encode_imu_sensor_config(const ImuSensorConfig& c) noexcept {
-  return {std::byte{static_cast<std::uint8_t>(c.output_rate)},
-          std::byte{static_cast<std::uint8_t>(c.accel_range)},
-          std::byte{static_cast<std::uint8_t>(c.gyro_range)}};
+std::array<std::byte, 3> encode_imu_sensor_config(const ImuSensorConfig & c) noexcept
+{
+  return {
+    std::byte{static_cast<std::uint8_t>(c.output_rate)},
+    std::byte{static_cast<std::uint8_t>(c.accel_range)},
+    std::byte{static_cast<std::uint8_t>(c.gyro_range)}};
 }
 
 // ---- decoders --------------------------------------------------------------
-namespace {
+namespace
+{
 template <typename T>
-std::expected<T, KeyError> decode_scalar(std::span<const std::byte> v) noexcept {
-  if (v.size() != sizeof(T)) return std::unexpected(KeyError::kWrongLength);
+std::expected<T, KeyError> decode_scalar(std::span<const std::byte> v) noexcept
+{
+  if (v.size() != sizeof(T)) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   return read_le<T>(v, 0);
 }
 }  // namespace
 
-std::expected<std::uint8_t, KeyError> decode_u8(std::span<const std::byte> v) noexcept {
+std::expected<std::uint8_t, KeyError> decode_u8(std::span<const std::byte> v) noexcept
+{
   return decode_scalar<std::uint8_t>(v);
 }
-std::expected<std::uint16_t, KeyError> decode_u16(std::span<const std::byte> v) noexcept {
+std::expected<std::uint16_t, KeyError> decode_u16(std::span<const std::byte> v) noexcept
+{
   return decode_scalar<std::uint16_t>(v);
 }
-std::expected<std::uint32_t, KeyError> decode_u32(std::span<const std::byte> v) noexcept {
+std::expected<std::uint32_t, KeyError> decode_u32(std::span<const std::byte> v) noexcept
+{
   return decode_scalar<std::uint32_t>(v);
 }
-std::expected<std::int32_t, KeyError> decode_i32(std::span<const std::byte> v) noexcept {
+std::expected<std::int32_t, KeyError> decode_i32(std::span<const std::byte> v) noexcept
+{
   return decode_scalar<std::int32_t>(v);
 }
-std::expected<std::uint64_t, KeyError> decode_u64(std::span<const std::byte> v) noexcept {
+std::expected<std::uint64_t, KeyError> decode_u64(std::span<const std::byte> v) noexcept
+{
   return decode_scalar<std::uint64_t>(v);
 }
-std::expected<std::int64_t, KeyError> decode_i64(std::span<const std::byte> v) noexcept {
+std::expected<std::int64_t, KeyError> decode_i64(std::span<const std::byte> v) noexcept
+{
   return decode_scalar<std::int64_t>(v);
 }
 
-std::expected<HostIpConfig, KeyError> decode_host_ip_config(std::span<const std::byte> v) noexcept {
-  if (v.size() != 8) return std::unexpected(KeyError::kWrongLength);
+std::expected<HostIpConfig, KeyError> decode_host_ip_config(std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 8) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   HostIpConfig c;
   std::memcpy(c.ip.data(), v.data(), 4);
   c.dst_port = read_le<std::uint16_t>(v, 4);
@@ -226,9 +247,11 @@ std::expected<HostIpConfig, KeyError> decode_host_ip_config(std::span<const std:
   return c;
 }
 
-std::expected<LidarIpConfig, KeyError> decode_lidar_ip_config(
-    std::span<const std::byte> v) noexcept {
-  if (v.size() != 12) return std::unexpected(KeyError::kWrongLength);
+std::expected<LidarIpConfig, KeyError> decode_lidar_ip_config(std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 12) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   LidarIpConfig c;
   std::memcpy(c.ip.data(), v.data(), 4);
   std::memcpy(c.netmask.data(), v.data() + 4, 4);
@@ -237,55 +260,79 @@ std::expected<LidarIpConfig, KeyError> decode_lidar_ip_config(
 }
 
 std::expected<InstallAttitude, KeyError> decode_install_attitude(
-    std::span<const std::byte> v) noexcept {
-  if (v.size() != 24) return std::unexpected(KeyError::kWrongLength);
+  std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 24) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   return InstallAttitude{read_le<float>(v, 0),         read_le<float>(v, 4),
                          read_le<float>(v, 8),         read_le<std::int32_t>(v, 12),
                          read_le<std::int32_t>(v, 16), read_le<std::int32_t>(v, 20)};
 }
 
-std::expected<FovConfig, KeyError> decode_fov_config(std::span<const std::byte> v) noexcept {
-  if (v.size() != 20) return std::unexpected(KeyError::kWrongLength);
-  return FovConfig{read_le<std::int32_t>(v, 0), read_le<std::int32_t>(v, 4),
-                   read_le<std::int32_t>(v, 8), read_le<std::int32_t>(v, 12),
-                   read_le<std::uint32_t>(v, 16)};
+std::expected<FovConfig, KeyError> decode_fov_config(std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 20) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
+  return FovConfig{
+    read_le<std::int32_t>(v, 0), read_le<std::int32_t>(v, 4), read_le<std::int32_t>(v, 8),
+    read_le<std::int32_t>(v, 12), read_le<std::uint32_t>(v, 16)};
 }
 
-std::expected<FuncIoConfig, KeyError> decode_func_io_config(std::span<const std::byte> v) noexcept {
-  if (v.size() != 4) return std::unexpected(KeyError::kWrongLength);
-  return FuncIoConfig{read_le<std::uint8_t>(v, 0), read_le<std::uint8_t>(v, 1),
-                      read_le<std::uint8_t>(v, 2), read_le<std::uint8_t>(v, 3)};
+std::expected<FuncIoConfig, KeyError> decode_func_io_config(std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 4) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
+  return FuncIoConfig{
+    read_le<std::uint8_t>(v, 0), read_le<std::uint8_t>(v, 1), read_le<std::uint8_t>(v, 2),
+    read_le<std::uint8_t>(v, 3)};
 }
 
 std::expected<ImuSensorConfig, KeyError> decode_imu_sensor_config(
-    std::span<const std::byte> v) noexcept {
-  if (v.size() != 3) return std::unexpected(KeyError::kWrongLength);
+  std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 3) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   const auto r = read_le<std::uint8_t>(v, 0);
   const auto a = read_le<std::uint8_t>(v, 1);
   const auto g = read_le<std::uint8_t>(v, 2);
-  if (r > 3 || a > 3 || g > 7) return std::unexpected(KeyError::kOutOfRange);
-  return ImuSensorConfig{static_cast<ImuOutputRate>(r), static_cast<ImuAccelRange>(a),
-                         static_cast<ImuGyroRange>(g)};
+  if (r > 3 || a > 3 || g > 7) {
+    return std::unexpected(KeyError::kOutOfRange);
+  }
+  return ImuSensorConfig{
+    static_cast<ImuOutputRate>(r), static_cast<ImuAccelRange>(a), static_cast<ImuGyroRange>(g)};
 }
 
-std::expected<Version, KeyError> decode_version(std::span<const std::byte> v) noexcept {
-  if (v.size() != 4) return std::unexpected(KeyError::kWrongLength);
+std::expected<Version, KeyError> decode_version(std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 4) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   Version out;
   std::memcpy(out.v.data(), v.data(), 4);
   return out;
 }
 
 std::expected<std::array<std::uint8_t, 6>, KeyError> decode_mac(
-    std::span<const std::byte> v) noexcept {
-  if (v.size() != 6) return std::unexpected(KeyError::kWrongLength);
+  std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 6) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   std::array<std::uint8_t, 6> m{};
   std::memcpy(m.data(), v.data(), 6);
   return m;
 }
 
-std::expected<WorkState, KeyError> decode_work_state(std::span<const std::byte> v) noexcept {
+std::expected<WorkState, KeyError> decode_work_state(std::span<const std::byte> v) noexcept
+{
   auto u = decode_u8(v);
-  if (!u) return std::unexpected(u.error());
+  if (!u) {
+    return std::unexpected(u.error());
+  }
   switch (*u) {
     case 0x01:
     case 0x02:
@@ -300,33 +347,44 @@ std::expected<WorkState, KeyError> decode_work_state(std::span<const std::byte> 
   }
 }
 
-std::expected<DiagStatus, KeyError> decode_diag_status(std::span<const std::byte> v) noexcept {
+std::expected<DiagStatus, KeyError> decode_diag_status(std::span<const std::byte> v) noexcept
+{
   auto u = decode_u16(v);
-  if (!u) return std::unexpected(u.error());
-  return DiagStatus{static_cast<std::uint8_t>(*u & 0xF), static_cast<std::uint8_t>((*u >> 4) & 0xF),
-                    static_cast<std::uint8_t>((*u >> 8) & 0xF),
-                    static_cast<std::uint8_t>((*u >> 12) & 0xF)};
+  if (!u) {
+    return std::unexpected(u.error());
+  }
+  return DiagStatus{
+    static_cast<std::uint8_t>(*u & 0xF), static_cast<std::uint8_t>((*u >> 4) & 0xF),
+    static_cast<std::uint8_t>((*u >> 8) & 0xF), static_cast<std::uint8_t>((*u >> 12) & 0xF)};
 }
 
 std::expected<std::array<std::uint32_t, 8>, KeyError> decode_hms_codes(
-    std::span<const std::byte> v) noexcept {
-  if (v.size() != 32) return std::unexpected(KeyError::kWrongLength);
+  std::span<const std::byte> v) noexcept
+{
+  if (v.size() != 32) {
+    return std::unexpected(KeyError::kWrongLength);
+  }
   std::array<std::uint32_t, 8> out{};
-  for (std::size_t i = 0; i < 8; ++i) out[i] = read_le<std::uint32_t>(v, 4 * i);
+  for (std::size_t i = 0; i < 8; ++i) {
+    out[i] = read_le<std::uint32_t>(v, 4 * i);
+  }
   return out;
 }
 
-std::string_view decode_string(std::span<const std::byte> v) noexcept {
-  const auto* p = reinterpret_cast<const char*>(v.data());
-  const auto* end = std::find(p, p + v.size(), '\0');
+std::string_view decode_string(std::span<const std::byte> v) noexcept
+{
+  const auto * p = reinterpret_cast<const char *>(v.data());
+  const auto * end = std::find(p, p + v.size(), '\0');
   return {p, static_cast<std::size_t>(end - p)};
 }
 
-std::optional<std::span<const std::byte>> find_key(std::span<const KeyValue> kvs,
-                                                   Key key) noexcept {
+std::optional<std::span<const std::byte>> find_key(std::span<const KeyValue> kvs, Key key) noexcept
+{
   const auto k = static_cast<std::uint16_t>(key);
-  for (const auto& kv : kvs) {
-    if (kv.key == k) return kv.value;
+  for (const auto & kv : kvs) {
+    if (kv.key == k) {
+      return kv.value;
+    }
   }
   return std::nullopt;
 }

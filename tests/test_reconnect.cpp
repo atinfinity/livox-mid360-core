@@ -22,18 +22,23 @@
 using namespace livox::mid360;
 using namespace std::chrono_literals;
 
-namespace {
+namespace
+{
 
-bool wait_until(const std::function<bool()>& pred, std::chrono::milliseconds timeout = 5s) {
+bool wait_until(const std::function<bool()> & pred, std::chrono::milliseconds timeout = 5s)
+{
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   while (std::chrono::steady_clock::now() < deadline) {
-    if (pred()) return true;
+    if (pred()) {
+      return true;
+    }
     std::this_thread::sleep_for(10ms);
   }
   return pred();
 }
 
-std::unique_ptr<Context> loopback_context() {
+std::unique_ptr<Context> loopback_context()
+{
   ContextOptions o;
   o.bind_address = {127, 0, 0, 1};
   o.push_port = o.point_port = o.imu_port = 0;
@@ -42,30 +47,37 @@ std::unique_ptr<Context> loopback_context() {
   return std::move(*c);
 }
 
-DiscoveredDevice discovered(const SimProcess& sim, Ipv4 ip = {127, 0, 0, 1}) {
-  return DiscoveredDevice{.serial_number = sim.sn(),
-                          .ip = ip,
-                          .cmd_port = sim.ports().cmd,
-                          .dev_type = 9,
-                          .from = Endpoint{ip, sim.ports().cmd}};
+DiscoveredDevice discovered(const SimProcess & sim, Ipv4 ip = {127, 0, 0, 1})
+{
+  return DiscoveredDevice{
+    .serial_number = sim.sn(),
+    .ip = ip,
+    .cmd_port = sim.ports().cmd,
+    .dev_type = 9,
+    .from = Endpoint{ip, sim.ports().cmd}};
 }
 
 /// Pushes at 10 Hz; disconnect after 500 ms of silence; fast backoff so tests stay short.
 /// The data rate is kept very low: a Debug + ASan build on a 2-vCPU runner needs ~2.5 ms per
 /// datagram, and once the receive thread saturates, the pushes it drains only between
 /// batches look late and trip the push timeout.
-struct Fixture {
+struct Fixture
+{
   std::optional<SimProcess> sim;
   std::string err;
   std::unique_ptr<Context> context;
 
-  explicit Fixture(std::vector<std::string> args = {}) {
+  explicit Fixture(std::vector<std::string> args = {})
+  {
     args.insert(args.end(), {"--rate-multiplier", "0.05", "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(args));
-    if (sim) context = loopback_context();
+    if (sim) {
+      context = loopback_context();
+    }
   }
 
-  [[nodiscard]] static DeviceOptions options() {
+  [[nodiscard]] static DeviceOptions options()
+  {
     DeviceOptions o;
     o.session.host_command_port = 0;
     o.session.request = {.timeout = 200ms, .attempts = 2};
@@ -76,35 +88,44 @@ struct Fixture {
     return o;
   }
 
-  [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions& o = options()) const {
+  [[nodiscard]] std::unique_ptr<Device> open(const DeviceOptions & o = options()) const
+  {
     auto d = Device::open(*context, discovered(*sim), o);
-    if (!d) FAIL(to_string(d.error()));
+    if (!d) {
+      FAIL(to_string(d.error()));
+    }
     return std::move(*d);
   }
 };
 
-struct Recorder {
+struct Recorder
+{
   std::atomic<std::uint64_t> frames{0};
   std::atomic<std::uint64_t> disconnected{0};
   std::atomic<std::uint64_t> reconnected{0};
   std::mutex mutex;
   std::vector<Event> events;  ///< everything except kStats, in order
 
-  void attach(Device& d) {
-    REQUIRE(d.on_frame([this](const Frame&) { ++frames; }).has_value());
-    REQUIRE(d.on_event([this](const Event& e) {
+  void attach(Device & d)
+  {
+    REQUIRE(d.on_frame([this](const Frame &) { ++frames; }).has_value());
+    REQUIRE(d.on_event([this](const Event & e) {
                if (e.kind == Event::Kind::kStats) return;
                const std::lock_guard lock(mutex);
                events.push_back(e);
                if (e.kind == Event::Kind::kDisconnected) ++disconnected;
                if (e.kind == Event::Kind::kReconnected) ++reconnected;
-             }).has_value());
+             })
+              .has_value());
   }
 
-  [[nodiscard]] std::optional<Event> last(Event::Kind kind) {
+  [[nodiscard]] std::optional<Event> last(Event::Kind kind)
+  {
     const std::lock_guard lock(mutex);
-    for (const Event& e : std::views::reverse(events)) {
-      if (e.kind == kind) return e;
+    for (const Event & e : std::views::reverse(events)) {
+      if (e.kind == kind) {
+        return e;
+      }
     }
     return std::nullopt;
   }
@@ -112,9 +133,12 @@ struct Recorder {
 
 }  // namespace
 
-TEST_CASE("Reconnect: push timeout, automatic recovery, sampling resumes", "[sim][reconnect]") {
+TEST_CASE("Reconnect: push timeout, automatic recovery, sampling resumes", "[sim][reconnect]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
@@ -150,13 +174,16 @@ TEST_CASE("Reconnect: push timeout, automatic recovery, sampling resumes", "[sim
   CHECK(s.reconnects == 1);
   CHECK(rec.disconnected == 1);
   // Callbacks stayed frozen throughout (sampling is still requested).
-  CHECK_FALSE(dev->on_imu([](const ImuData&) {}).has_value());
+  CHECK_FALSE(dev->on_imu([](const ImuData &) {}).has_value());
 }
 
-TEST_CASE("Reconnect: reboot() is noticed immediately and settings are replayed",
-          "[sim][reconnect]") {
+TEST_CASE(
+  "Reconnect: reboot() is noticed immediately and settings are replayed", "[sim][reconnect]")
+{
   Fixture f({"--reboot-silence", "0.3"});
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   auto dev = f.open();
   rec.attach(*dev);
@@ -180,10 +207,14 @@ TEST_CASE("Reconnect: reboot() is noticed immediately and settings are replayed"
   CHECK(dev->stats().reconnects == 1);
 }
 
-TEST_CASE("Reconnect: a lost ACK alone is not a disconnect, a stale push plus timeout is",
-          "[sim][reconnect]") {
+TEST_CASE(
+  "Reconnect: a lost ACK alone is not a disconnect, a stale push plus timeout is",
+  "[sim][reconnect]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   DeviceOptions o = Fixture::options();
   o.session.request = {.timeout = 100ms, .attempts = 1};
@@ -217,10 +248,12 @@ TEST_CASE("Reconnect: a lost ACK alone is not a disconnect, a stale push plus ti
   CHECK(dev->connected());
 }
 
-TEST_CASE("Reconnect: disabled means detect only; reconnect() recovers by hand",
-          "[sim][reconnect]") {
+TEST_CASE("Reconnect: disabled means detect only; reconnect() recovers by hand", "[sim][reconnect]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   DeviceOptions o = Fixture::options();
   o.reconnect.enabled = false;
@@ -257,7 +290,7 @@ TEST_CASE("Reconnect: disabled means detect only; reconnect() recovers by hand",
   REQUIRE(up.has_value());
   CHECK(up->attempts == 1);
   // Callbacks were never frozen (sampling not requested), so they can still be changed.
-  CHECK(dev->on_imu([](const ImuData&) {}).has_value());
+  CHECK(dev->on_imu([](const ImuData &) {}).has_value());
   REQUIRE(dev->start_sampling().has_value());
   REQUIRE(wait_until([&] { return rec.frames >= 3; }));
 
@@ -271,10 +304,13 @@ TEST_CASE("Reconnect: disabled means detect only; reconnect() recovers by hand",
   REQUIRE(wait_until([&] { return rec.reconnected == 2; }));
 }
 
-TEST_CASE("Reconnect: the destructor returns promptly while an attempt is in progress",
-          "[sim][reconnect]") {
+TEST_CASE(
+  "Reconnect: the destructor returns promptly while an attempt is in progress", "[sim][reconnect]")
+{
   Fixture f;
-  if (!f.sim) SKIP("simulator unavailable: " << f.err);
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
   Recorder rec;
   DeviceOptions o = Fixture::options();
   o.session.request = {.timeout = 1000ms, .attempts = 3};  // a direct attempt takes 3 s
@@ -290,7 +326,8 @@ TEST_CASE("Reconnect: the destructor returns promptly while an attempt is in pro
   CHECK(std::chrono::steady_clock::now() - t0 < 500ms);
 }
 
-TEST_CASE("Reconnect: invalid options", "[reconnect]") {
+TEST_CASE("Reconnect: invalid options", "[reconnect]")
+{
   auto ctx = loopback_context();
   DeviceOptions o;
   o.reconnect.max_backoff = 100ms;
@@ -300,17 +337,23 @@ TEST_CASE("Reconnect: invalid options", "[reconnect]") {
   CHECK(d.error().kind == DeviceError::Kind::kInvalidArgument);
 }
 
-TEST_CASE("Multi-device: two LiDARs on one Context, looked up by serial", "[sim][device]") {
+TEST_CASE("Multi-device: two LiDARs on one Context, looked up by serial", "[sim][device]")
+{
   // The second simulator answers from 127.0.0.2; macOS needs `ifconfig lo0 alias 127.0.0.2`.
   if (!UdpSocket::open(Endpoint{{127, 0, 0, 2}, 0}).has_value()) {
     SKIP("127.0.0.2 is not configured on the loopback interface");
   }
   Fixture a;
-  if (!a.sim) SKIP("simulator unavailable: " << a.err);
+  if (!a.sim) {
+    SKIP("simulator unavailable: " << a.err);
+  }
   std::string err;
-  auto sim_b = SimProcess::start(err, {"--bind", "127.0.0.2", "--sn", "SIM0000000000002",
-                                       "--rate-multiplier", "0.05", "--push-rate", "10"});
-  if (!sim_b) SKIP("second simulator unavailable: " << err);
+  auto sim_b = SimProcess::start(
+    err, {"--bind", "127.0.0.2", "--sn", "SIM0000000000002", "--rate-multiplier", "0.05",
+          "--push-rate", "10"});
+  if (!sim_b) {
+    SKIP("second simulator unavailable: " << err);
+  }
   REQUIRE(sim_b->ip() == "127.0.0.2");
 
   Recorder rec_a;
@@ -318,13 +361,15 @@ TEST_CASE("Multi-device: two LiDARs on one Context, looked up by serial", "[sim]
   auto dev_a = a.open();
   rec_a.attach(*dev_a);
   auto dev_b = Device::open(*a.context, discovered(*sim_b, {127, 0, 0, 2}), Fixture::options());
-  if (!dev_b) FAIL(to_string(dev_b.error()));
+  if (!dev_b) {
+    FAIL(to_string(dev_b.error()));
+  }
   rec_b.attach(**dev_b);
 
   CHECK(a.context->find(a.sim->sn()) == dev_a.get());
   CHECK(a.context->find(sim_b->sn()) == dev_b->get());
   CHECK(a.context->find("nope") == nullptr);
-  CHECK(a.context->devices() == std::vector<Device*>{dev_a.get(), dev_b->get()});
+  CHECK(a.context->devices() == std::vector<Device *>{dev_a.get(), dev_b->get()});
   CHECK((*dev_b)->info().ip == Ipv4{127, 0, 0, 2});
 
   // A second Device for a serial (or an IP) that is already open is refused.
@@ -347,5 +392,5 @@ TEST_CASE("Multi-device: two LiDARs on one Context, looked up by serial", "[sim]
 
   dev_b->reset();
   CHECK(a.context->find(sim_b->sn()) == nullptr);
-  CHECK(a.context->devices() == std::vector<Device*>{dev_a.get()});
+  CHECK(a.context->devices() == std::vector<Device *>{dev_a.get()});
 }

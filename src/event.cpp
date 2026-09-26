@@ -4,9 +4,11 @@
 #include <string>
 #include <string_view>
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-std::string_view to_string(Event::Kind kind) noexcept {
+std::string_view to_string(Event::Kind kind) noexcept
+{
   switch (kind) {
     case Event::Kind::kStateChanged:
       return "state_changed";
@@ -22,7 +24,8 @@ std::string_view to_string(Event::Kind kind) noexcept {
   return "unknown";
 }
 
-std::string_view to_string(DisconnectReason reason) noexcept {
+std::string_view to_string(DisconnectReason reason) noexcept
+{
   switch (reason) {
     case DisconnectReason::kNone:
       return "none";
@@ -38,7 +41,8 @@ std::string_view to_string(DisconnectReason reason) noexcept {
   return "unknown";
 }
 
-std::string to_string(const Event& event) {
+std::string to_string(const Event & event)
+{
   std::string out(to_string(event.kind));
   switch (event.kind) {
     case Event::Kind::kStateChanged:
@@ -49,14 +53,16 @@ std::string to_string(const Event& event) {
       break;
     case Event::Kind::kHms: {
       std::size_t active = 0;
-      for (const HmsCode& c : event.hms) active += c.active() ? 1u : 0u;
+      for (const HmsCode & c : event.hms) {
+        active += c.active() ? 1u : 0u;
+      }
       out += " active=" + std::to_string(active);
       out += " level=";
       out += to_string(event.hms_level);
       break;
     }
     case Event::Kind::kStats: {
-      const DeviceStats& s = event.stats;
+      const DeviceStats & s = event.stats;
       out += " packets=" + std::to_string(s.packets) + " points=" + std::to_string(s.points) +
              " frames=" + std::to_string(s.frames) + " imu=" + std::to_string(s.imu_samples) +
              " bad=" + std::to_string(s.bad_packets) +
@@ -75,7 +81,8 @@ std::string to_string(const Event& event) {
   return out;
 }
 
-std::string_view to_string(DeviceError::Kind kind) noexcept {
+std::string_view to_string(DeviceError::Kind kind) noexcept
+{
   switch (kind) {
     case DeviceError::Kind::kSession:
       return "session";
@@ -93,7 +100,8 @@ std::string_view to_string(DeviceError::Kind kind) noexcept {
   return "unknown";
 }
 
-std::string to_string(const DeviceError& err) {
+std::string to_string(const DeviceError & err)
+{
   std::string out(to_string(err.kind));
   if (err.session) {
     out += ": ";

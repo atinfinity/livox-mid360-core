@@ -18,35 +18,45 @@
 #include "livox/mid360/context.hpp"
 #include "livox/mid360/transport.hpp"
 
-namespace livox::mid360 {
+namespace livox::mid360
+{
 
-namespace detail {
+namespace detail
+{
 
-enum class DataPort : std::uint8_t { kPush, kPoint, kImu };
+enum class DataPort : std::uint8_t
+{
+  kPush,
+  kPoint,
+  kImu
+};
 
 /// What the receive thread calls on a registered Device. Both methods run on the receive
 /// thread only.
-class Receiver {
- public:
+class Receiver
+{
+public:
   Receiver() = default;
-  Receiver(const Receiver&) = delete;
-  Receiver& operator=(const Receiver&) = delete;
+  Receiver(const Receiver &) = delete;
+  Receiver & operator=(const Receiver &) = delete;
   virtual ~Receiver() = default;
 
-  virtual void on_datagram(DataPort port, const Datagram& datagram) = 0;
+  virtual void on_datagram(DataPort port, const Datagram & datagram) = 0;
   /// Timers (idle frame close, stats). Returns the next time it wants to be called.
   virtual std::optional<std::chrono::steady_clock::time_point> tick(
-      std::chrono::steady_clock::time_point now) = 0;
+    std::chrono::steady_clock::time_point now) = 0;
 };
 
 }  // namespace detail
 
-struct Context::Impl {
-  struct Entry {
+struct Context::Impl
+{
+  struct Entry
+  {
     Ipv4 ip;
-    detail::Receiver* receiver;
+    detail::Receiver * receiver;
     std::string serial;  ///< for Context::find; unique among entries
-    Device* device;      ///< set by Device's constructor (bind), nullptr until then
+    Device * device;     ///< set by Device's constructor (bind), nullptr until then
   };
 
   ContextOptions options;
@@ -71,16 +81,22 @@ struct Context::Impl {
   std::atomic<std::uint64_t> datagrams{0};
   std::atomic<std::uint64_t> unknown_source{0};
 
-  enum class AddResult : std::uint8_t { kOk, kDuplicateIp, kDuplicateSerial };
-  [[nodiscard]] AddResult add(const Ipv4& ip, std::string serial, detail::Receiver* receiver);
+  enum class AddResult : std::uint8_t
+  {
+    kOk,
+    kDuplicateIp,
+    kDuplicateSerial
+  };
+  [[nodiscard]] AddResult add(const Ipv4 & ip, std::string serial, detail::Receiver * receiver);
   /// Attaches the public handle to an entry (Context::find returns it).
-  void bind(detail::Receiver* receiver, Device* device);
+  void bind(detail::Receiver * receiver, Device * device);
   /// Moves an entry to a new source IP (reconnect found the LiDAR elsewhere). False when
   /// another entry holds `ip`.
-  [[nodiscard]] bool rekey(detail::Receiver* receiver, const Ipv4& ip);
+  [[nodiscard]] bool rekey(detail::Receiver * receiver, const Ipv4 & ip);
   /// Removes and blocks until the receive thread has dropped its snapshot of `receiver`.
-  void remove(detail::Receiver* receiver);
-  [[nodiscard]] bool on_receive_thread() const noexcept {
+  void remove(detail::Receiver * receiver);
+  [[nodiscard]] bool on_receive_thread() const noexcept
+  {
     return std::this_thread::get_id() == thread_id;
   }
 
