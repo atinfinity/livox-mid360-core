@@ -77,7 +77,8 @@ enum class TimestampPolicy : std::uint8_t
 /// Bounded single-producer / multi-consumer queue for handing Frames or ImuData from the
 /// receive thread to any other thread. Overflow drops the OLDEST element (newest data wins)
 /// and counts it in `dropped()`. Not part of Device: connect it yourself, e.g.
-///   BoundedQueue<Frame> q;  device.on_frame([&](Frame&& f) { q.push(std::move(f)); });
+///   BoundedQueue<Frame> q;
+///   device.on_frame([&](Frame && f) { q.push(std::move(f)); });
 template <class T>
 class BoundedQueue
 {

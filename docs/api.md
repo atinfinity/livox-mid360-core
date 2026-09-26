@@ -40,14 +40,14 @@ Context ── recv thread ──┬── Device A (Session A: command socket) 
 ## Lifecycle
 
 ```cpp
-auto ctx = Context::create({.bind_address = {192, 168, 1, 5}});     // thread starts here
+auto ctx = Context::create({.bind_address = {192, 168, 1, 5}});  // thread starts here
 auto found = discover();
-auto dev = Device::open(**ctx, found->front(), {});                   // connect + host setup
-dev->on_frame([&](Frame&& f) { queue.push(std::move(f)); });         // before start
-dev->start_sampling();                                                // work_tgt_mode + wait
+auto dev = Device::open(**ctx, found->front(), {});            // connect + host setup
+dev->on_frame([&](Frame && f) { queue.push(std::move(f)); });  // before start
+dev->start_sampling();                                         // work_tgt_mode + wait
 ...
 dev->stop_sampling();
-dev.reset();                                                          // before ctx
+dev.reset();  // before ctx
 ```
 
 - `Context::create(ContextOptions)` binds the sockets and starts the thread; the destructor
@@ -95,9 +95,9 @@ to C function pointers.
 | Setter | Signature | Ownership |
 | --- | --- | --- |
 | `on_packet` | `(const DataPacketView&, const ReceiveInfo&)` | non-owning view, valid during the call only |
-| `on_frame` | `(Frame&&)` | ownership transferred |
-| `on_imu` | `(const ImuData&)` | trivially copyable |
-| `on_event` | `(const Event&)` | trivially copyable |
+| `on_frame` | `(Frame &&)` | ownership transferred |
+| `on_imu` | `(const ImuData &)` | trivially copyable |
+| `on_event` | `(const Event &)` | trivially copyable |
 
 `on_packet` is the raw tier: every accepted point-cloud or IMU packet (parsed, CRC checked when
 `DeviceOptions::verify_crc` is on; never a push), before frame assembly, with the kernel

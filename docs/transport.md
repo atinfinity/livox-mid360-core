@@ -39,7 +39,11 @@ IPv4 address as `std::array<std::uint8_t, 4>` plus a port, the same representati
 ### `TransportError`
 
 ```cpp
-struct TransportError { TransportErrorCode code; int errno_value; };
+struct TransportError
+{
+  TransportErrorCode code;
+  int errno_value;
+};
 ```
 
 `code` is a normalised category so that callers and tests never depend on errno values;
@@ -64,7 +68,12 @@ struct TransportError { TransportErrorCode code; int errno_value; };
 ### `Datagram`
 
 ```cpp
-struct Datagram { std::span<std::byte> data; Endpoint from; std::uint64_t recv_time_ns; };
+struct Datagram
+{
+  std::span<std::byte> data;
+  Endpoint from;
+  std::uint64_t recv_time_ns;
+};
 ```
 
 On entry to `recv_batch()`, `data` must point at a caller-owned buffer of at least
@@ -92,11 +101,14 @@ is the receive pipeline's job (#6).
 ### `UdpSocket`
 
 ```cpp
-auto sock = UdpSocket::open(Endpoint::any(kDefaultHostPointCloudPort), {.recv_buffer_bytes = 4 << 20});
-if (!sock) { /* sock.error() */ }
-sock->send_to(bytes, Endpoint{{192,168,1,100}, kCommandPort});
-sock->local_endpoint();     // bound address; port resolved when 0 was requested
-sock->native_handle();      // raw fd for Poller / tests, -1 when closed
+auto sock =
+  UdpSocket::open(Endpoint::any(kDefaultHostPointCloudPort), {.recv_buffer_bytes = 4 << 20});
+if (!sock) {
+  // sock.error()
+}
+sock->send_to(bytes, Endpoint{{192, 168, 1, 100}, kCommandPort});
+sock->local_endpoint();  // bound address; port resolved when 0 was requested
+sock->native_handle();   // raw fd for Poller / tests, -1 when closed
 ```
 
 Move-only; the descriptor is closed in the destructor or by `close()`.
@@ -106,10 +118,16 @@ Receiving:
 ```cpp
 std::array<std::array<std::byte, kMaxDatagramSize>, 64> storage;
 std::array<Datagram, 64> batch;
-for (std::size_t i = 0; i < batch.size(); ++i) batch[i].data = storage[i];
+for (std::size_t i = 0; i < batch.size(); ++i) {
+  batch[i].data = storage[i];
+}
 
-auto n = sock->recv_batch(batch);        // never blocks
-if (n) for (std::size_t i = 0; i < *n; ++i) handle(batch[i]);
+auto n = sock->recv_batch(batch);  // never blocks
+if (n) {
+  for (std::size_t i = 0; i < *n; ++i) {
+    handle(batch[i]);
+  }
+}
 ```
 
 `recv_batch()` returns the number of datagrams received, `0` when nothing is pending, or an
@@ -128,12 +146,20 @@ poller->add(cmd_sock, kCmdTag);
 poller->add(pcl_sock, kPclTag);
 
 while (running) {
-  auto events = poller->wait(std::chrono::milliseconds{100});   // negative = block forever
-  if (!events) break;
-  if (poller->woken()) { /* someone called wake() */ }
-  for (const ReadyEvent& ev : *events) {
-    if (ev.error) { /* POLLERR / POLLHUP / POLLNVAL on ev.tag */ }
-    if (ev.readable) drain(sockets[ev.tag]);
+  auto events = poller->wait(std::chrono::milliseconds{100});  // negative = block forever
+  if (!events) {
+    break;
+  }
+  if (poller->woken()) {
+    // someone called wake()
+  }
+  for (const ReadyEvent & ev : *events) {
+    if (ev.error) {
+      // POLLERR / POLLHUP / POLLNVAL on ev.tag
+    }
+    if (ev.readable) {
+      drain(sockets[ev.tag]);
+    }
   }
 }
 ```

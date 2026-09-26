@@ -31,9 +31,9 @@ synchronous calls. It does not receive point-cloud or IMU data and creates no th
 ## Discovery
 
 ```cpp
-DiscoveryOptions o;           // empty targets → broadcast 255.255.255.255:56000, wait the whole timeout
+DiscoveryOptions o;  // empty targets → broadcast 255.255.255.255:56000, wait the whole timeout
 o.targets = {parse_endpoint("192.168.1.12:56000").value()};  // unicast: returns once all answered
-auto devices = discover(o);   // std::expected<std::vector<DiscoveredDevice>, SessionError>
+auto devices = discover(o);  // std::expected<std::vector<DiscoveredDevice>, SessionError>
 ```
 
 `discover()` binds an ephemeral socket on `bind_address`, sends `0x0000` and collects ACKs
@@ -45,16 +45,22 @@ not an error.
 ## `Session`
 
 ```cpp
-auto s = Session::connect(devices->front());               // or connect(Endpoint{ip, 56100})
-if (!s) { std::cerr << to_string(s.error()) << '\n'; return; }
+auto s = Session::connect(devices->front());  // or connect(Endpoint{ip, 56100})
+if (!s) {
+  std::cerr << to_string(s.error()) << '\n';
+  return;
+}
 
-const KeyValue kv{static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg),
-                  encode_host_ip_config({.ip = {192,168,1,5}, .dst_port = 56301, .src_port = 56300})};
-auto cfg = s->configure(std::span<const KeyValue>(&kv, 1));   // 0x21 (reboot effect) counts as success
+const KeyValue kv{
+  static_cast<std::uint16_t>(Key::kPointCloudHostIpCfg),
+  encode_host_ip_config({.ip = {192, 168, 1, 5}, .dst_port = 56301, .src_port = 56300})};
+auto cfg = s->configure(std::span<const KeyValue>(&kv, 1));  // 0x21 (reboot effect) is a success
 
 const Key keys[] = {Key::kSn, Key::kVersionApp};
-auto inq = s->inquire(keys);                                  // InquireResult owns the ACK bytes
-if (inq) std::cout << decode_string(*inq->get(Key::kSn)) << '\n';
+auto inq = s->inquire(keys);  // InquireResult owns the ACK bytes
+if (inq) {
+  std::cout << decode_string(*inq->get(Key::kSn)) << '\n';
+}
 
 auto ready = s->wait_for_state(WorkState::kSampling, std::chrono::seconds(10));
 ```
@@ -87,13 +93,15 @@ overrides `SessionOptions::request` (default 500 ms × 3).
 (design in [issue #5](https://github.com/atinfinity/livox-mid360-core/issues/5)):
 
 ```cpp
-HostSetup setup;                       // ip defaults to the session socket's local address
-setup.point_port = 56301;              // host-side ports; defaults are 56201 / 56301 / 56401
+HostSetup setup;           // ip defaults to the session socket's local address
+setup.point_port = 56301;  // host-side ports; defaults are 56201 / 56301 / 56401
 setup.pcl_data_type = DataType::kCartesian32;
 setup.imu_enable = true;
-setup.work_tgt_mode = WorkState::kSampling;   // optional; then waits up to wait_timeout (10 s)
-auto r = apply_host_setup(*s, setup);  // std::expected<HostSetupResult, SessionError>
-if (r && r->reboot_required) { /* an ACK said 0x21: reboot to apply */ }
+setup.work_tgt_mode = WorkState::kSampling;  // optional; then waits up to wait_timeout (10 s)
+auto r = apply_host_setup(*s, setup);        // std::expected<HostSetupResult, SessionError>
+if (r && r->reboot_required) {
+  // an ACK said 0x21: reboot to apply
+}
 ```
 
 `apply_host_setup` sends one `0x0100` with keys `0x0005`, `0x0006`, `0x0007` (host ipcfg with
