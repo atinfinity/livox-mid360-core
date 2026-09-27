@@ -256,7 +256,7 @@ public:
     std::optional<RequestOptions> opts = std::nullopt);
 
   // --- debug raw data collection (issue #93): 0x0303 on the LiDAR's log port, the stream
-  // on the Context's debug data socket. Unverified on hardware (#11).
+  // on the Context's debug data socket. Unverified on hardware (#106).
   /// Sends 0x0303 enable with this host and the Context's debug data port from the log
   /// socket and waits for its ACK (`opts`: timeout / attempts, the session defaults
   /// otherwise). kInvalidState when ContextOptions::debug_data_port is not set. Does not
