@@ -50,14 +50,19 @@ struct DeviceStats
   std::uint64_t log_acks_sent = 0;     ///< pushes that asked for an ACK and got one
   std::uint64_t bad_log_packets = 0;   ///< log-port datagrams that failed to parse
   std::uint64_t last_log_time_ns = 0;  ///< host receive time of the last push, 0 = none
+  // --- debug raw data (#93), see Device::on_debug_data ---
+  std::uint64_t debug_data_packets = 0;       ///< datagrams received on the debug data socket
+  std::uint64_t debug_data_bytes = 0;         ///< their payload bytes
+  std::uint64_t last_debug_data_time_ns = 0;  ///< host receive time of the last one, 0 = none
 };
 
 /// Counters of the shared receive side, snapshot via Context::stats().
 struct ContextStats
 {
-  std::uint64_t datagrams = 0;       ///< received on the four sockets
-  std::uint64_t unknown_source = 0;  ///< dropped: source IP not registered by any Device
-  std::uint64_t log_datagrams = 0;   ///< of `datagrams`, those on the firmware log socket
+  std::uint64_t datagrams = 0;        ///< received on all sockets
+  std::uint64_t unknown_source = 0;   ///< dropped: source IP not registered by any Device
+  std::uint64_t log_datagrams = 0;    ///< of `datagrams`, those on the firmware log socket
+  std::uint64_t debug_datagrams = 0;  ///< of `datagrams`, those on the debug data socket (#93)
 };
 
 /// Why a Device left the connected state (Event::reason, issue #8).

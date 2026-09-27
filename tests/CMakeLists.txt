@@ -26,6 +26,7 @@ add_executable(mid360_core_tests
   test_api_skeleton.cpp
   test_frame_assembler.cpp
   test_device.cpp
+  test_device_debug_data.cpp
   test_typed_keys.cpp
   test_lidar_info.cpp
   test_fov.cpp

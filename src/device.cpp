@@ -117,6 +117,7 @@ struct Device::Impl : detail::Receiver
   EventCallback event_cb;
   PushCallback push_cb;
   FirmwareLogCallback firmware_log_cb;
+  DebugDataCallback debug_data_cb;
   std::atomic<std::uint64_t> cb_generation{1};
 
   // --- receive-thread state --------------------------------------------------
@@ -127,16 +128,18 @@ struct Device::Impl : detail::Receiver
   EventCallback rx_event_cb;
   PushCallback rx_push_cb;
   FirmwareLogCallback rx_firmware_log_cb;
+  DebugDataCallback rx_debug_data_cb;
   detail::FrameAssembler assembler;
 
   // --- firmware log (issue #44) ----------------------------------------------
   /// Per log_type (index = raw type, only 0 / 1 tracked): start requested and not yet
   /// stopped; replayed by a reconnect like sampling_requested.
   std::array<std::atomic<bool>, 2> log_requested{};
-  /// 0x0301 ACK hand-off: the receive thread fills `log_ack` for `log_seq_wanted`, the
-  /// command thread waits on `log_cv` (all under log_mutex).
+  /// 0x0301 / 0x0303 ACK hand-off: the receive thread fills `log_ack` for `log_cmd_wanted`
+  /// and `log_seq_wanted`, the command thread waits on `log_cv` (all under log_mutex).
   std::mutex log_mutex;
   std::condition_variable log_cv;
+  std::uint16_t log_cmd_wanted = 0;
   std::uint32_t log_seq_wanted = 0;
   std::optional<RetCode> log_ack;
   bool log_ack_bad = false;
@@ -157,6 +160,13 @@ struct Device::Impl : detail::Receiver
   std::atomic<std::uint64_t> log_acks_sent{0};
   std::atomic<std::uint64_t> bad_log_packets{0};
   std::atomic<std::uint64_t> last_log_time_ns{0};
+
+  // --- debug raw data (issue #93) --------------------------------------------
+  /// Start requested and not yet stopped; replayed by a reconnect like log_requested.
+  std::atomic<bool> debug_data_requested{false};
+  std::atomic<std::uint64_t> debug_data_packets{0};
+  std::atomic<std::uint64_t> debug_data_bytes{0};
+  std::atomic<std::uint64_t> last_debug_data_time_ns{0};
   detail::DropCounter imu_drops;
   std::uint64_t imu_dropped = 0;
   std::uint64_t imu_reordered = 0;
@@ -211,6 +221,9 @@ struct Device::Impl : detail::Receiver
       .log_acks_sent = log_acks_sent.load(kRelaxed),
       .bad_log_packets = bad_log_packets.load(kRelaxed),
       .last_log_time_ns = last_log_time_ns.load(kRelaxed),
+      .debug_data_packets = debug_data_packets.load(kRelaxed),
+      .debug_data_bytes = debug_data_bytes.load(kRelaxed),
+      .last_debug_data_time_ns = last_debug_data_time_ns.load(kRelaxed),
     };
   }
 
@@ -247,6 +260,7 @@ struct Device::Impl : detail::Receiver
     rx_event_cb = event_cb;
     rx_push_cb = push_cb;
     rx_firmware_log_cb = firmware_log_cb;
+    rx_debug_data_cb = debug_data_cb;
     cb_seen = cb_generation.load(std::memory_order_acquire);
   }
 
@@ -383,6 +397,10 @@ struct Device::Impl : detail::Receiver
       on_log(d);
       return;
     }
+    if (port == detail::DataPort::kDebugData) {
+      on_debug_data(d);
+      return;
+    }
     const auto pkt = parse_data_packet(d.data, options.verify_crc);
     if (!pkt) {
       bad_packets.fetch_add(1, std::memory_order_relaxed);
@@ -420,8 +438,23 @@ struct Device::Impl : detail::Receiver
     deliver(assembler.push(*pkt, d.recv_time_ns));
   }
 
-  // Log port (#44): the 0x0301 ACK is handed to the waiting command thread; a 0x0300 push
-  // is counted, gap-checked per file, acknowledged when asked and delivered as a chunk.
+  // Debug data socket (#93): the stream is opaque, so every datagram is counted and
+  // delivered as it came.
+  void on_debug_data(const Datagram & d)
+  {
+    debug_data_packets.fetch_add(1, std::memory_order_relaxed);
+    debug_data_bytes.fetch_add(d.data.size(), std::memory_order_relaxed);
+    last_debug_data_time_ns.store(d.recv_time_ns, std::memory_order_relaxed);
+    refresh_callbacks();
+    if (rx_debug_data_cb) {
+      rx_debug_data_cb(
+        DebugDataPacket{.host_receive_time_ns = d.recv_time_ns, .from = d.from, .data = d.data});
+    }
+  }
+
+  // Log port (#44): the 0x0301 / 0x0303 ACK is handed to the waiting command thread; a
+  // 0x0300 push is counted, gap-checked per file, acknowledged when asked and delivered as
+  // a chunk.
   void on_log(const Datagram & d)
   {
     const auto frame = parse_command_frame(d.data);
@@ -431,11 +464,8 @@ struct Device::Impl : detail::Receiver
     }
     const CommandHeader & h = frame->header;
     if (h.cmd_type == CmdType::kAck) {
-      if (h.cmd_id != static_cast<std::uint16_t>(CmdId::kCollectionLog)) {
-        return;
-      }
       const std::lock_guard lock(log_mutex);
-      if (h.seq_num != log_seq_wanted || log_ack || log_ack_bad) {
+      if (h.cmd_id != log_cmd_wanted || h.seq_num != log_seq_wanted || log_ack || log_ack_bad) {
         return;
       }
       if (const auto ack = parse_simple_ack(frame->data)) {
@@ -505,30 +535,32 @@ struct Device::Impl : detail::Receiver
     }
   }
 
-  /// Sends 0x0301 from the Context's log socket and waits for the matching ACK. Under
-  /// cmd_mutex. Retries reuse the seq like Session::request. Errors are SessionErrors so
-  /// that note_command_error / kLidarRejected reporting work unchanged.
+  /// Sends a 0x03xx command (0x0301 / 0x0303) from the Context's log socket to `port` of
+  /// the LiDAR and waits for the matching ACK. Under cmd_mutex. Retries reuse the seq like
+  /// Session::request. Errors are SessionErrors so that note_command_error /
+  /// kLidarRejected reporting work unchanged.
   std::expected<void, SessionError> send_log_control_locked(
-    FirmwareLogType type, bool enable, std::optional<RequestOptions> opts)
+    CmdId cmd, std::span<const std::byte> payload, std::uint16_t port,
+    std::optional<RequestOptions> opts)
   {
     const RequestOptions ro = opts.value_or(session_options.request);
-    const auto cmd_id = static_cast<std::uint16_t>(CmdId::kCollectionLog);
+    const auto cmd_id = static_cast<std::uint16_t>(cmd);
     const std::uint32_t seq = log_next_seq++;
     if (log_next_seq == 0) {
       log_next_seq = 1;
     }
-    const auto payload = encode_firmware_log_control({.log_type = type, .enable = enable});
     CommandFrameSpec spec;
     spec.seq_num = seq;
     spec.cmd_id = cmd_id;
     spec.data = payload;
-    std::array<std::byte, kCommandHeaderSize + 2> buf{};
+    std::array<std::byte, kCommandHeaderSize + kDebugDataControlSize> buf{};
     const auto n = encode_command_frame(buf, spec);
     assert(n.has_value());
     const auto frame = std::span(buf).first(*n);
-    const Endpoint to{snapshot_info().ip, options.lidar_log_port};
+    const Endpoint to{snapshot_info().ip, port};
     {
       const std::lock_guard lock(log_mutex);
+      log_cmd_wanted = cmd_id;
       log_seq_wanted = seq;
       log_ack.reset();
       log_ack_bad = false;
@@ -583,17 +615,23 @@ struct Device::Impl : detail::Receiver
     return fail(SessionErrorKind::kTimeout, max_attempts);
   }
 
+  /// The address the LiDAR is told to send to: host_setup.ip or the command socket's.
+  [[nodiscard]] Ipv4 host_address()
+  {
+    std::optional<Ipv4> host_ip;
+    {
+      const std::lock_guard slock(setup_mutex);
+      host_ip = host_setup.ip;
+    }
+    return host_ip.value_or(session.local_endpoint().ip);
+  }
+
   /// Key 0x0009 → this host / the Context's log port, then 0x0301. Under cmd_mutex.
   std::expected<void, DeviceError> log_control_locked(
     FirmwareLogType type, bool enable, std::optional<RequestOptions> opts)
   {
     if (enable) {
-      std::optional<Ipv4> host_ip;
-      {
-        const std::lock_guard slock(setup_mutex);
-        host_ip = host_setup.ip;
-      }
-      const Ipv4 ip = host_ip.value_or(session.local_endpoint().ip);
+      const Ipv4 ip = host_address();
       if (ip == Ipv4{0, 0, 0, 0}) {
         return std::unexpected(error(DeviceError::Kind::kInvalidArgument));
       }
@@ -603,7 +641,10 @@ struct Device::Impl : detail::Receiver
         return std::unexpected(wrap(r.error()));
       }
     }
-    if (auto r = send_log_control_locked(type, enable, opts); !r) {
+    const auto payload = encode_firmware_log_control({.log_type = type, .enable = enable});
+    if (auto r =
+          send_log_control_locked(CmdId::kCollectionLog, payload, options.lidar_log_port, opts);
+        !r) {
       return std::unexpected(wrap(r.error()));
     }
     const auto idx = static_cast<std::uint8_t>(type);
@@ -628,6 +669,55 @@ struct Device::Impl : detail::Receiver
       return c;
     }
     auto r = log_control_locked(type, enable, opts);
+    if (!r) {
+      if (const auto & s = r.error().session) {
+        note_command_error(*s);
+      }
+    }
+    return r;
+  }
+
+  /// 0x0303 towards this host / the Context's debug data port. Under cmd_mutex.
+  std::expected<void, DeviceError> debug_data_control_locked(
+    bool enable, std::optional<RequestOptions> opts)
+  {
+    DebugDataControlRequest req;
+    req.enable = enable;
+    if (enable) {
+      if (!context.options.debug_data_port) {
+        return std::unexpected(error(DeviceError::Kind::kInvalidState));
+      }
+      const Ipv4 ip = host_address();
+      if (ip == Ipv4{0, 0, 0, 0}) {
+        return std::unexpected(error(DeviceError::Kind::kInvalidArgument));
+      }
+      req.host_ip = ip;
+    }
+    // A stop carries the port too (0 without the socket): the LiDAR has nothing to send to.
+    req.host_port = context.options.debug_data_port.value_or(0);
+    const auto payload = encode_debug_data_control(req);
+    if (auto r = send_log_control_locked(
+          CmdId::kDebugDataControl, payload, options.lidar_debug_data_port, opts);
+        !r) {
+      return std::unexpected(wrap(r.error()));
+    }
+    debug_data_requested.store(enable, std::memory_order_release);
+    LIVOX_LOG(LogLevel::kInfo, serial, "debug data {}", enable ? "started" : "stopped");
+    return {};
+  }
+
+  std::expected<void, DeviceError> debug_data_control(
+    bool enable, std::optional<RequestOptions> opts)
+  {
+    assert(!context.on_receive_thread() && "Device command called from a callback");
+    if (auto c = check_connected(); !c) {
+      return c;
+    }
+    const std::lock_guard lock(cmd_mutex);
+    if (auto c = check_connected(); !c) {
+      return c;
+    }
+    auto r = debug_data_control_locked(enable, opts);
     if (!r) {
       if (const auto & s = r.error().session) {
         note_command_error(*s);
@@ -862,6 +952,11 @@ struct Device::Impl : detail::Receiver
         if (auto r = log_control_locked(static_cast<FirmwareLogType>(i), true, std::nullopt); !r) {
           return r;
         }
+      }
+    }
+    if (debug_data_requested.load(std::memory_order_acquire)) {
+      if (auto r = debug_data_control_locked(true, std::nullopt); !r) {
+        return r;
       }
     }
     rebase_requested.store(true, std::memory_order_release);
@@ -1581,6 +1676,21 @@ std::expected<void, DeviceError> Device::stop_firmware_log(
   FirmwareLogType type, std::optional<RequestOptions> opts)
 {
   return impl_->log_control(type, false, opts);
+}
+
+std::expected<void, DeviceError> Device::on_debug_data(DebugDataCallback cb)
+{
+  return impl_->set_callback(impl_->debug_data_cb, std::move(cb));
+}
+
+std::expected<void, DeviceError> Device::start_debug_data(std::optional<RequestOptions> opts)
+{
+  return impl_->debug_data_control(true, opts);
+}
+
+std::expected<void, DeviceError> Device::stop_debug_data(std::optional<RequestOptions> opts)
+{
+  return impl_->debug_data_control(false, opts);
 }
 
 bool Device::connected() const noexcept { return impl_->connected.load(std::memory_order_acquire); }
