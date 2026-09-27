@@ -40,7 +40,8 @@ auto devices = discover(o);  // std::expected<std::vector<DiscoveredDevice>, Ses
 until the timeout (or, with unicast targets, until every target answered). Devices are
 deduplicated by serial number, first ACK wins. `DiscoveredDevice::from` is the address the
 ACK actually came from, which differs from `ip` only in NAT-like setups. An empty result is
-not an error.
+not an error. Unicast targets are answered by the simulator; whether a Mid-360 answers a
+unicast `0x0000` is tracked by [#11](https://github.com/atinfinity/livox-mid360-core/issues/11).
 
 ## `Session`
 

@@ -24,7 +24,10 @@ namespace livox::mid360
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-inline constexpr std::uint16_t kDiscoveryPort = 56000;   ///< LiDAR listens, broadcast only
+/// LiDAR discovery port (`0x0000`). discover() broadcasts to it by default; a unicast to it
+/// (DiscoveryOptions::targets, the Device reconnect path) is answered by the simulator and
+/// is still to be confirmed on hardware (#11).
+inline constexpr std::uint16_t kDiscoveryPort = 56000;
 inline constexpr std::uint16_t kCommandPort = 56100;     ///< LiDAR control command port
 inline constexpr std::uint16_t kPushPort = 56200;        ///< LiDAR-side source port for 0x0102 push
 inline constexpr std::uint16_t kPointCloudPort = 56300;  ///< LiDAR-side source port for point cloud
