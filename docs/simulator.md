@@ -60,14 +60,13 @@ The process is driven over its standard streams so that any test harness can use
 | Control | Fields | Effect |
 |---|---|---|
 | `quit` | | exit with status 0 after emitting `exit` |
-| `silence` | `seconds` | ignore commands and stop streaming for `seconds` (simulates a link drop) |
+| `silence` | `seconds` | simulates a link drop: for `seconds` commands are ignored and nothing is sent, but the LiDAR keeps running, so `udp_cnt`, `frame_cnt`, the push `seq` and the log `trans_index` advance and the host sees a gap afterwards (no catch-up burst). A later `silence` or a reboot only extends it |
 | `hms` | `codes` (≤ 8 ints) | set the HMS code slots reported by 0x800E/0x8011 and the push |
 | `drop_ack` | `count` | do not answer the next `count` requests (the request is still processed) |
 | `fail_cmd` | `cmd_id`, `ret` (default 1), `count` (default 1), `skip` (default 0), `key` (optional) | after letting `skip` of them pass, answer the next `count` requests with this `cmd_id` with `ret` without applying them; with `key` only `0x0100` / `0x0101` requests that name the key match (it is reported as `error_key` of `0x0100`). One rule per `cmd_id` |
 | `inquire_override` | `key`, and one of `value` (hex string, may be empty), `omit`, `unsupported`, `clear` (each `true`) | what `0x0101` answers for `key` from now on: these bytes instead of the stored value, the key left out of the ACK, the whole inquire rejected with `0x20` naming the key, or the normal answer again. The push and `0x0100` are not affected |
-| `reboot` | | reboot silence, counters reset; if the stored key 0x0004 address differs from the bound one, every socket is rebound to it keeping the ports and a `rebound` event is emitted (a failed bind emits `error` and keeps the old sockets) |
-| `set_status` | any of `diag` (u16 bitfield), `core_temp` (0.01 °C), `time_sync_type`, `time_offset_ns`, `last_sync_time`, `powerup_cnt`, `omit_keys` (list of key ids left out of the push) | overwrite the read-only status keys the push and 0x0101 report ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56) / [#55](https://github.com/atinfinity/livox-mid360-core/issues/55)) |
-| `reboot` | | same as receiving 0x0200 |
+| `reboot` | | same as receiving 0x0200: reboot silence, counters reset; if the stored key 0x0004 address differs from the bound one, every socket is rebound to it keeping the ports and a `rebound` event is emitted (a failed bind emits `error` and keeps the old sockets) |
+| `set_status` | any of `diag` (u16 bitfield), `core_temp` (0.01 °C), `time_sync_type`, `time_offset_ns`, `last_sync_time`, `powerup_cnt`, `bad_time_offset` (1: 0x800B answered truncated to 4 bytes), `omit_keys` (list of key ids left out of the push); a value that is not an integer applies nothing | overwrite the read-only status keys the push and 0x0101 report ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56) / [#55](https://github.com/atinfinity/livox-mid360-core/issues/55)) |
 | `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR); `work_tgt_mode` is untouched, so forcing a work substate makes the machine chase the target again |
 | `drop_rate` | `rate` | change the point-cloud drop fraction at run time |
 | `frame_ms` | `ms` | change the `frame_cnt` period at run time (`0` freezes it); the current frame restarts now |
@@ -82,13 +81,14 @@ The process is driven over its standard streams so that any test harness can use
 | `cmd` | `cmd_id`, `seq`, `ret`, `from` | a request was handled |
 | `ack_dropped` | `cmd_id`, `seq` | a request was handled but the ACK withheld (`drop_ack`) |
 | `bad_frame` | `from`, `error` | a datagram failed to parse |
-| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `log`, `debug`, `state` | once per second |
+| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `log`, `debug`, `silenced` (datagrams withheld by a silence), `state` | once per second, also while silent |
 | `log_dropped` | `file_index`, `trans` | a log chunk was withheld (`log_drop`) |
 | `log_ack` | `ret`, `log_type`, `file_index`, `trans` | the host acknowledged a log chunk |
 | `debug_data` | `enabled`, `dest`, `port` (both only when enabled) | `0x0303` switched the debug raw data stream; `port` is its source port |
 | `control` | `cmd` | a control command was applied |
 | `status` | `state`, `sent`, `hosts{pcl,imu,push,log}`, `log_enabled`, `log_acks_received`, `debug_data{enabled,dest,port}` | answer to `status` |
-| `error` | `error` | malformed or unknown control line |
+| `rebound` | `ip`, `ports` | a reboot moved every socket to the key 0x0004 address |
+| `error` | `error` | malformed or unknown control line, or one with a missing or invalid field (nothing of it is applied, the simulator keeps running) |
 | `exit` | `sent` | leaving the main loop |
 
 ## Behaviour
@@ -130,8 +130,11 @@ The process is driven over its standard streams so that any test harness can use
   8 → `0x20`, undefined → `0x03`, in ERROR / UPGRADE → `0x02`); a write during SELFCHECK /
   MOTORSTARTUP is stored and followed afterwards. ERROR / UPGRADE are entered only by `set_state` and left by
   `set_state` or a reboot. Reboot and factory reset go back through SELFCHECK, reset
-  `udp_cnt`/`frame_cnt`/`seq`, and stay silent for `--reboot-silence`. Reboot keeps every
-  setting except `work_tgt_mode`; factory reset restores `factory_settings()`. All durations
+  `udp_cnt`/`frame_cnt`/`seq`, stop the debug raw data stream and stay silent for
+  `--reboot-silence`; the push and log chunks resume after the silence. Reboot keeps every
+  setting except `work_tgt_mode`; factory reset restores `factory_settings()` except key
+  `0x0004`, which goes back to the address the simulator started on (it cannot move to the
+  real factory address 192.168.1.100; after a rebind it moves back). All durations
   and the return codes are assumptions ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 - **Streaming** while SAMPLING: point-cloud packets of 96 points in the configured
   `pcl_data_type` at 2000 pkt/s to the host in key `0x0006`, IMU packets at the `0x002B` rate (200 pkt/s by default) to the
@@ -146,7 +149,8 @@ The process is driven over its standard streams so that any test harness can use
   `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
   `yaw = atan2(y, x)`, `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and
   `90° - theta`. Each packet draws up to 16 batches of 96 points to fill its 96 slots, so a
-  narrow window only slows the generator; an empty window sends packets with `dot_num = 0`.
+  narrow window only slows the generator. `dot_num` is the number of points kept, so a tiny
+  window sends shorter packets and an empty one packets with `dot_num = 0`.
 
 ## Tests
 

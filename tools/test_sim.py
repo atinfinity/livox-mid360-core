@@ -352,6 +352,20 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.pcl_data_type, 1)
         self.assertEqual(self.m.hms, [0] * 8)
 
+    def test_factory_reset_restores_the_factory_lidar_address(self) -> None:
+        self.assertEqual(self.m.settings[sim.KEY_LIDAR_IPCFG][:4], bytes([192, 168, 1, 100]))
+        own = proto.encode_lidar_ipcfg('127.0.0.1', '255.0.0.0', '0.0.0.0')
+        self.m.factory_lidar_ipcfg = own
+        self.m.configure([(sim.KEY_LIDAR_IPCFG, bytes([127, 0, 0, 2]) + own[4:])])
+        self.m.factory_reset(0.0)
+        self.assertEqual(self.m.settings[sim.KEY_LIDAR_IPCFG], own)
+
+    def test_set_status_with_a_bad_value_applies_nothing(self) -> None:
+        with self.assertRaises(ValueError):
+            self.m.set_status({'diag': 7, 'core_temp': 'hot', 'omit_keys': [sim.KEY_HMS]})
+        self.assertEqual(self.m.diag_status, 0)
+        self.assertEqual(self.m.push_omit, set())
+
     def test_gps_time_sets_offset_and_sync_type(self) -> None:
         self.m.set_gps_time(ns=1_000, now_ns=400)
         self.assertEqual(self.m.time_offset_ns, 600)
@@ -414,6 +428,86 @@ class PointSourceTest(unittest.TestCase):
                 seen[k].add(t[k])
         for k, v in seen.items():
             self.assertEqual(v, {0, 1, 2}, k)
+
+
+class SimulatorTest(unittest.TestCase):
+    """Simulator methods called directly, without the main loop."""
+
+    def setUp(self) -> None:
+        args = sim.build_parser().parse_args(['--bind', '127.0.0.1', '--base-port', '0'])
+        self.out = io.StringIO()
+        self.s = sim.Simulator(args, out=self.out, control=None)
+        self.s.model.power_on(time.monotonic())
+        self.s.next_push = self.s.next_stats = time.monotonic() + 1.0  # as run() would
+        self.rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.rx.bind(('127.0.0.1', 0))
+        self.rx.settimeout(3)
+        self.rx_host = ('127.0.0.1', self.rx.getsockname()[1], 0)
+
+    def tearDown(self) -> None:
+        self.rx.close()
+        for s in self.s.socks.values():
+            s.close()
+
+    def events(self) -> list[dict]:
+        return [json.loads(line) for line in self.out.getvalue().splitlines()]
+
+    def test_fov_cropped_packet_announces_the_points_it_carries(self) -> None:
+        m = self.s.model
+        for window, expect_empty in (
+            (proto.encode_fov_cfg(0, 90, -5, 5), False),
+            (proto.encode_fov_cfg(20, 20, 0, 0), True),
+        ):
+            m.configure([(sim.KEY_FOV0, window), (sim.KEY_FOV_EN, b'\x01')])
+            self.s._send_pcl(self.rx_host, 1 / sim.PCL_PACKET_RATE)
+            d, _ = self.rx.recvfrom(2048)
+            pkt = proto.DataPacket.parse(d)  # raises 'bad dot_num' on a mismatch
+            if expect_empty:
+                self.assertEqual(pkt.dot_num, 0)
+            else:
+                self.assertGreater(pkt.dot_num, 0)
+                self.assertTrue(all(m.keeps_point(1, p) for p in pkt.samples()))
+
+    def test_silence_neither_spins_nor_bursts(self) -> None:
+        now = time.monotonic()
+        self.s.next_push = self.s.next_stats = now - 0.2  # overdue when the silence starts
+        self.s.apply_control({'cmd': 'silence', 'seconds': 5})
+        self.s._send_periodic(now)
+        self.assertGreater(self.s._next_deadline(now), now)
+        self.assertEqual(self.s.sent['push'], 0)
+
+    def test_reboot_silence_defers_the_push(self) -> None:
+        now = time.monotonic()
+        self.s.next_push = now - 0.2
+        self.s._do_reboot(now)
+        self.s._send_periodic(now)
+        self.assertGreater(self.s._next_deadline(now), now)
+        self.assertGreaterEqual(self.s.next_push, now + self.s.args.reboot_silence)
+
+    def test_factory_reset_keeps_the_answering_address(self) -> None:
+        self.s._debug_control(True, ('127.0.0.1', self.rx.getsockname()[1]))
+        self.s._do_reboot(time.monotonic(), factory=True)
+        self.assertEqual(self.s.configured_ip(), self.s.lidar_ip())
+        self.assertIsNone(self.s.pending_rebind)
+        self.assertIsNone(self.s.debug_dest)
+        self.assertEqual(self.s.model.pcl_data_type, 1)
+
+    def test_malformed_control_lines_emit_error(self) -> None:
+        for req in (
+            [],
+            {'cmd': 'fail_cmd'},
+            {'cmd': 'fail_cmd', 'cmd_id': 'x'},
+            {'cmd': 'set_state'},
+            {'cmd': 'set_state', 'state': 3},
+            {'cmd': 'hms', 'codes': 5},
+            {'cmd': 'inquire_override', 'key': 1, 'value': 'zz'},
+            {'cmd': 'silence', 'seconds': None},
+        ):
+            self.s.apply_control(req)
+        self.assertTrue(self.s.running)
+        evs = self.events()
+        self.assertEqual([e['event'] for e in evs], ['error'] * 8)
+        self.assertEqual(self.s.fail_cmds, {})
 
 
 class EndToEndTest(unittest.TestCase):
@@ -798,6 +892,27 @@ class EndToEndTest(unittest.TestCase):
         finally:
             host.close()
             other.close()
+
+    def test_silence_is_a_link_drop_that_leaves_a_udp_cnt_gap(self) -> None:
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        pcl = proto.encode_host_ipcfg('127.0.0.1', self.pcl.getsockname()[1], proto.PORT_PCL)
+        ack = self.request(
+            sim.CMD_PARAM_CONFIG, proto.encode_param_config([(sim.KEY_PCL_HOST, pcl)]), cmd
+        )
+        self.assertEqual(ack.data[0], 0)
+        prev = proto.DataPacket.parse(self.pcl.recvfrom(2048)[0]).udp_cnt
+        self.send_control('{"cmd":"silence","seconds":0.3}')
+        deadline = time.monotonic() + 3
+        jumps = []
+        while not jumps and time.monotonic() < deadline:
+            cnt = proto.DataPacket.parse(self.pcl.recvfrom(2048)[0]).udp_cnt
+            if cnt != (prev + 1) & 0xFFFF:
+                jumps.append((cnt - prev) & 0xFFFF)
+            prev = cnt
+        # 0.3 s at 2000 pkt/s were counted but withheld: one gap, no burst of stale ones.
+        self.assertEqual(len(jumps), 1)
+        self.assertGreater(jumps[0], 300)
+        self.assertGreater(self.s.sent['silenced'], 300)
 
     def test_control_lines_written_together_are_all_applied(self) -> None:
         # Two lines in one write land in the pipe together; the second must not be
