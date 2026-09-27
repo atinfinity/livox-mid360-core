@@ -145,6 +145,8 @@ Naming:
 
 - Firmware upgrade commands (`0x04xx`).
 - Mid-360S / Mid-360L specific features (v1 targets the base Mid-360).
+- Multicast reception: the host IP keys can hold a multicast group, but the transport does
+  not join it (`SocketOptions::multicast_group` is reserved; [#112](https://github.com/atinfinity/livox-mid360-core/issues/112)).
 - Platforms other than Ubuntu 24.04+ (macOS builds for development only; Jetson / JetPack 6
   is unsupported until a C++23-capable toolchain is confirmed).
 

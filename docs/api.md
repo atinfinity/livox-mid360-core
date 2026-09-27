@@ -551,8 +551,9 @@ After `reboot()` the ordinary reconnection (below) applies: the old endpoint fai
 is filtered by serial and the Device is re-keyed to the new IP. The Device remembers the
 address it configured and unicasts discovery to `{that ip, ReconnectOptions::discovery_port}`
 (56000 by default) before the user's `discovery_targets` / broadcast, so a move to a subnet
-that broadcast does not reach still recovers. The point / IMU / push destinations are the
-host's and are replayed unchanged.
+that broadcast does not reach still recovers. The simulator answers a unicast `0x0000`; that
+a Mid-360 does is still to be confirmed on hardware ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
+The point / IMU / push destinations are the host's and are replayed unchanged.
 
 | C++ | C |
 | --- | --- |

@@ -210,7 +210,9 @@ The broadcast test only asserts the error category when the runner has no broadc
 
 ## Not in scope (yet)
 
-- Multicast membership (`IP_ADD_MEMBERSHIP`) and `SO_BINDTODEVICE`: names reserved.
+- Multicast membership (`IP_ADD_MEMBERSHIP`): the name is reserved, but multicast reception
+  is not a v1 goal ([protocol_notes.md](protocol_notes.md#variants)).
+- `SO_BINDTODEVICE`: name reserved.
 - `epoll`, `SO_REUSEPORT` multi-thread receive, `io_uring`: revisit if the single-thread
   `recvmmsg` path proves insufficient in the long-run test ([#13](https://github.com/atinfinity/livox-mid360-core/issues/13)).
 - Send batching (`sendmmsg`): command traffic is too light to need it.
