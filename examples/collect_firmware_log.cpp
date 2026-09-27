@@ -24,6 +24,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 
 #include "livox/mid360/mid360.hpp"
 
