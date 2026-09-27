@@ -9,6 +9,7 @@
 #include <fstream>
 #include <stop_token>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "livox/mid360/bytes.hpp"
@@ -600,4 +601,196 @@ TEST_CASE("lvx2 player: open errors", "[lvx2]")
   auto m = missing.open(temp_file("does_not_exist.lvx2"));
   REQUIRE(!m);
   CHECK(m.error().kind == Lvx2Error::Kind::kIo);
+}
+
+// ---- edge branches (issue #101) ----------------------------------------------------------
+
+TEST_CASE("lvx2 writer rejects an unknown data_type", "[lvx2]")
+{
+  const auto path = temp_file("unknown_type.lvx2");
+  const auto info = device_info();
+  Lvx2Writer w;
+  REQUIRE(w.open(path, std::span(&info, 1)));
+  REQUIRE(w.write(0, make_packet(0, 0, 0).view));
+
+  auto bad = make_packet(1, 0, 10 * kMs);
+  bad.view.header.data_type = static_cast<DataType>(7);
+  const auto r = w.write(0, bad.view);
+  REQUIRE(!r);
+  CHECK(r.error().kind == Lvx2Error::Kind::kUnsupportedDataType);
+  CHECK(to_string(r.error()).find("unknown data_type") != std::string::npos);
+  CHECK(w.stats().packets == 1);
+  CHECK(w.stats().ignored == 0);
+
+  // The writer stays usable and the refused packet left nothing in the file.
+  REQUIRE(w.write(0, make_packet(1, 0, 20 * kMs).view));
+  REQUIRE(w.close());
+  Lvx2Reader reader;
+  REQUIRE(reader.open(path));
+  std::vector<std::vector<std::byte>> storage;
+  const auto pk = read_all(reader, storage);
+  REQUIRE(pk.size() == 2);
+  CHECK(pk[0].udp_counter == 0);
+  CHECK(pk[1].udp_counter == 1);
+  CHECK(pk[1].timestamp_ns == 20 * kMs);
+  CHECK_FALSE(reader.truncated());
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("lvx2 reader: file cut inside a package header", "[lvx2]")
+{
+  const auto path = temp_file("partial_header.lvx2");
+  const auto info = device_info();
+  Lvx2Writer w;
+  REQUIRE(w.open(path, std::span(&info, 1)));
+  // One frame (same 50 ms bin) with three packages of 23 + 4 * 14 bytes.
+  for (std::uint16_t i = 0; i < 3; ++i) {
+    REQUIRE(w.write(0, make_packet(i, 0, i * kMs).view));
+  }
+  REQUIRE(w.close());
+  REQUIRE(w.stats().frames == 1);
+  const auto size = std::filesystem::file_size(path);
+  constexpr std::uintmax_t kPoints = 4 * 14;
+  constexpr std::uintmax_t kHeader = 23;
+
+  // `left` bytes of the last package header remain.
+  for (const std::uintmax_t left : {std::uintmax_t{1}, std::uintmax_t{10}, kHeader - 1}) {
+    CAPTURE(left);
+    std::filesystem::resize_file(path, size - kPoints - kHeader + left);
+    Lvx2Reader reader;
+    REQUIRE(reader.open(path));
+    std::vector<std::vector<std::byte>> storage;
+    const auto pk = read_all(reader, storage);
+    REQUIRE(pk.size() == 2);
+    CHECK(pk[1].udp_counter == 1);
+    CHECK(pk[1].points.size() == kPoints);
+    CHECK(reader.truncated());
+    // The end is sticky.
+    const auto again = reader.next_packet();
+    REQUIRE(again.has_value());
+    CHECK_FALSE(again->has_value());
+  }
+
+  // Cut exactly between two packages: nothing is partial inside the frame data, but the
+  // frame is shorter than its header says.
+  std::filesystem::resize_file(path, size - kPoints - kHeader);
+  Lvx2Reader reader;
+  REQUIRE(reader.open(path));
+  std::vector<std::vector<std::byte>> storage;
+  CHECK(read_all(reader, storage).size() == 2);
+  CHECK(reader.truncated());
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("lvx2 player: pacing edge cases", "[lvx2]")
+{
+  const auto path = temp_file("pacing.lvx2");
+  const auto info = device_info();
+  const auto record = [&](const std::vector<std::uint64_t> & times_ms) {
+    Lvx2Writer w;
+    REQUIRE(w.open(path, std::span(&info, 1)));
+    std::uint16_t udp = 0;
+    for (const std::uint64_t t : times_ms) {
+      REQUIRE(w.write(0, make_packet(udp++, 0, t * kMs).view));
+    }
+    REQUIRE(w.close());
+  };
+  const auto elapsed = [](std::chrono::steady_clock::time_point t0) {
+    return std::chrono::steady_clock::now() - t0;
+  };
+
+  SECTION("a timestamp that goes backwards restarts the pacing")
+  {
+    // An hour of recorded time before the jump back: only the 60 + 40 ms around it are
+    // waited for.
+    record({3'600'000, 3'600'030, 3'600'060, 0, 20, 40});
+    Lvx2Player pl;  // rate 1
+    REQUIRE(pl.open(path));
+    std::vector<std::uint64_t> seen;
+    pl.on_packet([&](const Lvx2Packet & p) { seen.push_back(p.timestamp_ns / kMs); });
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto s = pl.run();
+    const auto took = elapsed(t0);
+    REQUIRE(s);
+    CHECK(s->packets == 6);
+    CHECK(s->loops == 1);
+    CHECK(seen == std::vector<std::uint64_t>{3'600'000, 3'600'030, 3'600'060, 0, 20, 40});
+    CHECK(took >= 90ms);
+    CHECK(took < 2s);
+  }
+  SECTION("a stop request ends the pacing sleep")
+  {
+    record({0, 60'000});
+    Lvx2Player pl;
+    REQUIRE(pl.open(path));
+    std::stop_source stop;
+    std::size_t packets = 0;
+    pl.on_packet([&](const Lvx2Packet &) { ++packets; });
+    std::jthread stopper([&] {
+      std::this_thread::sleep_for(150ms);
+      stop.request_stop();
+    });
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto s = pl.run(stop.get_token());
+    const auto took = elapsed(t0);
+    REQUIRE(s);
+    CHECK(took >= 140ms);
+    CHECK(took < 2s);  // the sleep is sliced in 50 ms steps
+    CHECK(s->packets == packets);
+    CHECK(packets >= 1);
+    CHECK(s->loops == 0);  // the pass was not completed
+  }
+  SECTION("a stop requested before run delivers nothing")
+  {
+    record({0, 10});
+    Lvx2Player pl;
+    REQUIRE(pl.open(path));
+    std::stop_source stop;
+    stop.request_stop();
+    const auto s = pl.run(stop.get_token());
+    REQUIRE(s);
+    CHECK(s->packets == 0);
+    CHECK(s->frames == 0);
+    CHECK(s->loops == 0);
+  }
+  SECTION("the file disappears before the next loop")
+  {
+    record({0, 10, 20});
+    Lvx2PlayOptions o;
+    o.rate = 0;
+    o.loop = true;
+    Lvx2Player pl(o);
+    REQUIRE(pl.open(path));
+    std::size_t packets = 0;
+    pl.on_packet([&](const Lvx2Packet &) {
+      if (++packets == 3) {
+        std::filesystem::remove(path);
+      }
+    });
+    const auto s = pl.run();
+    REQUIRE(!s);
+    CHECK(s.error().kind == Lvx2Error::Kind::kIo);
+    CHECK(packets == 3);
+  }
+  SECTION("the file is replaced by garbage before the next loop")
+  {
+    record({0, 10, 20});
+    Lvx2PlayOptions o;
+    o.rate = 0;
+    o.loop = true;
+    Lvx2Player pl(o);
+    REQUIRE(pl.open(path));
+    std::size_t packets = 0;
+    pl.on_packet([&](const Lvx2Packet &) {
+      if (++packets == 3) {
+        std::filesystem::remove(path);
+        std::ofstream(path, std::ios::binary) << "this is not an lvx2 file, not even close";
+      }
+    });
+    const auto s = pl.run();
+    REQUIRE(!s);
+    CHECK(s.error().kind == Lvx2Error::Kind::kBadFile);
+    CHECK(packets == 3);
+  }
+  std::filesystem::remove(path);
 }
