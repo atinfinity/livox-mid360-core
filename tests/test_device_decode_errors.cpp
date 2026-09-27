@@ -206,26 +206,26 @@ TEST_CASE("Device::fov leaves a missing or undecodable key empty", "[sim][device
   f.override_flag(Key::kFovCfg0, "omit");
   f.override_value(Key::kFovCfg1, "0102030405");
   f.override_value(Key::kFovCfgEn, "");
-  auto r = dev->fov();
-  REQUIRE(r.has_value());
-  CHECK_FALSE(r->fov0.has_value());
-  CHECK_FALSE(r->fov1.has_value());
-  CHECK_FALSE(r->enable.has_value());
+  const auto mixed = dev->fov();
+  REQUIRE(mixed.has_value());
+  CHECK_FALSE(mixed->fov0.has_value());
+  CHECK_FALSE(mixed->fov1.has_value());
+  CHECK_FALSE(mixed->enable.has_value());
 
   f.override_value(Key::kFovCfg0, "0102");
   f.override_flag(Key::kFovCfg1, "omit");
   f.override_flag(Key::kFovCfgEn, "omit");
-  r = dev->fov();
-  REQUIRE(r.has_value());
-  CHECK_FALSE(r->fov0.has_value());
-  CHECK_FALSE(r->fov1.has_value());
-  CHECK_FALSE(r->enable.has_value());
+  const auto swapped = dev->fov();
+  REQUIRE(swapped.has_value());
+  CHECK_FALSE(swapped->fov0.has_value());
+  CHECK_FALSE(swapped->fov1.has_value());
+  CHECK_FALSE(swapped->enable.has_value());
 
   f.override_flag(Key::kFovCfg0, "clear");
-  r = dev->fov();
-  REQUIRE(r.has_value());
-  CHECK(r->fov0.has_value());
-  CHECK_FALSE(r->fov1.has_value());
+  const auto restored = dev->fov();
+  REQUIRE(restored.has_value());
+  CHECK(restored->fov0.has_value());
+  CHECK_FALSE(restored->fov1.has_value());
 }
 
 TEST_CASE("Device::time_sync_status names the key it could not decode", "[sim][device]")
