@@ -3,7 +3,7 @@
 // Livox support asks for ("debug raw data" in the protocol document, "debug point cloud" in
 // Livox-SDK2). The stream itself is opaque to this SDK. The request layout follows the
 // protocol document rev v1.4.12; ports and behaviour follow Livox-SDK2 and are unverified on
-// hardware (#11). Unrelated to the firmware log (firmware_log.hpp).
+// hardware (#106). Unrelated to the firmware log (firmware_log.hpp).
 #pragma once
 
 #include <array>

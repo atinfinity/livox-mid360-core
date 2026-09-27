@@ -8,7 +8,8 @@ Python reference implementation and helpers. No third-party packages required (P
 | `gen_golden_vectors.py` | Regenerates `tests/generated/golden_vectors.hpp` from the Python implementation. Run after changing either implementation intentionally. |
 | `livox_mid360_pcap.py` | Decodes classic pcap captures of Mid-360 traffic (control frames, push, point cloud, IMU) to JSON/CSV and counts `udp_cnt` gaps. |
 | `livox_mid360_sim.py` | Mid-360 simulator: control commands, work-state machine, point-cloud/IMU/push streaming, JSON control channel on stdin. See `docs/simulator.md`. |
-| `cli/` | C++ `livox-mid360-cli` (`record` to lvx2 / `replay`), built with `LIVOX_MID360_BUILD_TOOLS`. See `docs/lvx2.md`. |
+| `cli/` | C++ `livox-mid360-cli` (`record` to lvx2 / `replay`, `debug-data`), built with `LIVOX_MID360_BUILD_TOOLS`. See `docs/lvx2.md` and `docs/debug_data.md`. |
+| `livox_mid360_debug_data.py` | Reads the file written by `livox-mid360-cli debug-data`. See `docs/debug_data.md`. |
 | `test_sim.py` | `unittest` suite for the simulator (`python3 -m unittest tools/test_sim.py`). |
 
 ```sh

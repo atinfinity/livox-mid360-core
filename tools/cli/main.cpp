@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // livox-mid360-cli: `record` writes the packet stream of one LiDAR to an lvx2 file, `replay`
-// plays such a file back through the frame assembler (issue #35, docs/lvx2.md).
+// plays such a file back through the frame assembler (issue #35, docs/lvx2.md), `debug-data`
+// collects the debug raw data stream (issue #93, docs/debug_data.md).
 #include <csignal>
 #include <cstring>
 #include <exception>
@@ -50,6 +51,8 @@ void usage()
                "         [--duration SECONDS] [--force]\n"
                "  replay FILE.lvx2 [--rate X] [--loop] [--frame-mode counter|window]\n"
                "         [--window-ms N] [--quiet]\n"
+               "  debug-data --out FILE [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] [--sn SN]\n"
+               "         [--duration SECONDS] [--port N] [--start-sampling] [--max-size BYTES]\n"
                "  --version | --help\n";
 }
 
@@ -70,6 +73,9 @@ int run(int argc, char ** argv)
   }
   if (cmd == "record") {
     return cli::run_record(argc - 2, argv + 2);
+  }
+  if (cmd == "debug-data") {
+    return cli::run_debug_data(argc - 2, argv + 2);
   }
   if (cmd == "replay") {
     return cli::run_replay(argc - 2, argv + 2);

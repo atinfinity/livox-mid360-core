@@ -4,7 +4,7 @@ Issue [#35](https://github.com/atinfinity/livox-mid360-core/issues/35) adds an l
 CLI (`livox-mid360-cli`, `tools/cli/`) that records the raw point-cloud packet stream of one
 Mid-360 to a `.lvx2` file and replays such a file through the same frame assembly the
 `Device` uses. Design decisions are recorded on issue [#35](https://github.com/atinfinity/livox-mid360-core/issues/35); the items that still need a real
-Livox Viewer 2 are listed on [#12](https://github.com/atinfinity/livox-mid360-core/issues/12).
+Livox Viewer 2 are listed on [#108](https://github.com/atinfinity/livox-mid360-core/issues/108).
 
 ## File layout
 
@@ -49,7 +49,7 @@ mid-frame (e.g. a recording that was killed) yields every complete package and t
 
 ## Unverified against Livox Viewer 2
 
-The simulator is the only "device" this has been run against. Tracked on [#12](https://github.com/atinfinity/livox-mid360-core/issues/12):
+The simulator is the only "device" this has been run against. Tracked on [#108](https://github.com/atinfinity/livox-mid360-core/issues/108):
 
 - whether Viewer 2 requires `lidar_id` to be the SDK2 handle (IP as `u32`) or accepts any value;
 - meaning of `lidar_type` (the spec calls it reserved);

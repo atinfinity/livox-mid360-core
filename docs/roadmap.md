@@ -47,7 +47,7 @@ simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-6
   clang-format / clang-tidy / ruff lint ([#17](https://github.com/atinfinity/livox-mid360-core/issues/17)); coverage on Codecov ([#18](https://github.com/atinfinity/livox-mid360-core/issues/18)); arm64 CI ([#19](https://github.com/atinfinity/livox-mid360-core/issues/19)).
 - **Documentation**: [architecture.md](architecture.md) (overview), [api.md](api.md),
   [transport.md](transport.md), [session.md](session.md), [simulator.md](simulator.md),
-  [protocol_notes.md](protocol_notes.md).
+  [protocol_notes.md](protocol_notes.md), [lvx2.md](lvx2.md), [debug_data.md](debug_data.md).
 
 ## Phase 2: in progress
 
@@ -80,6 +80,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
 
 - [#42](https://github.com/atinfinity/livox-mid360-core/issues/42) SDK logging: level control, console suppression, file / stderr sinks: **done** (C ABI mirror with phase 3)
 - [#44](https://github.com/atinfinity/livox-mid360-core/issues/44) firmware log collection (`0x03xx`, port 56500) API and sample: **done** (`examples/collect_firmware_log.cpp`)
+- [#93](https://github.com/atinfinity/livox-mid360-core/issues/93) debug raw data collection (`0x0303`): **done** (`debug_data.hpp`, `Device::start_debug_data()`, `livox-mid360-cli debug-data`, [debug_data.md](debug_data.md))
 - [#34](https://github.com/atinfinity/livox-mid360-core/issues/34) decoded point tag accessors (noise confidence per field): **done**
 - [#35](https://github.com/atinfinity/livox-mid360-core/issues/35) lvx2 record / replay CLI — done: `lvx2.hpp` codec + `livox-mid360-cli` (`tools/cli/`), docs/lvx2.md
 - [#43](https://github.com/atinfinity/livox-mid360-core/issues/43) minimal point-cloud and IMU receive sample: **done** (`examples/minimal_receive.cpp`)
@@ -91,9 +92,14 @@ Everything so far was validated against the simulator only. The assumptions to c
 listed in [simulator.md](simulator.md) and [protocol_notes.md](protocol_notes.md).
 
 - [#10](https://github.com/atinfinity/livox-mid360-core/issues/10) capture pcaps and add them as test fixtures
-- [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) verify open questions (`dev_type`, reserved / `pack_info` fields, minimum firmware)
+- [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) tracking issue: verify the unverified protocol assumptions (`dev_type`, return codes, work states, settings keys, firmware log, minimum firmware)
 - [#12](https://github.com/atinfinity/livox-mid360-core/issues/12) verify recovery from disconnect / reboot and multi-device operation
 - [#13](https://github.com/atinfinity/livox-mid360-core/issues/13) long-run reception test and comparison with Livox Viewer 2
+- [#110](https://github.com/atinfinity/livox-mid360-core/issues/110) first end-to-end run of the examples and the CLI
+- [#106](https://github.com/atinfinity/livox-mid360-core/issues/106) debug raw data collection (`0x0303`); [#107](https://github.com/atinfinity/livox-mid360-core/issues/107) SDK2-compatible file
+- [#108](https://github.com/atinfinity/livox-mid360-core/issues/108) lvx2 interchange with Livox Viewer 2
+- [#109](https://github.com/atinfinity/livox-mid360-core/issues/109) time synchronisation (PTP / gPTP / GPS)
+- [#111](https://github.com/atinfinity/livox-mid360-core/issues/111) provoke and record HMS codes
 
 ## Phase 3: not started
 
