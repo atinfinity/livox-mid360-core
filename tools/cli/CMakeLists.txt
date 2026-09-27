@@ -6,8 +6,10 @@ install(TARGETS livox-mid360-cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(LIVOX_MID360_BUILD_TESTS)
   # record 2 s from the simulator, then replay the file at full speed and compare the counts.
+  # Shares the simulator's default ports with the example tests, hence the lock.
   add_test(NAME cli_record_replay
     COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_record_replay.sh $<TARGET_FILE:livox-mid360-cli>
       ${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py ${CMAKE_CURRENT_BINARY_DIR}/record_replay.lvx2)
-  set_tests_properties(cli_record_replay PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+  set_tests_properties(cli_record_replay PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+    RESOURCE_LOCK sim_default_ports)
 endif()
