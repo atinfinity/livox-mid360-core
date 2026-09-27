@@ -2,7 +2,7 @@
 
 Where `livox-mid360-core` stands, what is planned and which issues track each item.
 Last updated 2026-09-26 (version 0.1.0, after the merge of the reconnection work in
-PR #37). Open issues carry the labels `no-hardware` (doable against the simulator),
+PR [#37](https://github.com/atinfinity/livox-mid360-core/pull/37)). Open issues carry the labels `no-hardware` (doable against the simulator),
 `needs-hardware` (requires a real Mid-360) and `phase-2` / `phase-3`.
 
 ## Phases
@@ -24,27 +24,27 @@ simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-6
   types 0–3, per-point timestamp interpolation, tag decoding); key-value lists for `0x0100`
   configure / `0x0101` inquire / `0x0102` push with typed codecs for every documented key;
   HMS diagnostic-code decoding with the official description table. A Python reference
-  implementation in `tools/` shares byte-exact golden vectors with the C++ tests (#1).
+  implementation in `tools/` shares byte-exact golden vectors with the C++ tests ([#1](https://github.com/atinfinity/livox-mid360-core/pull/1)).
 - **UDP transport** (`transport.hpp`): non-blocking IPv4 sockets, batched receive (`recvmmsg`
   on Linux) with kernel receive timestamps, a `poll`-based `Poller` with cross-thread wake-up
-  (#2).
+  ([#2](https://github.com/atinfinity/livox-mid360-core/issues/2)).
 - **LiDAR simulator** (`tools/livox_mid360_sim.py`, stdlib-only Python): answers commands,
   runs the work-state machine, streams point-cloud / IMU / push packets and takes JSON control
-  commands for fault injection (#3).
+  commands for fault injection ([#3](https://github.com/atinfinity/livox-mid360-core/issues/3)).
 - **Session layer** (`session.hpp`): broadcast / unicast discovery, synchronous command
   round-trips with seq-matched retries and timeouts, typed configure / inquire / reboot
-  helpers, work-state polling, cross-thread cancellation (#4). Host setup flow: host IP and
-  ports, IMU on/off, work mode (#5).
+  helpers, work-state polling, cross-thread cancellation ([#4](https://github.com/atinfinity/livox-mid360-core/issues/4)). Host setup flow: host IP and
+  ports, IMU on/off, work mode ([#5](https://github.com/atinfinity/livox-mid360-core/issues/5)).
 - **Device layer** (`context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`): a `Context` owns
   the host receive sockets and one receive thread that dispatches by source IP; a `Device`
   wraps a `Session`, applies the host setup and delivers packets, assembled `Frame`s (frame
   counter or time window, `udp_cnt` drop counting, timestamp policies) and IMU samples through
-  callbacks; `BoundedQueue<T>` hands them to another thread (#6, #9). Push handling: stats,
-  work-state and HMS events from the `0x0102` push (#7). Automatic reconnection after a cable
+  callbacks; `BoundedQueue<T>` hands them to another thread ([#6](https://github.com/atinfinity/livox-mid360-core/issues/6), [#9](https://github.com/atinfinity/livox-mid360-core/issues/9)). Push handling: stats,
+  work-state and HMS events from the `0x0102` push ([#7](https://github.com/atinfinity/livox-mid360-core/issues/7)). Automatic reconnection after a cable
   pull or reboot (`ReconnectOptions`) and several LiDARs sharing one `Context`
-  (`Context::find()` by serial) (#8).
-- **Quality gates**: fuzzers for the protocol, transport and session layers (#24, #28);
-  clang-format / clang-tidy / ruff lint (#17); coverage on Codecov (#18); arm64 CI (#19).
+  (`Context::find()` by serial) ([#8](https://github.com/atinfinity/livox-mid360-core/issues/8)).
+- **Quality gates**: fuzzers for the protocol, transport and session layers ([#24](https://github.com/atinfinity/livox-mid360-core/issues/24), [#28](https://github.com/atinfinity/livox-mid360-core/issues/28));
+  clang-format / clang-tidy / ruff lint ([#17](https://github.com/atinfinity/livox-mid360-core/issues/17)); coverage on Codecov ([#18](https://github.com/atinfinity/livox-mid360-core/issues/18)); arm64 CI ([#19](https://github.com/atinfinity/livox-mid360-core/issues/19)).
 - **Documentation**: [architecture.md](architecture.md) (overview), [api.md](api.md),
   [transport.md](transport.md), [session.md](session.md), [simulator.md](simulator.md),
   [protocol_notes.md](protocol_notes.md).
@@ -54,46 +54,46 @@ simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-6
 ### Typed configuration and status APIs on `Device`
 
 The generic `Device::set<K>()` / `get<K>()` / `set_many` / `get_many` over `key_traits<K>`
-(#57, done) are the primary API; the dedicated methods below are implemented as thin wrappers
+([#57](https://github.com/atinfinity/livox-mid360-core/issues/57), done) are the primary API; the dedicated methods below are implemented as thin wrappers
 over them and only add what the raw key does not express (waits, combined keys, events).
 
-- #38 firmware type and version query (`Device::identity()`, `lidar_info.hpp`): **done**
-- #39 FOV configuration and enable (`set_fov()` / `fov()`, `HostSetup::fov`): **done**
-- #40 coordinate format, scan pattern and point-cloud frame rate (`set_point_format()`,
+- [#38](https://github.com/atinfinity/livox-mid360-core/issues/38) firmware type and version query (`Device::identity()`, `lidar_info.hpp`): **done**
+- [#39](https://github.com/atinfinity/livox-mid360-core/issues/39) FOV configuration and enable (`set_fov()` / `fov()`, `HostSetup::fov`): **done**
+- [#40](https://github.com/atinfinity/livox-mid360-core/issues/40) coordinate format, scan pattern and point-cloud frame rate (`set_point_format()`,
   `set_scan_pattern()`, `set_frame_policy()`; no frame-rate key on the Mid-360): **done**
-- #41 read-back of stored settings and live status (`settings()` / `status()` / `pushed_status()`): **done**
-- #46 detection mode (normal / sensitive, key `0x0018`; `set_detect_mode()`): **done**
-- #47 IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range;
+- [#41](https://github.com/atinfinity/livox-mid360-core/issues/41) read-back of stored settings and live status (`settings()` / `status()` / `pushed_status()`): **done**
+- [#46](https://github.com/atinfinity/livox-mid360-core/issues/46) detection mode (normal / sensitive, key `0x0018`; `set_detect_mode()`): **done**
+- [#47](https://github.com/atinfinity/livox-mid360-core/issues/47) IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range;
   `set_imu_enabled()`, `set_imu_sensor_config()`): **done**
-- #50 LiDAR network config (key `0x0004`) with reboot-required handling — **done**
-- #51 install attitude / extrinsics (key `0x0012`) and optional host-side transform — **done**
-- #52 function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs) — **done**
-- #53 time-sync status read-back (`0x8009`–`0x800C`) and `set_gps_time` integration with
+- [#50](https://github.com/atinfinity/livox-mid360-core/issues/50) LiDAR network config (key `0x0004`) with reboot-required handling — **done**
+- [#51](https://github.com/atinfinity/livox-mid360-core/issues/51) install attitude / extrinsics (key `0x0012`) and optional host-side transform — **done**
+- [#52](https://github.com/atinfinity/livox-mid360-core/issues/52) function IO config (key `0x0019`: PPS / GPS inputs, safety-zone outputs) — **done**
+- [#53](https://github.com/atinfinity/livox-mid360-core/issues/53) time-sync status read-back (`0x8009`–`0x800C`) and `set_gps_time` integration with
   `TimestampPolicy` — **done**
-- #54 time filter (key `0x0026`; `set_time_filter()`): **done**
-- #55 diag status (key `0x800E`) read-back and change event
-- #56 typed snapshot of the full `0x0102` push payload and optional `on_push` callback
-- #57 generic typed key access (`set<Key>` / `get<Key>`, batched) over the `keys.hpp` codecs: **done**
-- #58 typed `DeviceType` from the discovery ACK (needs hardware to confirm values)
+- [#54](https://github.com/atinfinity/livox-mid360-core/issues/54) time filter (key `0x0026`; `set_time_filter()`): **done**
+- [#55](https://github.com/atinfinity/livox-mid360-core/issues/55) diag status (key `0x800E`) read-back and change event
+- [#56](https://github.com/atinfinity/livox-mid360-core/issues/56) typed snapshot of the full `0x0102` push payload and optional `on_push` callback
+- [#57](https://github.com/atinfinity/livox-mid360-core/issues/57) generic typed key access (`set<Key>` / `get<Key>`, batched) over the `keys.hpp` codecs: **done**
+- [#58](https://github.com/atinfinity/livox-mid360-core/issues/58) typed `DeviceType` from the discovery ACK (needs hardware to confirm values)
 
 ### Diagnostics, tooling and samples
 
-- #42 SDK logging: level control, console suppression, file / stderr sinks: **done** (C ABI mirror with phase 3)
-- #44 firmware log collection (`0x03xx`, port 56500) API and sample: **done** (`examples/collect_firmware_log.cpp`)
-- #34 decoded point tag accessors (noise confidence per field): **done**
-- #35 lvx2 record / replay CLI — done: `lvx2.hpp` codec + `livox-mid360-cli` (`tools/cli/`), docs/lvx2.md
-- #43 minimal point-cloud and IMU receive sample: **done** (`examples/minimal_receive.cpp`)
-- #45 simulator: verify the `work_tgt_mode` list and transitions and model them faithfully
+- [#42](https://github.com/atinfinity/livox-mid360-core/issues/42) SDK logging: level control, console suppression, file / stderr sinks: **done** (C ABI mirror with phase 3)
+- [#44](https://github.com/atinfinity/livox-mid360-core/issues/44) firmware log collection (`0x03xx`, port 56500) API and sample: **done** (`examples/collect_firmware_log.cpp`)
+- [#34](https://github.com/atinfinity/livox-mid360-core/issues/34) decoded point tag accessors (noise confidence per field): **done**
+- [#35](https://github.com/atinfinity/livox-mid360-core/issues/35) lvx2 record / replay CLI — done: `lvx2.hpp` codec + `livox-mid360-cli` (`tools/cli/`), docs/lvx2.md
+- [#43](https://github.com/atinfinity/livox-mid360-core/issues/43) minimal point-cloud and IMU receive sample: **done** (`examples/minimal_receive.cpp`)
+- [#45](https://github.com/atinfinity/livox-mid360-core/issues/45) simulator: verify the `work_tgt_mode` list and transitions and model them faithfully
 
 ### Hardware verification (`needs-hardware`)
 
 Everything so far was validated against the simulator only. The assumptions to confirm are
 listed in [simulator.md](simulator.md) and [protocol_notes.md](protocol_notes.md).
 
-- #10 capture pcaps and add them as test fixtures
-- #11 verify open questions (`dev_type`, reserved / `pack_info` fields, minimum firmware)
-- #12 verify recovery from disconnect / reboot and multi-device operation
-- #13 long-run reception test and comparison with Livox Viewer 2
+- [#10](https://github.com/atinfinity/livox-mid360-core/issues/10) capture pcaps and add them as test fixtures
+- [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) verify open questions (`dev_type`, reserved / `pack_info` fields, minimum firmware)
+- [#12](https://github.com/atinfinity/livox-mid360-core/issues/12) verify recovery from disconnect / reboot and multi-device operation
+- [#13](https://github.com/atinfinity/livox-mid360-core/issues/13) long-run reception test and comparison with Livox Viewer 2
 
 ## Phase 3: not started
 
@@ -104,7 +104,7 @@ listed in [simulator.md](simulator.md) and [protocol_notes.md](protocol_notes.md
 - **C ABI**: the mapping table is in [api.md](api.md#c-abi-mapping-phase-3); all output
   structs are already plain data with `static_assert`s in `tests/test_api_skeleton.cpp`.
 - **CLI** (`livox-mid360-cli`, separate repository): discovery, configuration, lvx2 record /
-  replay (#35 started this inside `tools/cli/`: `livox-mid360-cli record` / `replay`).
+  replay ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35) started this inside `tools/cli/`: `livox-mid360-cli record` / `replay`).
 - **ROS 2 driver** (`livox-mid360-ros2`, separate repository): rclcpp composable node
   `livox_mid360_driver` in package `livox_mid360_ros2`, publishing output compatible with
   `livox_ros_driver2` (`PointXYZRTLT` point cloud and `CustomMsg`: x, y, z, intensity, tag,
@@ -122,10 +122,10 @@ Fixed in phase 0 (2026-09-25) and not expected to change within v1.
 | Device scope | Base Mid-360 only. Mid-360S / Mid-360L keys (`speed_mode` `0x0021`, `pc_freq_mod` `0x0029`) are listed in the key enum but get no typed helpers. |
 | Language standard | C++20 code built with `-std=c++23`, because `std::expected` is only enabled under C++23 in libstdc++ and libc++. Clang 18 with libstdc++ cannot use `<expected>`, so Clang 19+ is required. |
 | Platform | Ubuntu 24.04 and later only. No Windows, no Ubuntu 18.04 / 20.04 / 22.04. |
-| Minimum firmware | Undecided. Firmware v13.18.0244 is the baseline for hardware verification (#11). |
+| Minimum firmware | Undecided. Firmware v13.18.0244 is the baseline for hardware verification ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). |
 | Tests | Catch2 v3 from apt when available, otherwise FetchContent. |
 | Repository split | Core library here; ROS 2 driver and CLI in sister repositories `livox-mid360-ros2` and `livox-mid360-cli`. |
-| Lint | `.clang-format` (ROS 2 style: a verbatim copy of the `ament_clang_format` configuration, #63), `.clang-tidy` and `pyproject.toml` (ruff configured to match `ament_flake8` / `ament_pep257`, #64) are shared with `livox-mid360-ros2` through `ament_clang_format --config` (ruff has no ament equivalent; the ROS 2 side uses the `ament_flake8` / `ament_pep257` defaults, which the ruff configuration matches). Of `ament_lint_common`, only `ament_cppcheck` and `ament_lint_cmake` run here (#65); the driver's `colcon test` never lints this library. Not adopted: `ament_cpplint` (tool limitations, its real findings fixed once), `ament_copyright` (files keep the one-line SPDX header; the driver repository uses the ROS 2 header format), `ament_uncrustify` (the driver package uses `ament_cmake_clang_format` with this repository's `.clang-format`). |
+| Lint | `.clang-format` (ROS 2 style: a verbatim copy of the `ament_clang_format` configuration, [#63](https://github.com/atinfinity/livox-mid360-core/issues/63)), `.clang-tidy` and `pyproject.toml` (ruff configured to match `ament_flake8` / `ament_pep257`, [#64](https://github.com/atinfinity/livox-mid360-core/issues/64)) are shared with `livox-mid360-ros2` through `ament_clang_format --config` (ruff has no ament equivalent; the ROS 2 side uses the `ament_flake8` / `ament_pep257` defaults, which the ruff configuration matches). Of `ament_lint_common`, only `ament_cppcheck` and `ament_lint_cmake` run here ([#65](https://github.com/atinfinity/livox-mid360-core/issues/65)); the driver's `colcon test` never lints this library. Not adopted: `ament_cpplint` (tool limitations, its real findings fixed once), `ament_copyright` (files keep the one-line SPDX header; the driver repository uses the ROS 2 header format), `ament_uncrustify` (the driver package uses `ament_cmake_clang_format` with this repository's `.clang-format`). |
 | Trademark | The README states up front that the project is unofficial and unaffiliated with Livox / DJI. |
 
 Naming:

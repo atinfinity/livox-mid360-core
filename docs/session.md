@@ -142,4 +142,4 @@ IDLE and back to SAMPLING, the default host address, and the rejection / invalid
 ## Not covered here (phase 2)
 
 Receive threads, `0x0102` push handling, reconnection after reboot and multi-device
-management are layered on top by the device layer (docs/api.md, #9; implemented in #6, #7 and #8).
+management are layered on top by the device layer (docs/api.md, [#9](https://github.com/atinfinity/livox-mid360-core/issues/9); implemented in [#6](https://github.com/atinfinity/livox-mid360-core/issues/6), [#7](https://github.com/atinfinity/livox-mid360-core/issues/7) and [#8](https://github.com/atinfinity/livox-mid360-core/issues/8)).

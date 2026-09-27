@@ -36,7 +36,7 @@ build/examples/minimal_receive --lidar-ip 127.0.0.1 --host-ip 127.0.0.1 --second
 
 ## collect_firmware_log
 
-`collect_firmware_log.cpp` collects the LiDAR's own firmware log (#44): `Device::open` →
+`collect_firmware_log.cpp` collects the LiDAR's own firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)): `Device::open` →
 `on_firmware_log` → `start_firmware_log`, one output file per firmware log file, a progress
 line per second on stdout (`file 1: N bytes, M chunks, G gaps`), events (including
 `firmware_log_gap`) on stderr, `stop_firmware_log` and a summary on exit.

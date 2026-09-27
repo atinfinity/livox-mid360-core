@@ -4,9 +4,9 @@
 
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions
 are recorded in [issue #9](https://github.com/atinfinity/livox-mid360-core/issues/9); this page
-describes the resulting shape. The data path (#6: receive thread, dispatch, frames, IMU,
-drop counting, `kStats`), push handling (#7: `work_state()`, `hms()`, `kStateChanged`,
-`kHms`) and reconnection / multi-device (#8: `kDisconnected`, `kReconnected`,
+describes the resulting shape. The data path ([#6](https://github.com/atinfinity/livox-mid360-core/issues/6): receive thread, dispatch, frames, IMU,
+drop counting, `kStats`), push handling ([#7](https://github.com/atinfinity/livox-mid360-core/issues/7): `work_state()`, `hms()`, `kStateChanged`,
+`kHms`) and reconnection / multi-device ([#8](https://github.com/atinfinity/livox-mid360-core/issues/8): `kDisconnected`, `kReconnected`,
 `ReconnectOptions`, `Context::find()`) are implemented and the headers are part of
 `mid360.hpp`.
 
@@ -100,7 +100,7 @@ to C function pointers.
 | `on_frame` | `(Frame &&)` | ownership transferred |
 | `on_imu` | `(const ImuData &)` | trivially copyable |
 | `on_event` | `(const Event &)` | trivially copyable |
-| `on_push` | `(const LidarStatus &)` | the merged snapshot of every 0x0102 push (#56) |
+| `on_push` | `(const LidarStatus &)` | the merged snapshot of every 0x0102 push ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56)) |
 
 `on_packet` is the raw tier: every accepted point-cloud or IMU packet (parsed, CRC checked when
 `DeviceOptions::verify_crc` is on; never a push), before frame assembly, with the kernel
@@ -117,7 +117,7 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   same semantics as livox_ros_driver2's `CustomPoint`. Mid-360 has no physical scan lines, so
   `line = sample index % 4` as the official driver does. `offset_ns` is relative to
   `Frame::base_time_ns`. The raw `tag` byte is decoded by `tag_info()`, `adjacent_glue()`,
-  `particles()`, `other()` and `is_noise()` (issue #34; `tag.hpp` has the free
+  `particles()`, `other()` and `is_noise()` (issue [#34](https://github.com/atinfinity/livox-mid360-core/issues/34); `tag.hpp` has the free
   `decode_tag()` / `is_noise()` and `to_string`). Each 2-bit field is a `TagConfidence`
   that the point is a normal return: `kHigh` 0, `kMedium` 1, `kLow` 2, `kReserved` 3.
 
@@ -178,7 +178,7 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
   sockets, `recv_batch` (`ContextOptions::batch_size` datagrams, up to 8 batches per socket
   per wake-up so one socket cannot starve the others), dispatch by source IP against a
   snapshot of the registry (`mutex + vector<{ip, Device*}>` plus a generation counter). The
-  push socket is only counted until #7. Unregistering removes the entry, bumps the generation,
+  push socket is only counted until [#7](https://github.com/atinfinity/livox-mid360-core/issues/7). Unregistering removes the entry, bumps the generation,
   wakes the poller and waits on a condition variable until the thread has taken a new
   snapshot, so no callback of the removed Device is in flight afterwards. The poll timeout is
   the earliest of the Devices' timers (idle frame close, next `kStats`) and 100 ms, on
@@ -188,7 +188,7 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
   Mid-360 is a non-repetitive scanner and the wiki marks `frame_cnt` invalid for that, so if
   the counter has not changed for `2 × window` since the first packet the assembler falls back
   to the time window and counts it in `DeviceStats::frame_cnt_fallback` (to be checked on
-  hardware, #11).
+  hardware, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 - **Time window mode**: packets are never split; a packet whose first point is at or past
   `base_time_ns + window` starts a new frame. `base_time_ns` is the first point of the first
   packet of the frame.
@@ -212,10 +212,10 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
 
 ## Typed key access
 
-`Device::set<K>()` / `get<K>()` (issue #57) read and write one key with its C++ type;
+`Device::set<K>()` / `get<K>()` (issue [#57](https://github.com/atinfinity/livox-mid360-core/issues/57)) read and write one key with its C++ type;
 `set_many<K...>()` / `get_many<K...>()` do the same for several keys in one 0x0100 / 0x0101.
 The mapping from `Key` to type is `key_traits<K>` in `keys.hpp` (`key_value_t<K>` for the type,
-concepts `typed_key<K>` / `writable_key<K>`). The dedicated APIs of #38–#56 (FOV, IMU config,
+concepts `typed_key<K>` / `writable_key<K>`). The dedicated APIs of [#38](https://github.com/atinfinity/livox-mid360-core/issues/38)–[#56](https://github.com/atinfinity/livox-mid360-core/issues/56) (FOV, IMU config,
 network config, ...) are thin wrappers over these; use `set<K>` directly when no wrapper exists
 yet, and the raw `configure()` / `inquire()` for keys chosen at run time.
 
@@ -265,7 +265,7 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 
 ## Identity, settings and status
 
-`lidar_info.hpp` (issues #38 / #41) aggregates the read-only keys into plain structs. Each has
+`lidar_info.hpp` (issues [#38](https://github.com/atinfinity/livox-mid360-core/issues/38) / [#41](https://github.com/atinfinity/livox-mid360-core/issues/41)) aggregates the read-only keys into plain structs. Each has
 a key list, a decoder over any parsed key-value list (an `InquireResult` or a 0x0102 push) and a
 one-line `to_string()` with the wire key names (`name=value`, greppable in logs).
 
@@ -292,14 +292,14 @@ if (id) {
   the decoded slots and `time_ns` the host time (CLOCK_REALTIME) at which the ACK arrived.
   `to_string()` prints `core_temp` in °C and only the active HMS codes
   (`hms=[0x0103800a:warning]`); `time_ns` is not printed.
-- `pushed_status()` is the same struct fed by the 0x0102 push (#56): the receive thread
+- `pushed_status()` is the same struct fed by the 0x0102 push ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56)): the receive thread
   decodes every status key of each push and merges it into the snapshot, so a key a push
   omits keeps the value an earlier push carried and a field is empty only until the first
   push that carries it. `time_ns` is the receive time of the last push. Kept under the push
   lock, returned without a round trip, `nullopt` before the first push; not cleared by a
   reconnect. `work_state()` and `hms()` are views of it. Which keys the real push carries is
-  unverified (#11); the simulator pushes all read-only keys.
-- `DiagStatus` (key 0x800E, #55) is four `DiagLevel` nibbles (`system`, `scan`, `ranging`,
+  unverified ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the simulator pushes all read-only keys.
+- `DiagStatus` (key 0x800E, [#55](https://github.com/atinfinity/livox-mid360-core/issues/55)) is four `DiagLevel` nibbles (`system`, `scan`, `ranging`,
   `communication`; `kNormal` .. `kSafetyError`, meanings unverified on hardware) with
   `worst()` / `normal()` and `operator==`. `diag_status()` inquires it; the pushed value is
   `pushed_status()->lidar_diag_status`.
@@ -320,7 +320,7 @@ if (cfg && cfg->fov_cfg_en && cfg->fov_cfg_en->fov0) { /* FOV 0 in use */ }
 
 ## FOV
 
-`Device::set_fov()` / `fov()` (issue #39) bundle the three FOV keys 0x0015 (`fov_cfg0`),
+`Device::set_fov()` / `fov()` (issue [#39](https://github.com/atinfinity/livox-mid360-core/issues/39)) bundle the three FOV keys 0x0015 (`fov_cfg0`),
 0x0016 (`fov_cfg1`) and 0x0017 (`fov_cfg_en`) into `FovSettings`, three optionals. Both
 windows are always stored by the LiDAR; the enable mask says which of them crop the point
 cloud.
@@ -341,7 +341,7 @@ if (cur) { LOG(to_string(*cur)); }            // fov0=yaw0-90/pitch-5-5 fov1=...
   validates before any I/O: no field at all → `kInvalidArgument` without `key`; a window
   outside `fov_in_range()` (yaw in [0, 360), pitch in (-10, 60), the wiki ranges) →
   `kInvalidArgument` with `key` naming the window. Equal or reversed start / stop values pass:
-  what the LiDAR makes of a wrapped or empty window is unverified (#11). `rsvd` is sent as
+  what the LiDAR makes of a wrapped or empty window is unverified ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). `rsvd` is sent as
   given. The codecs in `keys.hpp` stay pure; `set<Key::kFovCfg0>()` skips the range check.
 - `fov()` tolerates a key missing from the ACK (its field stays empty).
 - `HostSetup::fov` applies the same settings in the first 0x0100 of `Device::open()` (after
@@ -356,12 +356,12 @@ if (cur) { LOG(to_string(*cur)); }            // fov0=yaw0-90/pitch-5-5 fov1=...
 
 ## Install attitude and host-side extrinsic
 
-`Device::set_install_attitude(InstallAttitude)` / `install_attitude()` (issue #51) wrap key
+`Device::set_install_attitude(InstallAttitude)` / `install_attitude()` (issue [#51](https://github.com/atinfinity/livox-mid360-core/issues/51)) wrap key
 0x0012 (`roll_deg`, `pitch_deg`, `yaw_deg` as float degrees, `x_mm`, `y_mm`, `z_mm` as
 int32). `install_attitude_valid()` in `keys.hpp` is checked before any I/O
 (`kInvalidArgument` with `key` = 0x0012): the angles are finite and within ±180°. The
 value is only stored on the LiDAR; whether the firmware applies it to the emitted points,
-and in which convention, is [unverified] (#11). The SDK never transforms points by itself.
+and in which convention, is [unverified] ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). The SDK never transforms points by itself.
 
 To transform on the host, `frame.hpp` provides an opt-in extrinsic:
 
@@ -382,7 +382,7 @@ reflectivity, tag, line and offset untouched; the `Frame&` overload covers `poin
 
 ## Point format, scan pattern and frame policy
 
-Issue #40 covers the three things the wiki calls "coordinate format, scan pattern and
+Issue [#40](https://github.com/atinfinity/livox-mid360-core/issues/40) covers the three things the wiki calls "coordinate format, scan pattern and
 point-cloud frame rate":
 
 - `Device::set_point_format(DataType)` / `point_format()`: key 0x0000. `kImu` is rejected
@@ -426,7 +426,7 @@ are still not replayed; that is the LiDAR's own persistence.
 
 ## Function IO
 
-`Device::set_func_io_config(FuncIoConfig)` / `func_io_config()` (issue #52) wrap key 0x0019,
+`Device::set_func_io_config(FuncIoConfig)` / `func_io_config()` (issue [#52](https://github.com/atinfinity/livox-mid360-core/issues/52)) wrap key 0x0019,
 the four M12 function pins: `in0` (`FuncIn0::kPps`, the only defined input function),
 `in1` (`FuncIn1::kGps`), `out0` / `out1` (`FuncOut::kNone`, `kFollowInput` = the output
 mirrors its input pin, `kSafetyZone` = safety zone output 0 / 1). The struct keeps the raw
@@ -440,7 +440,7 @@ Time synchronisation: the PPS / GPS inputs are where an external clock arrives; 
 pushes a GPS timestamp with `set_gps_time()` (0x0202) and reads the resulting state with
 `time_sync_status()` (0x8009–0x800C), both in the time-sync section. `time_type` in the
 data packets is the per-packet signal `TimestampPolicy` acts on. How the firmware treats a
-write of an undefined input function is [unverified] (#11); the simulator answers
+write of an undefined input function is [unverified] ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the simulator answers
 `kOutOfRange`.
 
 | C++ | C |
@@ -449,12 +449,12 @@ write of an undefined input function is [unverified] (#11); the simulator answer
 
 ## Time synchronisation
 
-`Device::time_sync_status()` (issue #53) reads keys 0x8009–0x800C in one inquire into
+`Device::time_sync_status()` (issue [#53](https://github.com/atinfinity/livox-mid360-core/issues/53)) reads keys 0x8009–0x800C in one inquire into
 `TimeSyncStatus{local_time_ns, last_sync_time_ns, offset_ns, type}`. The fields are plain: a
 key the LiDAR omits or that fails to decode makes the whole call `kDecodeFailed` naming the
 key (`pushed_status()` keeps the same four keys as optionals for the tolerant flavour).
 `Device::set_gps_time(pps_time_ns)` is 0x0202, the host's GPS time of the last PPS edge (the
-IN0 / IN1 pins of the function IO config, #52); it is not validated and nothing is read back,
+IN0 / IN1 pins of the function IO config, [#52](https://github.com/atinfinity/livox-mid360-core/issues/52)); it is not validated and nothing is read back,
 so a caller that wants confirmation reads `time_sync_status()` (`type` becomes `kGps`, the
 simulator also shifts its clock by the difference).
 
@@ -476,7 +476,7 @@ if (auto s = dev->time_sync_status(); s && s->type == TimeSyncType::kGps) { /* s
 
 ## Detection mode, IMU and time filter
 
-Issues #46, #47 and #54 add thin wrappers over `set<K>()` / `get<K>()` for four stored
+Issues [#46](https://github.com/atinfinity/livox-mid360-core/issues/46), [#47](https://github.com/atinfinity/livox-mid360-core/issues/47) and [#54](https://github.com/atinfinity/livox-mid360-core/issues/54) add thin wrappers over `set<K>()` / `get<K>()` for four stored
 settings; each setter returns the LiDAR's `SetResult` and each accepted write is folded into
 the replayed `HostSetup` (rule above), whose new optionals `detect_mode`, `time_filter` and
 `imu_sensor_config` also let `open()` write them:
@@ -497,7 +497,7 @@ the replayed `HostSetup` (rule above), whose new optionals `detect_mode`, `time_
   rollback in the sync source interrupts the point cloud, with 1 (GPS-sync abnormal-time
   filtering) it does not. The SDK only stores the bit.
 
-Key 0x002B is absent on older firmware ([unverified] which version added it, #11). No
+Key 0x002B is absent on older firmware ([unverified] which version added it, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). No
 distinct error kind exists for that: the LiDAR rejects the write, the read and any batched
 inquire naming the key with `ret_code` 0x20, which surfaces as the ordinary `kSession` /
 `kLidarRejected` error. `settings()` drops such a key and asks again, so
@@ -527,13 +527,13 @@ dev->set_time_filter(true);
 
 ## LiDAR network config
 
-`Device::set_lidar_ip_config(LidarIpConfig)` / `lidar_ip_config()` (issue #50) wrap key
+`Device::set_lidar_ip_config(LidarIpConfig)` / `lidar_ip_config()` (issue [#50](https://github.com/atinfinity/livox-mid360-core/issues/50)) wrap key
 0x0004 (`ip`, `netmask`, `gateway`). `lidar_ip_config_valid()` in `keys.hpp` is checked
 before any I/O (`kInvalidArgument` with `key` = 0x0004): the address is neither unspecified,
 broadcast nor the subnet's network / broadcast address, the mask is a contiguous prefix of 1
 to 30 bits, and the gateway is 0.0.0.0 or inside the subnet and different from the address.
 The LiDAR answers a change with `ret_code` 0x21, surfaced as `SetResult::reboot_required`
-exactly as received (whether an unchanged value also answers 0x21 is [unverified], #11); the
+exactly as received (whether an unchanged value also answers 0x21 is [unverified], [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the
 SDK never reboots on its own.
 
 ```cpp
@@ -559,7 +559,7 @@ host's and are replayed unchanged.
 ## Push handling
 
 The LiDAR sends a 0x0102 info push about once per second to the host push port. The receive
-thread parses it, merges every status key into `pushed_status()` (#56, see above) and then,
+thread parses it, merges every status key into `pushed_status()` ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56), see above) and then,
 in this order, raises the change events and calls `on_push` with the merged snapshot:
 
 - `cur_work_state` (0x8006) becomes `Device::work_state()`. A change relative to the
@@ -572,7 +572,7 @@ in this order, raises the change events and calls `on_push` with the merged snap
 
 - `lidar_diag_status` (0x800E) raises `Event::kDiagChanged{diag_old, diag_new}` when the
   value differs from the last one seen; the baseline after `open()` is all normal, so a
-  first push with any abnormal subsystem raises (#55).
+  first push with any abnormal subsystem raises ([#55](https://github.com/atinfinity/livox-mid360-core/issues/55)).
 - `on_push(const LidarStatus &)` receives the snapshot every push produced, after that
   push's events. Pushes that fail to parse are neither merged nor delivered.
 
@@ -677,7 +677,7 @@ set_log_handler([](const LogRecord & r) { my_logger(r.level, r.serial_number, r.
 
 ## Firmware log
 
-The LiDAR can stream its own firmware log to the host (#44): `0x0301` "collection log" turns a
+The LiDAR can stream its own firmware log to the host ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)): `0x0301` "collection log" turns a
 log type on or off, after which the LiDAR pushes `0x0300` packets (a 16-byte header:
 `log_type`, `file_index`, `file_num`, `flag`, `timestamp`, `trans_index`, `data_length`, then
 raw log bytes) from its port 56500 to the host address written to key `0x0009`
@@ -711,13 +711,13 @@ raw log bytes) from its port 56500 to the host address written to key `0x0009`
   (`<SN>_<UTC start>_<type>_<file_index>.log`) and prints a progress line per second; see
   `examples/README.md`. The simulator streams synthetic chunks (`--log-chunk-interval`,
   `--log-ack-every`, `log_drop` / `log_new_file` controls, [simulator.md](simulator.md)).
-- **Unverified on hardware** (#11): whether the LiDAR sends to key `0x0009` or to the `0x0301`
+- **Unverified on hardware** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): whether the LiDAR sends to key `0x0009` or to the `0x0301`
   sender, the `ret_code` of a repeated enable, the meaning of `timestamp` / `file_num`, whether
   the exception log (type 1) is supported and the frame type of the host ACK.
 
 ## lvx2 record / replay
 
-`lvx2.hpp` (#35) has `Lvx2Writer` (raw packets → file, 50 ms frames, spherical converted to
+`lvx2.hpp` ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35)) has `Lvx2Writer` (raw packets → file, 50 ms frames, spherical converted to
 Cartesian32, IMU ignored), `Lvx2Reader` (file → `Lvx2Packet` with `to_data_packet_view()`,
 truncated tails tolerated) and `Lvx2Player` (file → `on_packet` / `on_frame` through the same
 `FrameAssembler` as a Device, `rate` / `loop` / `lidar_id` options). Format, unverified
@@ -749,15 +749,15 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `std::function` callback | function pointer + `void* user` |
 | `Frame` | `const livox_mid360_frame_t*` with `const livox_mid360_point_t* points, size_t count` |
 | `Point`, `ImuData`, `Event`, `DeviceStats` | same layout, `typedef struct` |
-| `decode_tag()` / `is_noise()` (#34) | `livox_mid360_decode_tag(uint8_t, livox_mid360_tag_info_t*)` / `livox_mid360_is_noise(uint8_t, int worst_accepted)`; `livox_mid360_point_t` keeps the raw `tag` |
+| `decode_tag()` / `is_noise()` ([#34](https://github.com/atinfinity/livox-mid360-core/issues/34)) | `livox_mid360_decode_tag(uint8_t, livox_mid360_tag_info_t*)` / `livox_mid360_is_noise(uint8_t, int worst_accepted)`; `livox_mid360_point_t` keeps the raw `tag` |
 | `DeviceError` | `int` code + `livox_mid360_error_string()` |
 | `Context::find` / `devices` | `livox_mid360_context_find(ctx, sn)` / `..._devices(ctx, out, cap)` |
 | `ReconnectOptions`, `DisconnectReason` | same layout, `typedef struct` / `enum` |
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
-| `set<K>` / `get<K>` (#57) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper (#38–#56) exists |
-| `on_firmware_log` / `start_firmware_log` / `stop_firmware_log` (#44) | `livox_mid360_device_on_firmware_log(dev, cb, user)` with `livox_mid360_firmware_log_chunk_t` (header fields, `const uint8_t* data, size_t len` valid during the call) / `..._start_firmware_log(dev, type)` / `..._stop_firmware_log(dev, type)` |
-| `Lvx2Writer` / `Lvx2Player` (#35) | `livox_mid360_lvx2_writer_open(path, devices, n, &w)` / `..._writer_write(w, index, packet)` / `..._writer_close(w)`; `livox_mid360_lvx2_player_open(path, opts, &p)` / `..._player_on_frame(p, cb, user)` / `..._player_run(p, stop_flag, &stats)` |
-| `set_log_level` / `set_log_handler` (#42) | `livox_mid360_set_log_level(level)` / `livox_mid360_set_log_handler(cb, user)` with `livox_mid360_log_record_t` (`level`, `time_ns`, NUL-terminated `serial_number` and `message` valid during the call) |
+| `set<K>` / `get<K>` ([#57](https://github.com/atinfinity/livox-mid360-core/issues/57)) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper ([#38](https://github.com/atinfinity/livox-mid360-core/issues/38)–[#56](https://github.com/atinfinity/livox-mid360-core/issues/56)) exists |
+| `on_firmware_log` / `start_firmware_log` / `stop_firmware_log` ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `livox_mid360_device_on_firmware_log(dev, cb, user)` with `livox_mid360_firmware_log_chunk_t` (header fields, `const uint8_t* data, size_t len` valid during the call) / `..._start_firmware_log(dev, type)` / `..._stop_firmware_log(dev, type)` |
+| `Lvx2Writer` / `Lvx2Player` ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35)) | `livox_mid360_lvx2_writer_open(path, devices, n, &w)` / `..._writer_write(w, index, packet)` / `..._writer_close(w)`; `livox_mid360_lvx2_player_open(path, opts, &p)` / `..._player_on_frame(p, cb, user)` / `..._player_run(p, stop_flag, &stats)` |
+| `set_log_level` / `set_log_handler` ([#42](https://github.com/atinfinity/livox-mid360-core/issues/42)) | `livox_mid360_set_log_level(level)` / `livox_mid360_set_log_handler(cb, user)` with `livox_mid360_log_record_t` (`level`, `time_ns`, NUL-terminated `serial_number` and `message` valid during the call) |
 
 `livox-mid360-ros2` (separate repository) uses the C++ API directly: one `Context`, one
 `Device` per LiDAR, `on_frame` publishing from the receive thread or through a queue.
@@ -766,7 +766,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 
 | Issue | Scope |
 | --- | --- |
-| #6 | Context sockets and receive thread, dispatch by IP, `on_packet`, frame assembly, `on_frame` / `on_imu`, drop counting, timestamp policy, `kStats` events |
-| #7 | 0x0102 push parsing, work-state machine, `kStateChanged` / `kHms` events, `work_state()` |
-| #56 / #55 | full push snapshot in `pushed_status()` (`time_ns`, carry-over), `on_push`, `DiagStatus` typing, `diag_status()`, `kDiagChanged` |
-| #8 | disconnect detection, reconnection, `kDisconnected` / `kReconnected`, multiple devices by serial |
+| [#6](https://github.com/atinfinity/livox-mid360-core/issues/6) | Context sockets and receive thread, dispatch by IP, `on_packet`, frame assembly, `on_frame` / `on_imu`, drop counting, timestamp policy, `kStats` events |
+| [#7](https://github.com/atinfinity/livox-mid360-core/issues/7) | 0x0102 push parsing, work-state machine, `kStateChanged` / `kHms` events, `work_state()` |
+| [#56](https://github.com/atinfinity/livox-mid360-core/issues/56) / [#55](https://github.com/atinfinity/livox-mid360-core/issues/55) | full push snapshot in `pushed_status()` (`time_ns`, carry-over), `on_push`, `DiagStatus` typing, `diag_status()`, `kDiagChanged` |
+| [#8](https://github.com/atinfinity/livox-mid360-core/issues/8) | disconnect detection, reconnection, `kDisconnected` / `kReconnected`, multiple devices by serial |
