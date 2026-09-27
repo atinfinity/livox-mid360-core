@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Public API (issue #9): the shared receive side. The Mid-360 host ports for push
 // (56201), point cloud (56301), IMU (56401) and firmware log (56501, #44) are the same for
-// every LiDAR, so one Context owns those four sockets and the single receive thread, and dispatches datagrams to the
-// registered Devices by source IP. Data path implemented in #6; push parsing is #7.
+// every LiDAR, so one Context owns those four sockets and the single receive thread, and
+// dispatches datagrams to the registered Devices by source IP. Data path implemented in #6;
+// push parsing is #7. A fifth socket for debug raw data (#93) is opened on request.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -28,8 +30,12 @@ struct ContextOptions
   std::uint16_t point_port = kDefaultHostPointCloudPort;  ///< 0 = ephemeral
   std::uint16_t imu_port = kDefaultHostImuPort;           ///< 0 = ephemeral
   std::uint16_t log_port = kDefaultHostLogPort;           ///< firmware log (#44); 0 = ephemeral
-  std::size_t recv_buffer_bytes = 4u << 20;               ///< SO_RCVBUF request per socket
-  std::size_t batch_size = 32;                            ///< datagrams per recvmmsg
+  /// Debug raw data (#93). nullopt = the socket is not opened and
+  /// Device::start_debug_data() fails with kInvalidState; 0 = ephemeral;
+  /// kDefaultHostDebugDataPort (44332) is what Livox-SDK2 listens on.
+  std::optional<std::uint16_t> debug_data_port;
+  std::size_t recv_buffer_bytes = 4u << 20;  ///< SO_RCVBUF request per socket
+  std::size_t batch_size = 32;               ///< datagrams per recvmmsg
 };
 
 class Device;

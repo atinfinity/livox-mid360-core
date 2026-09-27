@@ -14,6 +14,7 @@
 
 #include "livox/mid360/export.hpp"
 #include "livox/mid360/protocol.hpp"
+#include "livox/mid360/transport.hpp"
 
 LIVOX_MID360_API_BEGIN
 namespace livox::mid360
@@ -42,6 +43,15 @@ struct DebugDataControlRequest
 /// `enable` is any non-zero byte; bytes after the ninth are ignored.
 [[nodiscard]] std::expected<DebugDataControlRequest, ParseError> parse_debug_data_control(
   std::span<const std::byte> data) noexcept;
+
+/// What Device hands to a DebugDataCallback: one datagram of the stream, not interpreted
+/// (receive thread; `data` is valid only during the callback, copy it to keep it).
+struct DebugDataPacket
+{
+  std::uint64_t host_receive_time_ns = 0;
+  Endpoint from;  ///< the LiDAR; SDK2 expects port 60301 [unverified]
+  std::span<const std::byte> data;
+};
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END
