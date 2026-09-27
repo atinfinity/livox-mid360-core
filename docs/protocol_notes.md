@@ -46,9 +46,9 @@ implementation that computes it anyway is compatible.)
 The LiDAR-originated `0x0102` push is a REQ with `sender_type = 1` and, per the sequence
 diagram, is not acknowledged by the host. The wiki does not enumerate the keys it carries
 [unverified: the simulator pushes every read-only key `0x8000`–`0x8011`; the SDK merges every
-status key (0x8006–0x8011) into `Device::pushed_status()`, tolerating any missing key] (#11).
+status key (0x8006–0x8011) into `Device::pushed_status()`, tolerating any missing key] ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 Key `0x800E` `lidar_diag_status` is read as four 2-bit-wide nibbles (system, scan, ranging,
-communication; 0 normal, 1 warning, 2 error, 3 safety error) [unverified, #11]. Whether
+communication; 0 normal, 1 warning, 2 error, 3 safety error) [unverified, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)]. Whether
 `0x8007` `core_temp` and the time-sync keys `0x8009`–`0x800C` are refreshed in every push or
 only on change is likewise unverified; the SDK carries the last value over either way.
 
@@ -135,7 +135,7 @@ unchanged value still does; the simulator answers `0x21` only for a changed `lid
 lets equal or reversed start / stop through. **[unverified]** the return code for an
 out-of-range value (the simulator answers `0x03`), whether a reversed yaw window wraps around
 0°, whether the edges are inclusive, whether both windows combine as a union, and whether a
-FOV change needs a reboot (`0x21`) or a motor restart. See #11 and #39.
+FOV change needs a reboot (`0x21`) or a motor restart. See [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) and [#39](https://github.com/atinfinity/livox-mid360-core/issues/39).
 
 ## HMS table
 

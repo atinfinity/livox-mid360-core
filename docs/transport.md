@@ -96,7 +96,7 @@ subtracted directly. On Linux it is the kernel timestamp taken at packet arrival
 | `bind_to_device` | empty | **reserved**, rejected with `kInvalidArgument` |
 
 The transport layer sets no policy. Choosing a receive buffer size for the point-cloud socket
-is the receive pipeline's job (#6).
+is the receive pipeline's job ([#6](https://github.com/atinfinity/livox-mid360-core/issues/6)).
 
 ### `UdpSocket`
 
@@ -212,5 +212,5 @@ The broadcast test only asserts the error category when the runner has no broadc
 
 - Multicast membership (`IP_ADD_MEMBERSHIP`) and `SO_BINDTODEVICE`: names reserved.
 - `epoll`, `SO_REUSEPORT` multi-thread receive, `io_uring`: revisit if the single-thread
-  `recvmmsg` path proves insufficient in the long-run test (#13).
+  `recvmmsg` path proves insufficient in the long-run test ([#13](https://github.com/atinfinity/livox-mid360-core/issues/13)).
 - Send batching (`sendmmsg`): command traffic is too light to need it.

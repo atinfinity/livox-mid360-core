@@ -36,7 +36,7 @@ C++ follows the [ROS 2 C++ style](https://docs.ros.org/en/rolling/The-ROS2-Proje
 (the commit is named in the file header) and is re-synced by hand, not by CI. On top of the
 formatter, clang-tidy's `readability-braces-around-statements` requires braces on every
 `if` / `for` / `while` body. Deviations from the ROS 2 rules: `#pragma once` instead of include
-guards (so cpplint is not used, #17), and no cpplint-style header/footer comments. Code blocks in
+guards (so cpplint is not used, [#17](https://github.com/atinfinity/livox-mid360-core/issues/17)), and no cpplint-style header/footer comments. Code blocks in
 the documentation follow the same style.
 
 Python (`tools/`) follows the [ROS 2 Python style](https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#python)
@@ -60,7 +60,7 @@ python3 -m venv .venv-ament && .venv-ament/bin/pip install flake8 flake8-blind-e
 ```
 
 Of the ROS 2 `ament_lint_common` set, two more checks run here because they are cheap and
-useful on a plain CMake library (#65): `ament_cppcheck` (cppcheck from apt, with
+useful on a plain CMake library ([#65](https://github.com/atinfinity/livox-mid360-core/issues/65)): `ament_cppcheck` (cppcheck from apt, with
 `AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1` because ament refuses cppcheck 2.x by default) and
 `ament_lint_cmake` (all-lower-case command names, 140 columns). Both are installed with pip
 from the `jazzy` branch of [ament_lint](https://github.com/ament/ament_lint) (`AMENT_LINT_BRANCH`
