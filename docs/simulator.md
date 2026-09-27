@@ -38,6 +38,9 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--log-chunk-bytes` | 512 | data bytes per log chunk |
 | `--log-ack-every` | 1 | ask for a host ACK on every Nth chunk; `0` never (the file-end packet always asks) |
 | `--log-ignore-hostcfg` | | send log chunks to the sender of 0x0301 instead of the host in key 0x0009 |
+| `--debug-data-port` | 60301 | source port of the debug raw data stream ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)); `0` or `--base-port 0` picks a free port |
+| `--debug-data-interval` | 0.01 s | period of the debug raw data datagrams while `0x0303` has enabled them |
+| `--debug-data-bytes` | 1024 | size of a debug raw data datagram |
 | `--no-quit-on-eof` | | keep running when stdin closes (default: quit) |
 | `--verbose` | | log to stderr |
 
@@ -77,11 +80,12 @@ The process is driven over its standard streams so that any test harness can use
 | `cmd` | `cmd_id`, `seq`, `ret`, `from` | a request was handled |
 | `ack_dropped` | `cmd_id`, `seq` | a request was handled but the ACK withheld (`drop_ack`) |
 | `bad_frame` | `from`, `error` | a datagram failed to parse |
-| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `log`, `state` | once per second |
+| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `log`, `debug`, `state` | once per second |
 | `log_dropped` | `file_index`, `trans` | a log chunk was withheld (`log_drop`) |
 | `log_ack` | `ret`, `log_type`, `file_index`, `trans` | the host acknowledged a log chunk |
+| `debug_data` | `enabled`, `dest`, `port` (both only when enabled) | `0x0303` switched the debug raw data stream; `port` is its source port |
 | `control` | `cmd` | a control command was applied |
-| `status` | `state`, `sent`, `hosts{pcl,imu,push,log}`, `log_enabled`, `log_acks_received` | answer to `status` |
+| `status` | `state`, `sent`, `hosts{pcl,imu,push,log}`, `log_enabled`, `log_acks_received`, `debug_data{enabled,dest,port}` | answer to `status` |
 | `error` | `error` | malformed or unknown control line |
 | `exit` | `sent` | leaving the main loop |
 
@@ -92,6 +96,13 @@ The process is driven over its standard streams so that any test harness can use
   `--log-chunk-interval` for each enabled type. The first chunk of a file carries the begin
   flag, every `--log-ack-every`th the ACK flag; host ACKs (REQ `0x0300` with `{ret, type,
   file_index, trans_index}`) are counted in `status.log_acks_received`.
+- **Debug raw data** ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)): `0x0303` (payload `{enable, host_ip, host_port, reserved}`) is
+  answered on the log socket and on the command socket. While enabled, a datagram of
+  `--debug-data-bytes` goes to `host_ip:host_port` every `--debug-data-interval`: a `u32`
+  sequence number (little-endian, from 0) followed by bytes counting up from its low byte, so
+  that a receiver can detect loss and corruption. The source socket is bound by the first
+  enable, not at start-up, because 60301 lies inside the Linux ephemeral port range; it is not
+  part of `ready.ports`. The point cloud keeps flowing.
 
 - **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries `dev_type = 9`
   (provisional), the bound address and the real command port), `0x0100` configure, `0x0101`
@@ -171,6 +182,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
 | Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
+| Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)) | `0x0303` answers `0x00` on the log and the command port, in every work state, also when repeated (the stream then moves to the new destination) or when disabling a disabled stream; short payloads and an enable with port 0 answer `0x01`; the stream leaves port 60301, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | the protocol document gives the request layout only; ports come from the SDK2 source; nothing about the stream is known |
 | Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | the SDK2 source shows the wire format only; the LiDAR's counting, destination choice and end-of-file behaviour are unknown |
 | FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |

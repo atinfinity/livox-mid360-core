@@ -47,6 +47,8 @@ PORT_DISCOVERY, PORT_CMD, PORT_PUSH, PORT_PCL, PORT_IMU, PORT_LOG = (
     56400,
     56500,
 )
+# Debug raw data (#93), as Livox-SDK2 [unverified]: LiDAR source port, host destination port.
+PORT_DEBUG_DATA, HOST_PORT_DEBUG_DATA = 60301, 44332
 
 SAMPLE_SIZE = {0: 24, 1: 14, 2: 8, 3: 10}
 SAMPLE_FMT = {0: '<6f', 1: '<iiiBB', 2: '<hhhBB', 3: '<IHHBB'}
@@ -225,6 +227,21 @@ def encode_reboot(timeout_ms: int) -> bytes:
 
 def encode_set_gps_timestamp(ns: int) -> bytes:
     return struct.pack('<BQ', 2, ns)
+
+
+def encode_debug_data_control(enable: bool, ip: str, port: int, reserved: int = 0) -> bytes:
+    """0x0303 payload: enable u8, host_ip u8[4], host_port u16, reserved u16 (#93)."""
+    return struct.pack(
+        '<B4sHH', 1 if enable else 0, bytes(int(x) for x in ip.split('.')), port, reserved
+    )
+
+
+def parse_debug_data_control(d: bytes) -> tuple[bool, str, int, int] | None:
+    """Return (enable, host_ip, host_port, reserved), or None when `d` is too short."""
+    if len(d) < 9:
+        return None
+    enable, ip, port, reserved = struct.unpack_from('<B4sHH', d, 0)
+    return enable != 0, '.'.join(str(b) for b in ip), port, reserved
 
 
 # --------------------------------------------------------------------------- data packet

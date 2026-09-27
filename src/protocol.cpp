@@ -174,6 +174,8 @@ std::string_view to_string(CmdId id) noexcept
       return "PUSH_LOG";
     case CmdId::kCollectionLog:
       return "COLLECTION_LOG";
+    case CmdId::kDebugDataControl:
+      return "DEBUG_DATA_CONTROL";
   }
   return "UNKNOWN";
 }

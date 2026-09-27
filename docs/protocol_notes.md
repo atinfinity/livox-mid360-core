@@ -137,6 +137,30 @@ out-of-range value (the simulator answers `0x03`), whether a reversed yaw window
 0°, whether the edges are inclusive, whether both windows combine as a union, and whether a
 FOV change needs a reboot (`0x21`) or a motor restart. See [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) and [#39](https://github.com/atinfinity/livox-mid360-core/issues/39).
 
+## Debug raw data collection (0x0303)
+
+Command `0x0303` ("debug raw data collection configuration", protocol document rev v1.4.12;
+"debug point cloud" in Livox-SDK2) switches on a diagnostic stream that Livox support asks
+for ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)). The request is `enable` (u8), `host_ip` (u8[4]), `host_port` (u16) and two
+reserved bytes; the ACK is a `ret_code`. The SDK treats the stream as opaque bytes.
+
+Everything else is taken from the Livox-SDK2 source and **[unverified]** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)):
+
+- Which LiDAR port accepts `0x0303`. SDK2 sends it like `0x0301`, to 56500; the SDK does the
+  same and the simulator also answers on 56100.
+- Whether the stream leaves port 60301 (`kDebugDataPort`) and what a datagram looks like.
+  SDK2 listens on host port 44332 (`kDefaultHostDebugDataPort`).
+- Whether the point cloud keeps flowing while the stream is enabled, and the bandwidth of
+  the stream.
+- The `ret_code` of a repeated enable and of an enable outside `SAMPLING`.
+- The meaning of offset 7: `reserved` in the protocol document, `bandwidth` (Mbps) in SDK2,
+  which sends 0. `DebugDataControlRequest::reserved` defaults to 0.
+- Whether the setting survives a reboot.
+- The layout of the file SDK2 writes (`.LivoxDebugPointCloudData`: a header with `file_ver`,
+  `dev_type`, `data_type`, `sn` and a CRC16, then the datagrams unmodified). Field widths
+  and the size of the reserved area have to be read from a file written by SDK2 or Livox
+  Viewer 2.
+
 ## HMS table
 
 The wiki lists `0x0210–0x0219` twice (error: "trying to recover"; fatal: "abnormal"). The

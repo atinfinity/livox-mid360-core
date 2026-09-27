@@ -66,6 +66,7 @@ add_library(mid360_core
   src/hms.cpp
   src/session.cpp
   src/config.cpp
+  src/debug_data.cpp
   src/firmware_log.cpp
   src/frame_assembler.cpp
   src/lvx2.cpp

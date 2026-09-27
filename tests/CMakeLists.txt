@@ -35,6 +35,7 @@ add_executable(mid360_core_tests
   test_reconnect.cpp
   test_log.cpp
   test_golden_vectors.cpp
+  test_debug_data.cpp
   test_firmware_log.cpp
   test_lvx2.cpp
   test_to_string.cpp)

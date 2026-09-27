@@ -94,6 +94,7 @@ TEST_CASE("to_string: protocol enums", "[to_string]")
     {CmdId::kSetGpsTimestamp, "SET_GPS_TIMESTAMP"},
     {CmdId::kPushLog, "PUSH_LOG"},
     {CmdId::kCollectionLog, "COLLECTION_LOG"},
+    {CmdId::kDebugDataControl, "DEBUG_DATA_CONTROL"},
   });
 }
 
