@@ -24,7 +24,7 @@ with tracking issues is in [docs/roadmap.md](docs/roadmap.md).
 
 ## Requirements
 
-- Ubuntu 24.04+ with GCC 13/14 or Clang 19 (macOS with Apple Clang works for development).
+- Ubuntu 24.04+ with GCC 13/14 or Clang 19 (macOS with Apple Clang works for development and is built and tested in CI).
   x86-64 and arm64 are both verified in CI (native `ubuntu-24.04-arm` runners). NVIDIA Jetson
   with JetPack 6 (Ubuntu 22.04) is outside this support statement until a compatible toolchain
   is confirmed.

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SDK logging (issue #42): level filtering, sinks, formatting, handler swap under emission.
+#include <unistd.h>
+
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cerrno>

@@ -94,6 +94,25 @@ jobs:
       - name: Install (smoke)
         run: cmake --install build --prefix "$PWD/_install" && ls -R _install/include/livox
 
+  # macOS is a development platform only (docs/roadmap.md), but Apple libc++ lacks parts of
+  # libstdc++'s C++23 (std::atomic<std::shared_ptr>, transitive includes): build and test it so
+  # that the README's claim stays true (issue #129).
+  macos:
+    name: Apple Clang / Release / macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: brew install ninja catch2
+      - name: Loopback alias for the multi-device tests
+        run: sudo ifconfig lo0 alias 127.0.0.2
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   golden-vectors-in-sync:
     name: Python reference & golden vectors
     runs-on: ubuntu-24.04

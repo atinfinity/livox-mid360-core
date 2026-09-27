@@ -126,8 +126,9 @@ informational for now.
 ## Continuous integration
 
 `CI` runs gcc-13, gcc-14 and clang-19 in Release plus gcc-14 and clang-19 in Debug with
-ASan + UBSan, each on x86-64 and arm64 (`ubuntu-24.04-arm`), and separate jobs for the Python
-reference and simulator tests and a short run of every fuzzer. `Lint` runs clang-format 19,
+ASan + UBSan, each on x86-64 and arm64 (`ubuntu-24.04-arm`), Apple Clang in Release on
+`macos-latest`, and separate jobs for the Python reference and simulator tests and a short run
+of every fuzzer. `Lint` runs clang-format 19,
 clang-tidy 19 and ruff; `Coverage` uploads to Codecov.
 
 To reproduce CI locally on any Docker host: `docker/check.sh [linux/arm64|linux/amd64]`. The

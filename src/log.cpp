@@ -8,8 +8,10 @@
 #include <ctime>
 #include <format>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
+#include <version>
 
 #include "log_detail.hpp"
 
@@ -25,9 +27,40 @@ std::atomic<LogLevel> & level_slot() noexcept
   return level;
 }
 
-std::atomic<std::shared_ptr<const LogHandler>> & handler_slot() noexcept
+#if defined(__cpp_lib_atomic_shared_ptr)
+using HandlerSlot = std::atomic<std::shared_ptr<const LogHandler>>;
+#else
+/// libc++ has no std::atomic<std::shared_ptr> (P0718, issue #129): the same load / store under
+/// a mutex. The previous handler is released after the lock, so its destructor never runs under
+/// it.
+class HandlerSlot
 {
-  static std::atomic<std::shared_ptr<const LogHandler>> handler{nullptr};
+public:
+  constexpr explicit HandlerSlot(std::nullptr_t) noexcept {}
+
+  std::shared_ptr<const LogHandler> load(std::memory_order /*order*/) const
+  {
+    const std::scoped_lock lock(mutex_);
+    return handler_;
+  }
+
+  void store(std::shared_ptr<const LogHandler> next, std::memory_order /*order*/)
+  {
+    {
+      const std::scoped_lock lock(mutex_);
+      handler_.swap(next);
+    }
+  }
+
+private:
+  mutable std::mutex mutex_;
+  std::shared_ptr<const LogHandler> handler_;
+};
+#endif
+
+HandlerSlot & handler_slot() noexcept
+{
+  static HandlerSlot handler{nullptr};
   return handler;
 }
 
