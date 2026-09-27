@@ -22,6 +22,7 @@ add_executable(mid360_core_tests
   test_sim_smoke.cpp
   test_session.cpp
   test_session_detail.cpp
+  test_session_branches.cpp
   test_config.cpp
   test_api_skeleton.cpp
   test_frame_assembler.cpp
