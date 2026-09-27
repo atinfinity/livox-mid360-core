@@ -715,6 +715,38 @@ raw log bytes) from its port 56500 to the host address written to key `0x0009`
   sender, the `ret_code` of a repeated enable, the meaning of `timestamp` / `file_num`, whether
   the exception log (type 1) is supported and the frame type of the host ACK.
 
+## Debug raw data
+
+Livox support may ask for the LiDAR's debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)): `0x0303` switches on a
+diagnostic stream towards a host address and port carried in the request. The stream is
+opaque to this SDK, which delivers the datagrams as they arrive. The codec lives in
+`debug_data.hpp` (`DebugDataControlRequest`, `encode_debug_data_control`, ...); see
+[protocol_notes.md](protocol_notes.md) for the layout.
+
+- **Socket**: off by default. `ContextOptions::debug_data_port` (`std::optional`, default
+  `nullopt`) opens a fifth receive socket when set: `0` = ephemeral,
+  `kDefaultHostDebugDataPort` (44332) is the port Livox-SDK2 listens on. It uses the same
+  receive buffer size as the other sockets, `Context::options()` reports the bound port and
+  `ContextStats::debug_datagrams` counts its datagrams. Datagrams are dispatched to the Device
+  by source IP only; the source port is handed to the callback.
+- **Start / stop**: `start_debug_data(opts)` sends `0x0303 {enable=1, host_ip, host_port}`
+  from the log socket to `DeviceOptions::lidar_debug_data_port` (56500) and waits for the ACK
+  like `start_firmware_log()` (same `RequestOptions`, same errors). `host_ip` is
+  `HostSetup::ip` or the command socket's address, `host_port` the Context's debug data port.
+  Without that socket it fails with `kInvalidState` before anything is sent.
+  `stop_debug_data(opts)` sends `enable=0` and works without the socket. Neither depends on
+  the work state. Both are idempotent. A start that succeeded is replayed after a reconnect
+  until a stop succeeds; the destructor does not stop the stream.
+- **Delivery**: `on_debug_data(cb)` receives every datagram as a `DebugDataPacket`
+  (`host_receive_time_ns`, `from`, `data` valid during the call) on the receive thread. The
+  callback is optional and can be set without the socket. Like the other callbacks it cannot
+  be changed while sampling is requested.
+- **Stats**: `debug_data_packets`, `debug_data_bytes`, `last_debug_data_time_ns`. A stream
+  that falls silent raises no event; watch `last_debug_data_time_ns`.
+- **Unverified on hardware** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): the port that accepts `0x0303`, the source port and
+  layout of the stream, whether the point cloud keeps flowing, the `ret_code` of a repeated
+  enable and whether the setting survives a reboot.
+
 ## lvx2 record / replay
 
 `lvx2.hpp` ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35)) has `Lvx2Writer` (raw packets → file, 50 ms frames, spherical converted to
@@ -756,6 +788,7 @@ The C header is written once the C++ layer is implemented; this table fixes the 
 | `std::expected<T, DeviceError>` | `int` return, out-parameter for `T` |
 | `set<K>` / `get<K>` ([#57](https://github.com/atinfinity/livox-mid360-core/issues/57)) | raw `livox_mid360_device_set_key(dev, key, bytes, len)` / `..._get_key(dev, key, buf, cap, &len)`; typed per-key helpers only where a C++ wrapper ([#38](https://github.com/atinfinity/livox-mid360-core/issues/38)–[#56](https://github.com/atinfinity/livox-mid360-core/issues/56)) exists |
 | `on_firmware_log` / `start_firmware_log` / `stop_firmware_log` ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `livox_mid360_device_on_firmware_log(dev, cb, user)` with `livox_mid360_firmware_log_chunk_t` (header fields, `const uint8_t* data, size_t len` valid during the call) / `..._start_firmware_log(dev, type)` / `..._stop_firmware_log(dev, type)` |
+| `on_debug_data` / `start_debug_data` / `stop_debug_data` ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)) | `livox_mid360_device_on_debug_data(dev, cb, user)` with `livox_mid360_debug_data_packet_t` (`host_receive_time_ns`, source address and port, `const uint8_t* data, size_t len` valid during the call) / `..._start_debug_data(dev)` / `..._stop_debug_data(dev)`; `debug_data_port` in the context options with `-1` = not opened |
 | `Lvx2Writer` / `Lvx2Player` ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35)) | `livox_mid360_lvx2_writer_open(path, devices, n, &w)` / `..._writer_write(w, index, packet)` / `..._writer_close(w)`; `livox_mid360_lvx2_player_open(path, opts, &p)` / `..._player_on_frame(p, cb, user)` / `..._player_run(p, stop_flag, &stats)` |
 | `set_log_level` / `set_log_handler` ([#42](https://github.com/atinfinity/livox-mid360-core/issues/42)) | `livox_mid360_set_log_level(level)` / `livox_mid360_set_log_handler(cb, user)` with `livox_mid360_log_record_t` (`level`, `time_ns`, NUL-terminated `serial_number` and `message` valid during the call) |
 

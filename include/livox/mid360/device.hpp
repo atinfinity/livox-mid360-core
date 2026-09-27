@@ -32,6 +32,7 @@
 
 #include "livox/mid360/config.hpp"
 #include "livox/mid360/context.hpp"
+#include "livox/mid360/debug_data.hpp"
 #include "livox/mid360/event.hpp"
 #include "livox/mid360/export.hpp"
 #include "livox/mid360/firmware_log.hpp"
@@ -80,6 +81,8 @@ struct DeviceOptions
   ReconnectOptions reconnect;
   /// LiDAR-side port that 0x0301 is sent to (#44). Tests point it at the simulator.
   std::uint16_t lidar_log_port = kLogPort;
+  /// LiDAR-side port that 0x0303 is sent to (#93); SDK2 uses the log port [unverified].
+  std::uint16_t lidar_debug_data_port = kLogPort;
 };
 
 /// Per-packet metadata handed to on_packet together with the non-owning DataPacketView.
@@ -97,6 +100,8 @@ using EventCallback = std::function<void(const Event &)>;
 using PushCallback = std::function<void(const LidarStatus &)>;
 /// One 0x0300 firmware log push (#44); `data` is valid only during the call.
 using FirmwareLogCallback = std::function<void(const FirmwareLogChunk &)>;
+/// One datagram of the debug raw data stream (#93); `data` is valid only during the call.
+using DebugDataCallback = std::function<void(const DebugDataPacket &)>;
 
 /// Result of Device::set<K>() / set_many<>(): the LiDAR accepted the values.
 struct SetResult
@@ -134,6 +139,9 @@ public:
   std::expected<void, DeviceError> on_push(PushCallback cb);
   /// Receive thread, once per 0x0300 push including begin / end packets (#44).
   std::expected<void, DeviceError> on_firmware_log(FirmwareLogCallback cb);
+  /// Receive thread, once per datagram on the Context's debug data socket (#93). Allowed
+  /// without that socket; the callback is then never called.
+  std::expected<void, DeviceError> on_debug_data(DebugDataCallback cb);
 
   // --- commands (caller's thread, serialised, blocking; see Session for the semantics)
   /// work_tgt_mode = SAMPLING, then wait for cur_work_state (host_setup.wait_timeout).
@@ -245,6 +253,19 @@ public:
   /// 0x0301 disable. The destructor does not send it: the LiDAR keeps pushing.
   std::expected<void, DeviceError> stop_firmware_log(
     FirmwareLogType type = FirmwareLogType::kRealTime,
+    std::optional<RequestOptions> opts = std::nullopt);
+
+  // --- debug raw data collection (issue #93): 0x0303 on the LiDAR's log port, the stream
+  // on the Context's debug data socket. Unverified on hardware (#11).
+  /// Sends 0x0303 enable with this host and the Context's debug data port from the log
+  /// socket and waits for its ACK (`opts`: timeout / attempts, the session defaults
+  /// otherwise). kInvalidState when ContextOptions::debug_data_port is not set. Does not
+  /// depend on the work state. Idempotent; replayed after a reconnect until a successful
+  /// stop_debug_data(). ret_code != 0 → kSession / kLidarRejected.
+  std::expected<void, DeviceError> start_debug_data(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0303 disable. The destructor does not send it: the LiDAR keeps streaming.
+  std::expected<void, DeviceError> stop_debug_data(
     std::optional<RequestOptions> opts = std::nullopt);
 
   /// Key 0x800E by inquire (#55); the pushed value is pushed_status()->lidar_diag_status

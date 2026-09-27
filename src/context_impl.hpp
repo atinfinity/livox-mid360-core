@@ -29,7 +29,8 @@ enum class DataPort : std::uint8_t
   kPush,
   kPoint,
   kImu,
-  kLog  ///< firmware log (#44): 0x0300 pushes and the 0x0301 ACK
+  kLog,       ///< firmware log (#44): 0x0300 pushes and the 0x0301 / 0x0303 ACKs
+  kDebugData  ///< debug raw data (#93): opaque datagrams
 };
 
 /// What the receive thread calls on a registered Device. Both methods run on the receive
@@ -64,7 +65,8 @@ struct Context::Impl
   UdpSocket push_socket;
   UdpSocket point_socket;
   UdpSocket imu_socket;
-  UdpSocket log_socket;  ///< also used by Devices to send 0x0301 / 0x0300 ACKs
+  UdpSocket log_socket;    ///< also used by Devices to send 0x0301 / 0x0303 / 0x0300 ACKs
+  UdpSocket debug_socket;  ///< open only when options.debug_data_port is set (#93)
   Poller poller;
 
   std::thread thread;
@@ -83,6 +85,7 @@ struct Context::Impl
   std::atomic<std::uint64_t> datagrams{0};
   std::atomic<std::uint64_t> unknown_source{0};
   std::atomic<std::uint64_t> log_datagrams{0};
+  std::atomic<std::uint64_t> debug_datagrams{0};
 
   enum class AddResult : std::uint8_t
   {

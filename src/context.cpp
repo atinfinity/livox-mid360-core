@@ -25,6 +25,7 @@ constexpr std::uint64_t kPushTag = 1;
 constexpr std::uint64_t kPointTag = 2;
 constexpr std::uint64_t kImuTag = 3;
 constexpr std::uint64_t kLogTag = 4;
+constexpr std::uint64_t kDebugDataTag = 5;
 constexpr auto kMaxPoll = std::chrono::milliseconds{100};
 
 DeviceError transport_error(const TransportError & err)
@@ -148,6 +149,10 @@ void Context::Impl::run()
           socket = &log_socket;
           port = detail::DataPort::kLog;
           break;
+        case kDebugDataTag:
+          socket = &debug_socket;
+          port = detail::DataPort::kDebugData;
+          break;
         default:
           continue;
       }
@@ -166,6 +171,8 @@ void Context::Impl::run()
         datagrams.fetch_add(*n, std::memory_order_relaxed);
         if (port == detail::DataPort::kLog) {
           log_datagrams.fetch_add(*n, std::memory_order_relaxed);
+        } else if (port == detail::DataPort::kDebugData) {
+          debug_datagrams.fetch_add(*n, std::memory_order_relaxed);
         }
         for (std::size_t i = 0; i < *n; ++i) {
           const Datagram & d = batch[i];
@@ -240,6 +247,17 @@ std::expected<std::unique_ptr<Context>, DeviceError> Context::create(const Conte
   impl->options.point_port = impl->point_socket.local_endpoint().port;
   impl->options.imu_port = impl->imu_socket.local_endpoint().port;
   impl->options.log_port = impl->log_socket.local_endpoint().port;
+  if (opts.debug_data_port) {
+    auto debug = open(*opts.debug_data_port);
+    if (!debug) {
+      return std::unexpected(transport_error(debug.error()));
+    }
+    impl->debug_socket = std::move(*debug);
+    if (auto r = impl->poller.add(impl->debug_socket, kDebugDataTag); !r) {
+      return std::unexpected(transport_error(r.error()));
+    }
+    impl->options.debug_data_port = impl->debug_socket.local_endpoint().port;
+  }
 
   Impl * raw = impl.get();
   impl->thread = std::thread([raw] { raw->run(); });
@@ -293,6 +311,7 @@ ContextStats Context::stats() const
     .datagrams = impl_->datagrams.load(std::memory_order_relaxed),
     .unknown_source = impl_->unknown_source.load(std::memory_order_relaxed),
     .log_datagrams = impl_->log_datagrams.load(std::memory_order_relaxed),
+    .debug_datagrams = impl_->debug_datagrams.load(std::memory_order_relaxed),
   };
 }
 
