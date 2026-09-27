@@ -228,6 +228,8 @@ class DeviceModel:
     last_sync_time_ns: int = 0
     push_omit: set[int] = field(default_factory=set)  # keys left out of the push (tests)
     bad_time_offset: int = 0  # 1: answer 0x800B truncated to 4 bytes (tests)
+    # key -> value the inquiry answers instead of the real one, or 'omit' / 'unsupported' (tests)
+    inquire_overrides: dict[int, bytes | str] = field(default_factory=dict)
     state_deadline: float = 0.0  # monotonic time at which the timed state completes
     on_state: Callable[[int, int], None] | None = None
 
@@ -357,7 +359,12 @@ class DeviceModel:
     def inquire(self, keys: list[int], now_ns: int) -> tuple[int, list[tuple[int, bytes]]]:
         out = []
         for key in keys:
-            v = self.read_key(key, now_ns)
+            rule = self.inquire_overrides.get(key)
+            if rule == 'omit':
+                continue
+            v = None if rule == 'unsupported' else self.read_key(key, now_ns)
+            if isinstance(rule, bytes):
+                v = rule
             if v is None:
                 return RET_PARAM_NOT_SUPPORT, [(key, b'')]
             out.append((key, v))
@@ -794,6 +801,16 @@ class Simulator:
                 'ret': int(req.get('ret', RET_FAIL)),
                 'key': req.get('key'),
             }
+        elif cmd == 'inquire_override':
+            key = int(req['key'])
+            if req.get('clear'):
+                self.model.inquire_overrides.pop(key, None)
+            elif req.get('omit'):
+                self.model.inquire_overrides[key] = 'omit'
+            elif req.get('unsupported'):
+                self.model.inquire_overrides[key] = 'unsupported'
+            else:
+                self.model.inquire_overrides[key] = bytes.fromhex(req.get('value', ''))
         elif cmd == 'log_drop':
             self.log_drop += int(req.get('n', 1))
         elif cmd == 'log_new_file':

@@ -620,6 +620,30 @@ class EndToEndTest(unittest.TestCase):
             ack = self.request(sim.CMD_PARAM_INQUIRE, inquire, cmd)
             self.assertEqual(ack.data[0], expected)
 
+    def test_control_channel_inquire_override(self) -> None:
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        inquire = proto.encode_param_inquire([sim.KEY_SN, sim.KEY_CORE_TEMP])
+
+        def ask() -> tuple[int, dict]:
+            ack = self.request(sim.CMD_PARAM_INQUIRE, inquire, cmd)
+            ret, kvs = proto.parse_param_inquire_ack(ack.data)
+            return ret, dict(kvs)
+
+        key = sim.KEY_CORE_TEMP
+        self.send_control(f'{{"cmd":"inquire_override","key":{key},"value":"0102"}}')
+        time.sleep(0.1)
+        self.assertEqual(ask()[1][key], b'\x01\x02')
+        self.send_control(f'{{"cmd":"inquire_override","key":{key},"omit":true}}')
+        time.sleep(0.1)
+        ret, kvs = ask()
+        self.assertEqual((ret, list(kvs)), (0, [sim.KEY_SN]))
+        self.send_control(f'{{"cmd":"inquire_override","key":{key},"unsupported":true}}')
+        time.sleep(0.1)
+        self.assertEqual(ask(), (0x20, {key: b''}))
+        self.send_control(f'{{"cmd":"inquire_override","key":{key},"clear":true}}')
+        time.sleep(0.1)
+        self.assertEqual(len(ask()[1][key]), 4)
+
     def test_firmware_log_stream_gap_and_ack(self) -> None:
         self.s.args.log_chunk_interval = 0.01
         self.s.args.log_chunk_bytes = 64
