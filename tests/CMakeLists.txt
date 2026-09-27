@@ -34,6 +34,7 @@ add_executable(mid360_core_tests
   test_point_format.cpp
   test_settings_keys.cpp
   test_reconnect.cpp
+  test_reconnect_failures.cpp
   test_log.cpp
   test_golden_vectors.cpp
   test_debug_data.cpp

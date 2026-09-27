@@ -609,6 +609,8 @@ class Simulator:
         self.next_debug = 0.0
         self.silence_until = 0.0
         self.drop_ack = 0
+        # fail_cmd control: cmd_id -> {'skip', 'count', 'ret', 'key'}
+        self.fail_cmds: dict[int, dict] = {}
         self.running = True
 
         self.sel = selectors.DefaultSelector()
@@ -785,6 +787,13 @@ class Simulator:
                 return
         elif cmd == 'drop_ack':
             self.drop_ack += int(req.get('count', 1))
+        elif cmd == 'fail_cmd':
+            self.fail_cmds[int(req['cmd_id'])] = {
+                'skip': int(req.get('skip', 0)),
+                'count': int(req.get('count', 1)),
+                'ret': int(req.get('ret', RET_FAIL)),
+                'key': req.get('key'),
+            }
         elif cmd == 'log_drop':
             self.log_drop += int(req.get('n', 1))
         elif cmd == 'log_new_file':
@@ -866,7 +875,8 @@ class Simulator:
                 return
             if frame.cmd_id not in (CMD_COLLECTION_LOG, CMD_DEBUG_DATA):
                 return
-        ret, payload = self._dispatch(frame, addr, now)
+        failed = self._injected_failure(frame)
+        ret, payload = failed if failed else self._dispatch(frame, addr, now)
         self.emit(
             event='cmd',
             cmd_id=frame.cmd_id,
@@ -883,6 +893,35 @@ class Simulator:
         ack = proto.CommandFrame(frame.seq_num, frame.cmd_id, ACK, SENDER_LIDAR, payload).encode()
         sock.sendto(ack, addr)
         self._apply_pending_rebind()
+
+    def _injected_failure(self, f: proto.CommandFrame) -> tuple[int, bytes] | None:
+        """Answer of a request the `fail_cmd` control rejects; the request is not applied."""
+        rule = self.fail_cmds.get(f.cmd_id)
+        if rule is None:
+            return None
+        key = 0
+        if rule['key'] is not None:
+            key = int(rule['key'])
+            try:
+                n, _ = struct.unpack_from('<HH', f.data, 0)
+                if f.cmd_id == CMD_PARAM_CONFIG:
+                    keys = [k for k, _ in proto.parse_kv_list(f.data[4:], n)]
+                else:
+                    keys = list(struct.unpack_from(f'<{n}H', f.data, 4))
+            except (struct.error, ValueError):
+                return None
+            if key not in keys:
+                return None
+        if rule['skip'] > 0:
+            rule['skip'] -= 1
+            return None
+        rule['count'] -= 1
+        if rule['count'] <= 0:
+            del self.fail_cmds[f.cmd_id]
+        ret = rule['ret']
+        if f.cmd_id in (CMD_PARAM_CONFIG, CMD_PARAM_INQUIRE):
+            return ret, struct.pack('<BH', ret, key if f.cmd_id == CMD_PARAM_CONFIG else 0)
+        return ret, struct.pack('<B', ret)
 
     def _dispatch(self, f: proto.CommandFrame, addr, now: float) -> tuple[int, bytes | None]:
         now_ns = self.now_ns()

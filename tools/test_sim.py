@@ -600,6 +600,26 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(proto.parse_param_inquire_ack(ack.data)[0], 0)
         self.assertTrue(any(e['event'] == 'ack_dropped' for e in self.events()))
 
+    def test_control_channel_fail_cmd(self) -> None:
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        mode = proto.encode_param_config([(sim.KEY_WORK_TGT_MODE, bytes([1]))])
+        imu = proto.encode_param_config([(sim.KEY_IMU_EN, bytes([0]))])
+        self.send_control('{"cmd":"fail_cmd","cmd_id":256,"ret":2,"skip":1,"key":26}')
+        time.sleep(0.1)
+        # Another key does not match, the first match is skipped, the second one fails.
+        self.assertEqual(self.request(sim.CMD_PARAM_CONFIG, imu, cmd).data[0], 0)
+        self.assertEqual(self.request(sim.CMD_PARAM_CONFIG, mode, cmd).data[0], 0)
+        ack = self.request(sim.CMD_PARAM_CONFIG, mode, cmd)
+        self.assertEqual(struct.unpack('<BH', ack.data[:3]), (2, sim.KEY_WORK_TGT_MODE))
+        self.assertEqual(self.request(sim.CMD_PARAM_CONFIG, mode, cmd).data[0], 0)
+
+        self.send_control('{"cmd":"fail_cmd","cmd_id":257,"count":2}')
+        time.sleep(0.1)
+        inquire = proto.encode_param_inquire([sim.KEY_SN])
+        for expected in (1, 1, 0):
+            ack = self.request(sim.CMD_PARAM_INQUIRE, inquire, cmd)
+            self.assertEqual(ack.data[0], expected)
+
     def test_firmware_log_stream_gap_and_ack(self) -> None:
         self.s.args.log_chunk_interval = 0.01
         self.s.args.log_chunk_bytes = 64
