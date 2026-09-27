@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <limits>
+#include <span>
 #include <vector>
 
 #include "livox/mid360/keys.hpp"
@@ -211,4 +212,31 @@ TEST_CASE("read-only decoders", "[keys]")
   CHECK((*h)[1] == 0);
   CHECK(decode_string(bytes_of("Mid-360 2021/12/01\0\0\0")) == "Mid-360 2021/12/01");
   CHECK(decode_string(bytes_of("abc")) == "abc");
+}
+
+TEST_CASE("decoders reject values of the wrong length", "[keys]")
+{
+  // A LiDAR answering with a different layout must not be read past the end of the value.
+  const std::vector<std::byte> one(1);
+  const std::vector<std::byte> many(65);
+  for (const auto & v : {one, many}) {
+    CAPTURE(v.size());
+    CHECK(decode_host_ip_config(v).error() == KeyError::kWrongLength);
+    CHECK(decode_lidar_ip_config(v).error() == KeyError::kWrongLength);
+    CHECK(decode_install_attitude(v).error() == KeyError::kWrongLength);
+    CHECK(decode_fov_config(v).error() == KeyError::kWrongLength);
+    CHECK(decode_func_io_config(v).error() == KeyError::kWrongLength);
+    CHECK(decode_imu_sensor_config(v).error() == KeyError::kWrongLength);
+    CHECK(decode_version(v).error() == KeyError::kWrongLength);
+    CHECK(decode_mac(v).error() == KeyError::kWrongLength);
+    CHECK(decode_hms_codes(v).error() == KeyError::kWrongLength);
+    CHECK(decode_diag_status(v).error() == KeyError::kWrongLength);
+    CHECK(decode_u64(v).error() == KeyError::kWrongLength);
+  }
+  const std::span<const std::byte> empty;
+  CHECK(decode_work_state(empty).error() == KeyError::kWrongLength);
+  CHECK(decode_fov_enable(empty).error() == KeyError::kWrongLength);
+  CHECK(decode_scan_pattern(empty).error() == KeyError::kWrongLength);
+  CHECK(decode_scan_pattern(encode_u8(2)).value() == ScanPattern::kLowRateRepetitive);
+  CHECK(decode_scan_pattern(encode_u8(3)).error() == KeyError::kOutOfRange);
 }
