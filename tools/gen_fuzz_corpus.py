@@ -104,6 +104,7 @@ def build() -> dict[str, dict[str, bytes]]:
     sess['config_ack_reboot_effect'] = (
         session_prefix(2, 0x0100) + p.CommandFrame(2, 0x0100, 1, 1, bytes([0x21, 0, 0])).encode()
     )
+    sess['debug_data_ack_match'] = session_prefix(9, 0x0303) + g['debug_data_ack_ok']
     sess['info_push_not_ack'] = session_prefix(7, 0x0102) + g['info_push']
     sess['request_not_ack'] = session_prefix(3, 0x0100) + g['set_sampling_req']
     corpus['fuzz_session_ack'] = sess

@@ -39,6 +39,7 @@ import livox_mid360_proto as proto  # noqa: E402
 CMD_DISCOVERY, CMD_PARAM_CONFIG, CMD_PARAM_INQUIRE, CMD_INFO_PUSH = 0x0000, 0x0100, 0x0101, 0x0102
 CMD_REBOOT, CMD_FACTORY_RESET, CMD_SET_GPS_TIME = 0x0200, 0x0201, 0x0202
 CMD_PUSH_LOG, CMD_COLLECTION_LOG = 0x0300, 0x0301  # firmware log (#44), LiDAR port 56500
+CMD_DEBUG_DATA = 0x0303  # debug raw data (#93), accepted on the log and the command port
 REQ, ACK = 0, 1
 SENDER_HOST, SENDER_LIDAR = 0, 1
 
@@ -595,12 +596,17 @@ class Simulator:
         self.frame_cnt = 0
         self.frame_started = 0.0
         self.next_pcl = self.next_imu = self.next_push = self.next_stats = 0.0
-        self.sent = {'pcl': 0, 'imu': 0, 'push': 0, 'pcl_dropped': 0, 'log': 0}
+        self.sent = {'pcl': 0, 'imu': 0, 'push': 0, 'pcl_dropped': 0, 'log': 0, 'debug': 0}
         # Firmware log collection (#44): one stream per log_type (0 realtime, 1 exception).
         self.log_streams: dict[int, LogStream] = {}
         self.log_drop = 0  # chunks to skip (trans_index still advances) -> gap on the host
         self.log_acks_received = 0
         self.next_log = 0.0
+        # Debug raw data (#93): destination from the last 0x0303 enable, None while disabled.
+        self.debug_dest: tuple[str, int] | None = None
+        self.debug_sock: socket.socket | None = None  # opened by the first enable
+        self.debug_seq = 0
+        self.next_debug = 0.0
         self.silence_until = 0.0
         self.drop_ack = 0
         self.running = True
@@ -670,6 +676,9 @@ class Simulator:
         for old in self.socks.values():
             old.close()
         self.socks = fresh
+        if self.debug_sock is not None:  # reopened on the new address by the next datagram
+            self.debug_sock.close()
+            self.debug_sock = None
         self.sel.register(self.socks['discovery'], selectors.EVENT_READ, 'discovery')
         self.sel.register(self.socks['cmd'], selectors.EVENT_READ, 'cmd')
         self.bound_ip = ip
@@ -722,6 +731,8 @@ class Simulator:
         d = [self.next_push, self.next_stats]
         if self.log_streams:
             d.append(self.next_log)
+        if self.debug_dest is not None:
+            d.append(self.next_debug)
         if self.model.timed:
             d.append(self.model.state_deadline)
         if self.model.sampling:
@@ -803,6 +814,11 @@ class Simulator:
                 },
                 log_enabled=sorted(self.log_streams),
                 log_acks_received=self.log_acks_received,
+                debug_data={
+                    'enabled': self.debug_dest is not None,
+                    'dest': self.debug_dest,
+                    'port': self.debug_sock.getsockname()[1] if self.debug_sock else None,
+                },
             )
         else:
             self.emit(event='error', error=f'unknown control cmd: {cmd!r}')
@@ -815,6 +831,8 @@ class Simulator:
         self.frame_cnt = 0
         self.silence_until = now + self.args.reboot_silence
         self.model.reboot(now + self.args.reboot_silence)
+        self.debug_dest = None  # [unverified] assumed not to survive a reboot
+        self.debug_seq = 0
         # A changed 0x0004 takes effect now [unverified: the wiki only says "after reboot"].
         # Deferred so the reboot ACK still leaves the old socket.
         if self.configured_ip() != self.lidar_ip():
@@ -846,7 +864,7 @@ class Simulator:
             if frame.cmd_id == CMD_PUSH_LOG:  # host ACK for a pushed chunk (REQ 0x0300)
                 self._on_log_ack(frame, addr)
                 return
-            if frame.cmd_id != CMD_COLLECTION_LOG:
+            if frame.cmd_id not in (CMD_COLLECTION_LOG, CMD_DEBUG_DATA):
                 return
         ret, payload = self._dispatch(frame, addr, now)
         self.emit(
@@ -914,6 +932,11 @@ class Simulator:
             if len(f.data) < 2 or f.data[0] not in LOG_TYPES:
                 return RET_FAIL, struct.pack('<B', RET_FAIL)
             self._log_control(f.data[0], f.data[1] != 0, addr)
+            return RET_OK, struct.pack('<B', RET_OK)
+        if f.cmd_id == CMD_DEBUG_DATA:
+            req = proto.parse_debug_data_control(f.data)
+            if req is None or not self._debug_control(req[0], (req[1], req[2])):
+                return RET_FAIL, struct.pack('<B', RET_FAIL)
             return RET_OK, struct.pack('<B', RET_OK)
         return RET_FAIL, struct.pack('<B', RET_FAIL)  # unknown cmd_id
 
@@ -996,6 +1019,74 @@ class Simulator:
         self.emit(event='log_ack', ret=ret, log_type=log_type, file_index=file_index, trans=trans)
 
     # -- periodic senders ------------------------------------------------------
+    # -- debug raw data (#93) ------------------------------------------------
+    def _debug_socket(self) -> socket.socket | None:
+        """
+        Return the source socket of the stream, bound on first use.
+
+        60301 is inside the Linux ephemeral range, so binding it at start-up could fail for
+        reasons unrelated to the test at hand.
+        """
+        if self.debug_sock is None:
+            port = 0 if self.args.base_port == 0 else self.args.debug_data_port
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                if port != 0:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.setblocking(False)
+                s.bind((self.bound_ip or self.args.bind, port))
+            except OSError as e:
+                s.close()
+                self.emit(event='error', error=f'debug data socket on port {port}: {e}')
+                return None
+            self.debug_sock = s
+        return self.debug_sock
+
+    def _debug_control(self, enable: bool, dest: tuple[str, int]) -> bool:
+        """
+        Apply a 0x0303 request and return whether it was accepted.
+
+        A repeated enable moves the stream to the new destination; a disable while disabled
+        is accepted [unverified, #11].
+        """
+        if not enable:
+            self.debug_dest = None
+            self.emit(event='debug_data', enabled=False)
+            return True
+        if dest[1] == 0 or self._debug_socket() is None:
+            return False
+        if self.debug_dest is None:
+            self.next_debug = time.monotonic()
+        self.debug_dest = dest
+        self.emit(
+            event='debug_data',
+            enabled=True,
+            dest=f'{dest[0]}:{dest[1]}',
+            port=self.debug_sock.getsockname()[1],
+        )
+        return True
+
+    def _send_debug_data(self) -> None:
+        """
+        Send one synthetic datagram.
+
+        seq u32 (little-endian, from 0), then bytes counting up from the low byte of seq.
+        The real layout is unknown.
+        """
+        sock = self._debug_socket()
+        if sock is None or self.debug_dest is None:
+            return
+        seq = self.debug_seq
+        self.debug_seq = (seq + 1) & 0xFFFFFFFF
+        n = max(0, self.args.debug_data_bytes - 4)
+        data = struct.pack('<I', seq) + bytes((seq + i) & 0xFF for i in range(n))
+        try:
+            sock.sendto(data, self.debug_dest)
+        except OSError as e:
+            self.log(f'send debug data to {self.debug_dest} failed: {e}')
+            return
+        self.sent['debug'] += 1
+
     def now_ns(self) -> int:
         return time.time_ns() + self.model.time_offset_ns
 
@@ -1031,6 +1122,14 @@ class Simulator:
             for stream in list(self.log_streams.values()):
                 self._send_log_chunk(stream)
             self.next_log = max(self.next_log + self.args.log_chunk_interval, now)
+        if self.debug_dest is not None:
+            budget = 64  # bound catch-up bursts
+            while now >= self.next_debug and budget > 0:
+                self._send_debug_data()
+                self.next_debug += self.args.debug_data_interval
+                budget -= 1
+            if now - self.next_debug > 0.5:
+                self.next_debug = now
         if now >= self.next_stats:
             self.emit(event='sent', **self.sent, state=m.work_state)
             self.next_stats += 1.0
@@ -1183,6 +1282,21 @@ def build_parser() -> argparse.ArgumentParser:
         '--log-ignore-hostcfg',
         action='store_true',
         help='send log chunks to the 0x0301 sender instead of the key 0x0009 host',
+    )
+    p.add_argument(
+        '--debug-data-port',
+        type=int,
+        default=proto.PORT_DEBUG_DATA,
+        help='source port of the debug raw data stream; 0 or --base-port 0 = pick a free port',
+    )
+    p.add_argument(
+        '--debug-data-interval',
+        type=float,
+        default=0.01,
+        help='seconds between debug raw data datagrams while 0x0303 has enabled them',
+    )
+    p.add_argument(
+        '--debug-data-bytes', type=int, default=1024, help='size of a debug raw data datagram'
     )
     p.add_argument('--quit-on-eof', action='store_true', default=True)
     p.add_argument('--no-quit-on-eof', dest='quit_on_eof', action='store_false')
