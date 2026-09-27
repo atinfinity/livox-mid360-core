@@ -106,7 +106,9 @@ scripts/fuzz.sh build-fuzz 30   # seconds per target; CI runs the same script
 The `Coverage` workflow builds with GCC 14 and `LIVOX_MID360_ENABLE_COVERAGE=ON`, runs the
 Catch2 suite and uploads a gcovr report to [Codecov](https://codecov.io/gh/atinfinity/livox-mid360-core)
 (README badge, line coverage). The HTML report is attached to each run as the `coverage-html`
-artifact. Locally (`gcovr` from apt or pip):
+artifact. The counters are updated atomically (`-fprofile-update=atomic`): the tests are
+multithreaded, and racing counters make gcov report negative branch counts, which gcovr
+rejects ([#125](https://github.com/atinfinity/livox-mid360-core/issues/125)). Locally (`gcovr` from apt or pip):
 
 ```sh
 cmake -S . -B build-cov -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLIVOX_MID360_ENABLE_COVERAGE=ON
