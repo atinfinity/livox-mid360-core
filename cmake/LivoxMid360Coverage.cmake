@@ -7,6 +7,8 @@ function(livox_mid360_apply_coverage target)
   if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     message(FATAL_ERROR "LIVOX_MID360_ENABLE_COVERAGE requires GCC or Clang (got ${CMAKE_CXX_COMPILER_ID})")
   endif()
-  target_compile_options(${target} PUBLIC --coverage)
-  target_link_options(${target} PUBLIC --coverage)
+  # The library and the tests are multithreaded; non-atomic counters race and gcov then
+  # reports negative branch counts, which gcovr rejects (GCC bug 68080, issue #125).
+  target_compile_options(${target} PUBLIC --coverage -fprofile-update=atomic)
+  target_link_options(${target} PUBLIC --coverage -fprofile-update=atomic)
 endfunction()
