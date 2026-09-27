@@ -614,6 +614,7 @@ TEST_CASE("lvx2 writer rejects an unknown data_type", "[lvx2]")
   REQUIRE(w.write(0, make_packet(0, 0, 0).view));
 
   auto bad = make_packet(1, 0, 10 * kMs);
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): the point of the test
   bad.view.header.data_type = static_cast<DataType>(7);
   const auto r = w.write(0, bad.view);
   REQUIRE(!r);
@@ -650,7 +651,7 @@ TEST_CASE("lvx2 reader: file cut inside a package header", "[lvx2]")
   REQUIRE(w.close());
   REQUIRE(w.stats().frames == 1);
   const auto size = std::filesystem::file_size(path);
-  constexpr std::uintmax_t kPoints = 4 * 14;
+  constexpr std::uintmax_t kPoints = 56;  // 4 points of 14 bytes
   constexpr std::uintmax_t kHeader = 23;
 
   // `left` bytes of the last package header remain.
