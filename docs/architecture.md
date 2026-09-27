@@ -120,7 +120,7 @@ thread. `Device` serialises access to it.
 | Mutex | Protects | Held by |
 | --- | --- | --- |
 | `cmd_mutex` | the command path: one command or one `attempt()` at a time | commands, `attempt()` (worker and `reconnect()`) |
-| `conn_mutex` | `info_`, `session` swap, `pending` events, worker hand-off, `cancel()` | short critical sections everywhere; `run_worker()` sleeps on `conn_cv` with it |
+| `conn_mutex` | `info_`, `session` swap, `pending` events, worker hand-off, `cancel()` and clearing its flags | short critical sections everywhere; `run_worker()` sleeps on `conn_cv` with it |
 | `push_mutex` | pushed work state and HMS set (`work_state()`, `hms()`) | receive thread (write), observers (read) |
 | `cb_mutex` | the four callback slots plus `cb_generation` | setters (write), receive thread (copy when the generation changes) |
 
@@ -305,7 +305,8 @@ flowchart TB
   Device may not be destroyed from its own callback (it would wait for itself).
 - **Session hand-off during reconnect**: `attempt()` builds a new `Session` and swaps it into
   `Device::Impl` under `conn_mutex`; `cancel()` takes the same mutex so it always reaches the
-  live socket. The `HostSetup` recorded at `open()` is immutable and replayed as is.
+  live socket, and a cancel no call has consumed yet moves over to the new `Session`. The
+  `HostSetup` recorded at `open()` is immutable and replayed as is.
 - **Registry snapshot**: the receive thread works from a copy of the registry refreshed when
   `generation` changes, so user threads never block it while adding, rekeying or removing
   entries.

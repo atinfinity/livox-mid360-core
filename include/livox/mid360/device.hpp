@@ -363,7 +363,9 @@ public:
     }
     return out;
   }
-  /// Interrupts a blocking command from another thread (not serialised).
+  /// Interrupts the blocking command in progress from another thread (not serialised); it
+  /// returns kCancelled. Without one in progress, the next command (or reconnect()) does.
+  /// One cancel() aborts one command.
   void cancel() noexcept;
 
   // --- connection (issue #8)

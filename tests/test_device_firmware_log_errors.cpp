@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Error paths of the firmware log collection in device.cpp (issue #96). The control requests
-// of the Device go to tools/livox_mid360_sim.py as usual, but DeviceOptions::lidar_log_port
-// points at a socket of the test that answers 0x0301 with whatever the test case asks for.
+// Error paths of the firmware log collection in device.cpp (issue #96) and Device::cancel()
+// across the Session and the log socket (#114). The control requests of the Device go to
+// tools/livox_mid360_sim.py as usual, but DeviceOptions::lidar_log_port points at a socket of
+// the test that answers 0x0301 with whatever the test case asks for.
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -169,7 +170,8 @@ struct Fixture
   std::unique_ptr<Context> context;
   std::unique_ptr<Device> dev;
 
-  explicit Fixture(RequestOptions request = {.timeout = 150ms, .attempts = 2})
+  explicit Fixture(
+    RequestOptions request = {.timeout = 150ms, .attempts = 2}, bool reconnect = true)
   {
     std::string err;
     sim = SimProcess::start(err, {"--rate-multiplier", "0.05", "--push-rate", "10"});
@@ -187,6 +189,7 @@ struct Fixture
     o.session.host_command_port = 0;
     o.session.request = request;
     o.lidar_log_port = fake.port();
+    o.reconnect.enabled = reconnect;
     const Endpoint cmd{{127, 0, 0, 1}, sim->ports().cmd};
     const DiscoveredDevice found{
       .serial_number = sim->sn(), .ip = cmd.ip, .cmd_port = cmd.port, .dev_type = 9, .from = cmd};
@@ -209,6 +212,13 @@ struct Fixture
     CHECK(e.kind == kind);
     CHECK(e.cmd_id == static_cast<std::uint16_t>(CmdId::kCollectionLog));
     return e;
+  }
+
+  /// A control line to the simulator, applied before this returns.
+  void control(const std::string & json)
+  {
+    REQUIRE(sim->control(json));
+    REQUIRE(sim->wait_event(R"("event":"control")").has_value());
   }
 
   /// The Device still talks to the LiDAR and the next log request succeeds.
@@ -285,10 +295,87 @@ TEST_CASE("Device: cancel() ends a firmware log request that waits for its ACK",
   CHECK(r.error().session->attempts == 1);
   CHECK(elapsed < 3s);
   canceller.join();
-  // The same cancel() left the Session's flag set, which aborts the next command (#114).
-  const auto stale = f.dev->identity();
-  REQUIRE_FALSE(stale.has_value());
-  REQUIRE(stale.error().session.has_value());
-  CHECK(stale.error().session->kind == SessionErrorKind::kCancelled);
+  // The same cancel() does not abort the next command through the Session (#114).
+  f.still_usable();
+}
+
+TEST_CASE("Device: cancel() of a command does not abort the next log request", "[sim][device]")
+{
+  Fixture f(RequestOptions{.timeout = 5s, .attempts = 3});
+  f.control(R"({"cmd":"drop_ack","count":1})");
+  std::jthread canceller([&] {
+    (void)f.sim->wait_event(R"("event":"ack_dropped")");
+    f.dev->cancel();
+  });
+  const auto t0 = std::chrono::steady_clock::now();
+  const auto r = f.dev->identity();
+  const auto elapsed = std::chrono::steady_clock::now() - t0;
+  canceller.join();
+  REQUIRE_FALSE(r.has_value());
+  REQUIRE(r.error().session.has_value());
+  CHECK(r.error().session->kind == SessionErrorKind::kCancelled);
+  CHECK(r.error().session->attempts == 1);
+  CHECK(elapsed < 3s);
+  // stop_firmware_log() goes to the log socket only: the log flag is the one left behind.
+  const auto before = f.fake.requests();
+  CHECK(f.dev->stop_firmware_log().has_value());
+  CHECK(f.fake.requests() == before + 1);
+  f.still_usable();
+}
+
+TEST_CASE("Device: cancel() with no command in progress aborts one command", "[sim][device]")
+{
+  Fixture f;
+  const auto cancelled = [](const auto & r) {
+    return !r.has_value() && r.error().session.has_value() &&
+           r.error().session->kind == SessionErrorKind::kCancelled &&
+           r.error().session->attempts == 0;
+  };
+  const auto before = f.fake.requests();
+
+  SECTION("a log request consumes it")
+  {
+    f.dev->cancel();
+    CHECK(cancelled(f.dev->stop_firmware_log()));
+    CHECK(f.fake.requests() == before);  // nothing was sent
+    CHECK(f.dev->identity().has_value());
+  }
+  SECTION("a debug data request consumes it")
+  {
+    f.dev->cancel();
+    CHECK(cancelled(f.dev->stop_debug_data()));
+    CHECK(f.dev->identity().has_value());
+  }
+  SECTION("a command consumes it")
+  {
+    f.dev->cancel();
+    CHECK(cancelled(f.dev->identity()));
+    CHECK(f.dev->stop_firmware_log().has_value());
+    CHECK(f.fake.requests() == before + 1);
+  }
+  SECTION("start_firmware_log() consumes it with the key 0x0009 request")
+  {
+    f.dev->cancel();
+    CHECK(cancelled(f.dev->start_firmware_log()));
+    CHECK(f.fake.requests() == before);
+    CHECK(f.dev->stop_firmware_log().has_value());
+  }
+  f.still_usable();
+}
+
+TEST_CASE("Device: a pending cancel() survives the Session swap of reconnect()", "[sim][device]")
+{
+  Fixture f(RequestOptions{.timeout = 150ms, .attempts = 2}, /*reconnect=*/false);
+  f.dev->disconnect();
+  REQUIRE_FALSE(f.dev->connected());
+  f.dev->cancel();
+  // The new Session inherits the flag: the host setup replay is the call that consumes it.
+  const auto r = f.dev->reconnect();
+  REQUIRE_FALSE(r.has_value());
+  REQUIRE(r.error().session.has_value());
+  CHECK(r.error().session->kind == SessionErrorKind::kCancelled);
+  CHECK_FALSE(f.dev->connected());
+  REQUIRE(f.dev->reconnect().has_value());
+  CHECK(f.dev->connected());
   f.still_usable();
 }

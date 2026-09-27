@@ -6,6 +6,7 @@
 // it. The symbols are exported so the fuzzers can link against the shared library.
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -48,6 +49,14 @@ enum class AckMismatch : std::uint8_t
 [[nodiscard]] std::expected<SimpleAck, SessionError> to_simple_ack(const RawAck & ack);
 /// Reads key 0x8006 out of an inquire result.
 [[nodiscard]] std::expected<WorkState, SessionError> to_work_state(const InquireResult & result);
+
+/// Device::cancel() raises the Session's cancel flag together with its own one for the log
+/// socket requests; the Device clears the one a cancelled call left behind and carries a
+/// pending one over to the Session a reconnect creates (#114).
+struct SessionAccess
+{
+  [[nodiscard]] static std::atomic<bool> & cancel_flag(Session & s) noexcept { return s.cancel_; }
+};
 
 }  // namespace livox::mid360::detail
 LIVOX_MID360_API_END
