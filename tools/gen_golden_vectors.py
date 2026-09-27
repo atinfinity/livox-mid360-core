@@ -120,6 +120,25 @@ def vectors() -> list[tuple[str, bytes]]:
         )
     )
 
+    # 0x0303 debug raw data control (#93)
+    out.append(
+        (
+            'debug_data_enable_req',
+            p.CommandFrame(
+                9, 0x0303, 0, 0, p.encode_debug_data_control(True, '192.168.1.5', 44332)
+            ).encode(),
+        )
+    )
+    out.append(
+        (
+            'debug_data_disable_req',
+            p.CommandFrame(
+                10, 0x0303, 0, 0, p.encode_debug_data_control(False, '192.168.1.5', 44332)
+            ).encode(),
+        )
+    )
+    out.append(('debug_data_ack_ok', p.CommandFrame(9, 0x0303, 1, 1, bytes([0])).encode()))
+
     # data packets
     pts32 = [
         (1000 + i, -2000 + 3 * i, 500 - i, (i * 7) % 256, i % 4 | ((i % 3) << 2))

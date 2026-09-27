@@ -670,6 +670,91 @@ class EndToEndTest(unittest.TestCase):
         finally:
             host_log.close()
 
+    def test_debug_data_stream(self) -> None:
+        self.s.args.debug_data_interval = 0.005
+        self.s.args.debug_data_bytes = 32
+        log = ('127.0.0.1', self.s.ports['log'])
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        host = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        other = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            for s in (host, other):
+                s.bind(('127.0.0.1', 0))
+                s.settimeout(3)
+
+            def control(enable: bool, sock: socket.socket, reserved: int = 0) -> bytes:
+                return proto.encode_debug_data_control(
+                    enable, '127.0.0.1', sock.getsockname()[1], reserved
+                )
+
+            # Rejected: short payload, enable with port 0. Nothing is opened for them.
+            self.assertEqual(self.request(sim.CMD_DEBUG_DATA, b'\x01\x7f\x00', log).data, b'\x01')
+            zero = proto.encode_debug_data_control(True, '127.0.0.1', 0)
+            self.assertEqual(self.request(sim.CMD_DEBUG_DATA, zero, log).data, b'\x01')
+            self.assertIsNone(self.s.debug_sock)
+            # A disable before any enable is accepted.
+            self.assertEqual(
+                self.request(sim.CMD_DEBUG_DATA, control(False, host), log).data, b'\x00'
+            )
+
+            self.assertEqual(
+                self.request(sim.CMD_DEBUG_DATA, control(True, host), log).data, b'\x00'
+            )
+            seqs = []
+            for _ in range(5):
+                d, addr = host.recvfrom(2048)
+                self.assertEqual(len(d), 32)
+                (seq,) = struct.unpack_from('<I', d, 0)
+                self.assertEqual(d[4:], bytes((seq + i) & 0xFF for i in range(28)))
+                seqs.append(seq)
+            self.assertEqual(seqs, [0, 1, 2, 3, 4])
+            # --base-port 0: the source port is a free one, reported by the event and status.
+            source_port = addr[1]
+            ev = [e for e in self.events() if e['event'] == 'debug_data'][-1]
+            self.assertEqual(ev['port'], source_port)
+            self.assertEqual(ev['dest'], f'127.0.0.1:{host.getsockname()[1]}')
+
+            # A repeated enable, here on the command port, moves the stream.
+            self.assertEqual(
+                self.request(sim.CMD_DEBUG_DATA, control(True, other, 100), cmd).data, b'\x00'
+            )
+            d, addr = other.recvfrom(2048)
+            self.assertEqual(addr[1], source_port)
+            self.assertGreater(struct.unpack_from('<I', d, 0)[0], 4)
+
+            self.send_control('{"cmd":"status"}')
+            deadline = time.monotonic() + 3
+            while '"event":"status"' not in self.out.getvalue() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            status = [e for e in self.events() if e['event'] == 'status'][-1]
+            self.assertEqual(
+                status['debug_data'],
+                {
+                    'enabled': True,
+                    'dest': ['127.0.0.1', other.getsockname()[1]],
+                    'port': source_port,
+                },
+            )
+            self.assertGreaterEqual(status['sent']['debug'], 6)
+
+            self.assertEqual(
+                self.request(sim.CMD_DEBUG_DATA, control(False, other), log).data, b'\x00'
+            )
+            self.assertIsNone(self.s.debug_dest)
+            time.sleep(0.05)
+            other.setblocking(False)
+            while True:  # what was in flight
+                try:
+                    other.recvfrom(2048)
+                except BlockingIOError:
+                    break
+            time.sleep(0.05)
+            with self.assertRaises(BlockingIOError):
+                other.recvfrom(2048)
+        finally:
+            host.close()
+            other.close()
+
     def test_control_lines_written_together_are_all_applied(self) -> None:
         # Two lines in one write land in the pipe together; the second must not be
         # left behind in a read buffer that select() never reports again.

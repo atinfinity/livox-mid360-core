@@ -5,6 +5,7 @@
 
 #include "generated/golden_vectors.hpp"
 #include "livox/mid360/crc.hpp"
+#include "livox/mid360/debug_data.hpp"
 #include "livox/mid360/hms.hpp"
 #include "livox/mid360/keys.hpp"
 #include "livox/mid360/protocol.hpp"
@@ -68,6 +69,16 @@ TEST_CASE("golden: request frames byte-identical", "[golden]")
   CHECK(
     build_command_frame({.seq_num = 8, .cmd_id = 0x0202, .data = gps}).value() ==
     to_vec(GOLDEN(gps_time_req)));
+
+  const auto dbg_on = encode_debug_data_control({.host_ip = {192, 168, 1, 5}, .host_port = 44332});
+  CHECK(
+    build_command_frame({.seq_num = 9, .cmd_id = 0x0303, .data = dbg_on}).value() ==
+    to_vec(GOLDEN(debug_data_enable_req)));
+  const auto dbg_off =
+    encode_debug_data_control({.enable = false, .host_ip = {192, 168, 1, 5}, .host_port = 44332});
+  CHECK(
+    build_command_frame({.seq_num = 10, .cmd_id = 0x0303, .data = dbg_off}).value() ==
+    to_vec(GOLDEN(debug_data_disable_req)));
 }
 
 TEST_CASE("golden: LiDAR-originated frames parse", "[golden]")
@@ -116,6 +127,12 @@ TEST_CASE("golden: LiDAR-originated frames parse", "[golden]")
   CHECK(decode_hms(hms[0]).abnormal_id == 0x0102);
   CHECK(decode_hms(hms[1]).level == HmsLevel::kFatal);
   CHECK_FALSE(decode_hms(hms[2]).active());
+
+  auto dbg = parse_command_frame(GOLDEN(debug_data_ack_ok));
+  REQUIRE(dbg);
+  CHECK(dbg->header.cmd_id == static_cast<std::uint16_t>(CmdId::kDebugDataControl));
+  CHECK(dbg->header.cmd_type == CmdType::kAck);
+  CHECK(parse_simple_ack(dbg->data)->ret_code == RetCode::kSuccess);
 }
 
 TEST_CASE("golden: data packets", "[golden]")

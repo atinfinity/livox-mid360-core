@@ -9,6 +9,7 @@
 #include "livox/mid360/config.hpp"
 #include "livox/mid360/context.hpp"
 #include "livox/mid360/crc.hpp"
+#include "livox/mid360/debug_data.hpp"
 #include "livox/mid360/device.hpp"
 #include "livox/mid360/event.hpp"
 #include "livox/mid360/export.hpp"
