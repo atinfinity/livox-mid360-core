@@ -74,8 +74,10 @@ dev.reset();  // before ctx
    callbacks are invoked on it; they must return quickly. Heavy work goes through a
    `BoundedQueue<T>` (or your own queue) to another thread.
 2. **Commands run on the caller's thread**, serialised by a mutex inside `Device`, so several
-   user threads may call them. `cancel()` bypasses the mutex and forwards to
-   `Session::cancel()`. `Session` itself stays non-thread-safe.
+   user threads may call them. `cancel()` bypasses the mutex and aborts the command in
+   progress with `kCancelled` (or the next command when none is in progress), whether it
+   waits on the `Session` or on the log socket; one `cancel()` aborts one command. `Session`
+   itself stays non-thread-safe.
 3. **Never call a command from a callback**: it would block the receive thread (and can
    deadlock with the destructor). Debug builds assert. React to an `Event` from your own
    thread instead.

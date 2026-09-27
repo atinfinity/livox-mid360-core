@@ -20,6 +20,7 @@
 #include "context_impl.hpp"
 #include "frame_assembler.hpp"
 #include "log_detail.hpp"
+#include "session_detail.hpp"
 
 namespace livox::mid360
 {
@@ -844,9 +845,25 @@ struct Device::Impl : detail::Receiver
     return true;
   }
 
-  /// A command timed out: a disconnect only when the push is stale too (one nominal period).
+  /// Device::cancel() raises two flags, the Session's and log_cancel, and a cancelled call
+  /// consumes only the one it waits on. Clear the other so that one cancel() aborts one call
+  /// (#114). Under cmd_mutex, so that no later call has started yet; conn_mutex keeps the
+  /// pair consistent with cancel().
+  void settle_cancel(const SessionError & err)
+  {
+    if (err.kind != SessionErrorKind::kCancelled) {
+      return;
+    }
+    const std::lock_guard lock(conn_mutex);
+    detail::SessionAccess::cancel_flag(session).store(false);
+    log_cancel.store(false, std::memory_order_release);
+  }
+
+  /// A command failed. Timed out: a disconnect only when the push is stale too (one nominal
+  /// period). Cancelled: see settle_cancel().
   void note_command_error(const SessionError & err)
   {
+    settle_cancel(err);
     if (err.kind != SessionErrorKind::kTimeout) {
       return;
     }
@@ -884,6 +901,18 @@ struct Device::Impl : detail::Receiver
   {
     assert(!context.on_receive_thread() && "Device::reconnect() called from a callback");
     const std::lock_guard lock(cmd_mutex);
+    auto r = attempt_locked();
+    if (!r) {
+      if (const auto & s = r.error().session) {
+        settle_cancel(*s);
+      }
+    }
+    return r;
+  }
+
+  /// The body of attempt(), under cmd_mutex.
+  std::expected<void, DeviceError> attempt_locked()
+  {
     if (connected.load(std::memory_order_acquire)) {
       return {};
     }
@@ -931,7 +960,10 @@ struct Device::Impl : detail::Receiver
     {
       const std::lock_guard clock(conn_mutex);
       info_ = target;
+      // A cancel() that no call has consumed yet stays pending on the new Session.
+      const bool cancel_pending = detail::SessionAccess::cancel_flag(session).load();
       session = std::move(*s);
+      detail::SessionAccess::cancel_flag(session).store(cancel_pending);
     }
     HostSetup replay;
     {
