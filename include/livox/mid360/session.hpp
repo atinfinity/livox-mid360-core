@@ -158,6 +158,11 @@ struct InquireResult
   }
 };
 
+namespace detail
+{
+struct SessionAccess;  // src/session_detail.hpp: Device's access to the cancel flag
+}  // namespace detail
+
 /// Synchronous command channel to one LiDAR. Move-only.
 class Session
 {
@@ -222,6 +227,8 @@ public:
   void cancel() noexcept;
 
 private:
+  friend struct detail::SessionAccess;
+
   Session() = default;
   [[nodiscard]] std::expected<void, SessionError> open(
     const SessionOptions & options, Endpoint lidar);
