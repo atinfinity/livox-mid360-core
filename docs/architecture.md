@@ -6,11 +6,11 @@ model and how all of it is tested. The per-layer pages hold the detail; this pag
 
 | Layer | Page | Design issue |
 | --- | --- | --- |
-| ④ device: `Context`, `Device`, frames, events | [api.md](api.md) | #6, #7, #8, #9 |
-| ③ session: `discover()`, `Session`, `HostSetup` | [session.md](session.md) | #4, #5 |
-| ② transport: `UdpSocket`, `Poller` | [transport.md](transport.md) | #2 |
+| ④ device: `Context`, `Device`, frames, events | [api.md](api.md) | [#6](https://github.com/atinfinity/livox-mid360-core/issues/6), [#7](https://github.com/atinfinity/livox-mid360-core/issues/7), [#8](https://github.com/atinfinity/livox-mid360-core/issues/8), [#9](https://github.com/atinfinity/livox-mid360-core/issues/9) |
+| ③ session: `discover()`, `Session`, `HostSetup` | [session.md](session.md) | [#4](https://github.com/atinfinity/livox-mid360-core/issues/4), [#5](https://github.com/atinfinity/livox-mid360-core/issues/5) |
+| ② transport: `UdpSocket`, `Poller` | [transport.md](transport.md) | [#2](https://github.com/atinfinity/livox-mid360-core/issues/2) |
 | ① protocol: CRC, frames, packets, keys, HMS | [protocol_notes.md](protocol_notes.md) | — |
-| test double: `tools/livox_mid360_sim.py` | [simulator.md](simulator.md) | #3 |
+| test double: `tools/livox_mid360_sim.py` | [simulator.md](simulator.md) | [#3](https://github.com/atinfinity/livox-mid360-core/issues/3) |
 
 Last verified against commit `e429f5e` (2026-09-26). When the code moves, update the
 diagrams here first and the per-layer pages second.
@@ -330,7 +330,7 @@ flowchart LR
 - Asynchronous conditions are **events**, not errors: `kDisconnected`, `kReconnected`,
   `kHms`, `kStateChanged`, `kStats`. Counters (`bad_packets`, `dropped_packets`,
   `unknown_source`, `late_acks`, ...) record what was silently dropped.
-- The library writes nothing to stdout or stderr on its own. The diagnostic trail (#42,
+- The library writes nothing to stdout or stderr on its own. The diagnostic trail ([#42](https://github.com/atinfinity/livox-mid360-core/issues/42),
   `log.hpp`) is off by default and goes only to the handler the application installs; see
   [api.md](api.md#logging).
 
@@ -351,7 +351,7 @@ flowchart LR
   included. Measured on a 2-vCPU CI runner, a Debug + ASan + UBSan build needs about 2.5 ms per
   datagram; the simulator-driven tests therefore run at `--rate-multiplier 0.05`. When the
   receive thread saturates, pushes are read late and the push timeout fires, which is what
-  that setting avoids. The long-run test on hardware (#13) is where the release numbers get
+  that setting avoids. The long-run test on hardware ([#13](https://github.com/atinfinity/livox-mid360-core/issues/13)) is where the release numbers get
   confirmed; `epoll`, `SO_REUSEPORT` or `io_uring` are only considered if it fails.
 - **Callbacks are on the hot path.** Heavy consumers hand off through `BoundedQueue<T>`
   (newest wins on overflow, drops counted) or their own queue.
@@ -395,12 +395,12 @@ flowchart LR
 The full status and plan, with tracking issues per item, is in [roadmap.md](roadmap.md). The
 items that touch this document most:
 
-- Typed parameter APIs on `Device`: firmware version (#38), FOV (#39), coordinate format /
-  scan pattern / frame rate (#40), stored settings and live status read-back (#41), detection
-  mode (#46), IMU enable and sensor config (#47).
-- Diagnostics: firmware log stream on port 56500, 0x03xx (#44, [api.md](api.md#firmware-log));
-  SDK logging (#42) is in [api.md](api.md#logging).
-- Point tag accessors (#34), lvx2 record / replay CLI (#35, [lvx2.md](lvx2.md)), examples (`examples/`), simulator
-  state-machine fidelity (#45).
+- Typed parameter APIs on `Device`: firmware version ([#38](https://github.com/atinfinity/livox-mid360-core/issues/38)), FOV ([#39](https://github.com/atinfinity/livox-mid360-core/issues/39)), coordinate format /
+  scan pattern / frame rate ([#40](https://github.com/atinfinity/livox-mid360-core/issues/40)), stored settings and live status read-back ([#41](https://github.com/atinfinity/livox-mid360-core/issues/41)), detection
+  mode ([#46](https://github.com/atinfinity/livox-mid360-core/issues/46)), IMU enable and sensor config ([#47](https://github.com/atinfinity/livox-mid360-core/issues/47)).
+- Diagnostics: firmware log stream on port 56500, 0x03xx ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44), [api.md](api.md#firmware-log));
+  SDK logging ([#42](https://github.com/atinfinity/livox-mid360-core/issues/42)) is in [api.md](api.md#logging).
+- Point tag accessors ([#34](https://github.com/atinfinity/livox-mid360-core/issues/34)), lvx2 record / replay CLI ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35), [lvx2.md](lvx2.md)), examples (`examples/`), simulator
+  state-machine fidelity ([#45](https://github.com/atinfinity/livox-mid360-core/issues/45)).
 - C ABI: the mapping table in [api.md](api.md#c-abi-mapping-phase-3); all output structs are
   already plain data with `static_assert`s in `tests/test_api_skeleton.cpp`.
