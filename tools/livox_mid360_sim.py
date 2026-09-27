@@ -217,6 +217,8 @@ class DeviceModel:
     startup_delay: float = 0.3
     selfcheck_delay: float = 0.1
     imu_cfg_unsupported: bool = False  # emulate firmware without key 0x002B
+    # Key 0x0004 restored by a factory reset; None keeps factory_settings()'s 192.168.1.100.
+    factory_lidar_ipcfg: bytes | None = None
     settings: dict[int, bytes] = field(default_factory=factory_settings)
     work_state: int = WS_SELFCHECK
     hms: list[int] = field(default_factory=lambda: [0] * 8)
@@ -244,6 +246,8 @@ class DeviceModel:
 
     def factory_reset(self, now: float) -> None:
         self.settings = factory_settings()
+        if self.factory_lidar_ipcfg is not None:
+            self.settings[KEY_LIDAR_IPCFG] = self.factory_lidar_ipcfg
         self.hms = [0] * 8
         self.time_offset_ns = 0
         self.time_sync_type = 0
@@ -437,17 +441,20 @@ class DeviceModel:
     }
 
     def set_status(self, fields: dict) -> list[str]:
-        """Apply the known fields and return the names of the unknown ones."""
-        unknown = []
-        for name, value in fields.items():
-            if name == 'omit_keys':
-                self.push_omit = {int(k) for k in value}
-                continue
-            attr = self.STATUS_FIELDS.get(name)
-            if attr is None:
-                unknown.append(name)
-            else:
-                setattr(self, attr, int(value))
+        """
+        Apply the known fields and return the names of the unknown ones.
+
+        Every value is converted first, so a bad one (ValueError / TypeError) applies nothing.
+        """
+        unknown = [n for n in fields if n != 'omit_keys' and n not in self.STATUS_FIELDS]
+        omit = {int(k) for k in fields['omit_keys']} if 'omit_keys' in fields else None
+        values = {
+            self.STATUS_FIELDS[n]: int(v) for n, v in fields.items() if n in self.STATUS_FIELDS
+        }
+        if omit is not None:
+            self.push_omit = omit
+        for attr, value in values.items():
+            setattr(self, attr, value)
         return unknown
 
     def host(self, key: int) -> tuple[str, int, int] | None:
@@ -588,8 +595,10 @@ class Simulator:
         self.bound_ip: str | None = None  # set by a reboot that moved the LiDAR (#50)
         self.pending_rebind: str | None = None
         # Key 0x0004 reports the address the simulator actually answers from.
+        # A factory reset returns to this address: the simulator cannot move to 192.168.1.100.
         own = bytes(int(x) for x in self.lidar_ip().split('.'))
         self.model.settings[KEY_LIDAR_IPCFG] = own + self.model.settings[KEY_LIDAR_IPCFG][4:]
+        self.model.factory_lidar_ipcfg = self.model.settings[KEY_LIDAR_IPCFG]
         self.points = PointSource(args.seed)
         self.rate = args.rate_multiplier
         self.push_rate = args.push_rate
@@ -603,7 +612,15 @@ class Simulator:
         self.frame_cnt = 0
         self.frame_started = 0.0
         self.next_pcl = self.next_imu = self.next_push = self.next_stats = 0.0
-        self.sent = {'pcl': 0, 'imu': 0, 'push': 0, 'pcl_dropped': 0, 'log': 0, 'debug': 0}
+        self.sent = {
+            'pcl': 0,
+            'imu': 0,
+            'push': 0,
+            'pcl_dropped': 0,
+            'log': 0,
+            'debug': 0,
+            'silenced': 0,  # datagrams generated but withheld by `silence` / reboot silence
+        }
         # Firmware log collection (#44): one stream per log_type (0 realtime, 1 exception).
         self.log_streams: dict[int, LogStream] = {}
         self.log_drop = 0  # chunks to skip (trans_index still advances) -> gap on the host
@@ -614,7 +631,7 @@ class Simulator:
         self.debug_sock: socket.socket | None = None  # opened by the first enable
         self.debug_seq = 0
         self.next_debug = 0.0
-        self.silence_until = 0.0
+        self.silence_until = 0.0  # nothing is received or sent before this (link drop, reboot)
         self.drop_ack = 0
         # fail_cmd control: cmd_id -> {'skip', 'count', 'ret', 'key'}
         self.fail_cmds: dict[int, dict] = {}
@@ -777,13 +794,24 @@ class Simulator:
                 continue
             self.apply_control(req)
 
-    def apply_control(self, req: dict) -> None:
+    def apply_control(self, req: object) -> None:
+        """Apply one control line; a malformed one emits `error` instead of stopping the loop."""
+        if not isinstance(req, dict):
+            self.emit(event='error', error=f'control line is not an object: {req!r}')
+            return
+        try:
+            self._apply_control(req)
+        except (KeyError, ValueError, TypeError, AttributeError) as e:
+            self.emit(event='error', error=f'bad control {req.get("cmd")!r}: {e!r}')
+
+    def _apply_control(self, req: dict) -> None:
         cmd = req.get('cmd')
         now = time.monotonic()
         if cmd == 'quit':
             self.running = False
         elif cmd == 'silence':
-            self.silence_until = now + float(req.get('seconds', 1.0))
+            # A link drop: the LiDAR keeps running (udp_cnt, push seq, trans_index advance).
+            self.silence_until = max(self.silence_until, now + float(req.get('seconds', 1.0)))
         elif cmd == 'hms':
             codes = [int(c) for c in req.get('codes', [])][:8]
             self.model.hms = (codes + [0] * 8)[:8]
@@ -795,11 +823,12 @@ class Simulator:
         elif cmd == 'drop_ack':
             self.drop_ack += int(req.get('count', 1))
         elif cmd == 'fail_cmd':
+            key = req.get('key')
             self.fail_cmds[int(req['cmd_id'])] = {
                 'skip': int(req.get('skip', 0)),
                 'count': int(req.get('count', 1)),
                 'ret': int(req.get('ret', RET_FAIL)),
-                'key': req.get('key'),
+                'key': None if key is None else int(key),
             }
         elif cmd == 'inquire_override':
             key = int(req['key'])
@@ -821,7 +850,10 @@ class Simulator:
             self._do_reboot(now)
             self._apply_pending_rebind()
         elif cmd == 'set_state':
-            self.model.force_state(int(req['state']), now)
+            state = int(req['state'])
+            if state not in WS_ALL:
+                raise ValueError(f'unknown work state {state}')
+            self.model.force_state(state, now)
         elif cmd == 'drop_rate':
             self.drop_rate = float(req.get('rate', 0.0))
         elif cmd == 'frame_ms':
@@ -851,12 +883,20 @@ class Simulator:
             return
         self.emit(event='control', cmd=cmd)
 
-    def _do_reboot(self, now: float) -> None:
+    def _do_reboot(self, now: float, factory: bool = False) -> None:
+        """0x0200 reboot, or 0x0201 factory reset when `factory` (settings back to defaults)."""
         self.seq = 0
         self.udp_cnt_pcl = self.udp_cnt_imu = 0
         self.frame_cnt = 0
-        self.silence_until = now + self.args.reboot_silence
-        self.model.reboot(now + self.args.reboot_silence)
+        up = now + self.args.reboot_silence
+        self.silence_until = max(self.silence_until, up)
+        # Powered down: the push and the log chunks resume after the silence, not during it.
+        self.next_push = max(self.next_push, up)
+        self.next_log = max(self.next_log, up)
+        if factory:
+            self.model.factory_reset(up)
+        else:
+            self.model.reboot(up)
         self.debug_dest = None  # [unverified] assumed not to survive a reboot
         self.debug_seq = 0
         # A changed 0x0004 takes effect now [unverified: the wiki only says "after reboot"].
@@ -973,10 +1013,7 @@ class Simulator:
             self._do_reboot(now)
             return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_FACTORY_RESET:
-            m.factory_reset(now + self.args.reboot_silence)
-            self.seq = 0
-            self.udp_cnt_pcl = self.udp_cnt_imu = self.frame_cnt = 0
-            self.silence_until = now + self.args.reboot_silence
+            self._do_reboot(now, factory=True)
             return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_SET_GPS_TIME:
             if len(f.data) < 9 or f.data[0] != 2:
@@ -1001,10 +1038,10 @@ class Simulator:
         stream = self.log_streams.get(log_type)
         if enable:
             if stream is None:
+                if not self.log_streams:  # the first enabled type starts the chunk clock
+                    self.next_log = time.monotonic() + self.args.log_chunk_interval
                 stream = LogStream(log_type=log_type)
                 self.log_streams[log_type] = stream
-                if not self.log_streams or self.next_log == 0.0:
-                    self.next_log = time.monotonic() + self.args.log_chunk_interval
             stream.requester = addr  # fallback destination when key 0x0009 is unset
             self.log(f'log type {log_type} enabled for {addr}')
         elif stream is not None:
@@ -1054,6 +1091,9 @@ class Simulator:
         if dest is None:
             return
         self.seq = (self.seq + 1) & 0xFFFFFFFF
+        if self.silenced():
+            self.sent['silenced'] += 1
+            return
         frame = proto.CommandFrame(
             self.seq, CMD_PUSH_LOG, REQ, SENDER_LIDAR, header + data
         ).encode()
@@ -1134,6 +1174,9 @@ class Simulator:
             return
         seq = self.debug_seq
         self.debug_seq = (seq + 1) & 0xFFFFFFFF
+        if self.silenced():
+            self.sent['silenced'] += 1
+            return
         n = max(0, self.args.debug_data_bytes - 4)
         data = struct.pack('<I', seq) + bytes((seq + i) & 0xFF for i in range(n))
         try:
@@ -1146,9 +1189,12 @@ class Simulator:
     def now_ns(self) -> int:
         return time.time_ns() + self.model.time_offset_ns
 
+    def silenced(self) -> bool:
+        return time.monotonic() < self.silence_until
+
     def _send_periodic(self, now: float) -> None:
-        if now < self.silence_until:
-            return
+        # Runs during a silence too: the schedules and counters advance and the senders
+        # withhold the datagrams, so the host sees a udp_cnt gap and no burst afterwards.
         m = self.model
         if m.sampling:
             pcl_host = m.host(KEY_PCL_HOST)
@@ -1166,9 +1212,11 @@ class Simulator:
             if m.imu_enabled:
                 imu_host = m.host(KEY_IMU_HOST)
                 imu_interval = 1.0 / (m.imu_rate * self.rate)
-                while now >= self.next_imu:
+                budget = 256
+                while now >= self.next_imu and budget > 0:
                     self._send_imu(imu_host, imu_interval)
                     self.next_imu += imu_interval
+                    budget -= 1
                 if now - self.next_imu > 0.5:
                     self.next_imu = now
         if now >= self.next_push:
@@ -1210,15 +1258,16 @@ class Simulator:
 
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
+        samples = self._cropped_samples(dt)  # fewer than 96 for a narrow FOV window
         pkt = proto.DataPacket(
             time_interval=min(int(interval_s * 1e7), 0xFFFF),
-            dot_num=POINTS_PER_PACKET,
+            dot_num=len(samples),
             udp_cnt=self.udp_cnt_pcl,
             frame_cnt=self.frame_cnt,
             data_type=dt,
             time_type=self.model.time_sync_type,
             timestamp_ns=self.now_ns(),
-            data=proto.pack_samples(dt, self._cropped_samples(dt)),
+            data=proto.pack_samples(dt, samples),
         )
         self.udp_cnt_pcl = (self.udp_cnt_pcl + 1) & 0xFFFF
         if host is None:
@@ -1226,8 +1275,8 @@ class Simulator:
         if self.drop_rate > 0 and self._drop_rng.random() < self.drop_rate:
             self.sent['pcl_dropped'] += 1
             return
-        self._sendto('pcl', pkt.encode(), host)
-        self.sent['pcl'] += 1
+        if self._sendto('pcl', pkt.encode(), host):
+            self.sent['pcl'] += 1
 
     def _send_imu(self, host, interval_s: float) -> None:
         pkt = proto.DataPacket(
@@ -1243,8 +1292,8 @@ class Simulator:
         self.udp_cnt_imu = (self.udp_cnt_imu + 1) & 0xFFFF
         if host is None:
             return
-        self._sendto('imu', pkt.encode(), host)
-        self.sent['imu'] += 1
+        if self._sendto('imu', pkt.encode(), host):
+            self.sent['imu'] += 1
 
     def _send_push(self) -> None:
         host = self.model.host(KEY_STATE_HOST)
@@ -1254,14 +1303,20 @@ class Simulator:
         frame = proto.CommandFrame(
             self.seq, CMD_INFO_PUSH, REQ, SENDER_LIDAR, self.model.push_payload(self.now_ns())
         ).encode()
-        self._sendto('push', frame, host)
-        self.sent['push'] += 1
+        if self._sendto('push', frame, host):
+            self.sent['push'] += 1
 
-    def _sendto(self, kind: str, data: bytes, host: tuple[str, int, int]) -> None:
+    def _sendto(self, kind: str, data: bytes, host: tuple[str, int, int]) -> bool:
+        """Send unless silenced; return whether the datagram left."""
+        if self.silenced():
+            self.sent['silenced'] += 1
+            return False
         try:
             self.socks[kind].sendto(data, (host[0], host[1]))
         except OSError as e:
             self.log(f'send {kind} to {host[:2]} failed: {e}')
+            return False
+        return True
 
 
 # --------------------------------------------------------------------------- CLI
@@ -1280,7 +1335,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--base-port',
         type=int,
         default=proto.PORT_DISCOVERY,
-        help='discovery port; cmd/push/pcl/imu follow at +100..+400. 0 = pick free ports',
+        help='discovery port; cmd/push/pcl/imu/log follow at +100..+500. 0 = pick free ports',
     )
     p.add_argument('--sn', default='SIM0000000000001')
     p.add_argument('--product-info', default='MID360-SIM', help='key 0x8001 (<= 64 chars)')
