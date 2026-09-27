@@ -100,15 +100,22 @@ void Context::Impl::run()
   std::vector<Datagram> batch(options.batch_size);
   std::vector<Entry> snapshot;
   std::uint64_t seen = 0;
+  // Re-read the entries after add() / rekey() / remove(). Checked after every receive as
+  // well: a poll can return the wake-up of an add() together with the first datagrams of
+  // that Device, which the previous snapshot would count as unknown_source (#124).
+  const auto refresh = [&] {
+    if (generation.load(std::memory_order_acquire) == seen) {
+      return;
+    }
+    const std::lock_guard lock(mutex);
+    snapshot = entries;
+    seen = generation.load(std::memory_order_acquire);
+    observed = seen;
+    cv.notify_all();
+  };
 
   while (!stop.load(std::memory_order_acquire)) {
-    if (generation.load(std::memory_order_acquire) != seen) {
-      const std::lock_guard lock(mutex);
-      snapshot = entries;
-      seen = generation.load(std::memory_order_acquire);
-      observed = seen;
-      cv.notify_all();
-    }
+    refresh();
 
     // Timers first: they also give the poll timeout.
     Clock::time_point now = Clock::now();
@@ -168,6 +175,7 @@ void Context::Impl::run()
           }
           break;
         }
+        refresh();
         datagrams.fetch_add(*n, std::memory_order_relaxed);
         if (port == detail::DataPort::kLog) {
           log_datagrams.fetch_add(*n, std::memory_order_relaxed);
