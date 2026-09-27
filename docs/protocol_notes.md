@@ -169,5 +169,11 @@ level byte in the code distinguishes them; the library carries one description f
 ## Variants
 
 v1 targets the base Mid-360. `speed_mode` (0x0021) and `pc_freq_mod` (0x0029) exist in the
-key table but are not given typed helpers. Spherical output (data type 3) and multicast are
-modelled because the base model supports them.
+key table but are not given typed helpers. Spherical output (data type 3) is modelled because
+the base model supports it: `set_point_format()`, the frame assembler, the lvx2 writer and the
+simulator all handle it.
+
+Multicast is not implemented and is not a v1 goal. The host IP keys (`0x0005`–`0x0007`) accept
+any address, so a multicast group can be written to them with `set<Key>()`, but the library
+does not join the group: `SocketOptions::multicast_group` is reserved and rejected with
+`kInvalidArgument` ([transport.md](transport.md)), and the simulator has no multicast mode.

@@ -121,7 +121,8 @@ struct SocketOptions
   /// Requested SO_RCVBUF in bytes; 0 leaves the OS default untouched. The kernel may
   /// clamp the value; see UdpSocket::recv_buffer_bytes().
   std::size_t recv_buffer_bytes = 0;
-  /// Reserved for later (#2 design): not implemented in v0.2, must stay at default.
+  /// Reserved (#2 design): not implemented, must stay at default. Multicast reception is
+  /// not a v1 goal (#112); bind_to_device is reserved in the same way.
   std::optional<std::array<std::uint8_t, 4>> multicast_group;
   std::string bind_to_device;
 };
