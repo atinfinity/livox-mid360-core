@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // lvx2 writer / reader / player (issue #35).
 #include <catch2/catch_test_macros.hpp>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <stop_token>
+#include <string>
 #include <vector>
 
 #include "livox/mid360/bytes.hpp"
@@ -418,4 +421,183 @@ TEST_CASE("lvx2 player: frames, loop, stop token and lidar_id filter", "[lvx2]")
     CHECK(!bad.open(path));
   }
   std::filesystem::remove(path);
+}
+
+TEST_CASE("lvx2 error strings", "[lvx2]")
+{
+  CHECK(to_string(Lvx2Error::Kind::kIo) == "io");
+  CHECK(to_string(Lvx2Error::Kind::kInvalidArgument) == "invalid_argument");
+  CHECK(to_string(Lvx2Error::Kind::kUnsupportedDataType) == "unsupported_data_type");
+  CHECK(to_string(Lvx2Error::Kind::kBadFile) == "bad_file");
+  CHECK(to_string(Lvx2Error{Lvx2Error::Kind::kBadFile, 0, ""}) == "bad_file");
+  CHECK(to_string(Lvx2Error{Lvx2Error::Kind::kBadFile, 0, "why"}) == "bad_file: why");
+  // errno is only printed for kIo
+  CHECK(to_string(Lvx2Error{Lvx2Error::Kind::kBadFile, ENOENT, "why"}) == "bad_file: why");
+  CHECK(
+    to_string(Lvx2Error{Lvx2Error::Kind::kIo, ENOENT, "open x"}) ==
+    std::string("io: open x (") + std::strerror(ENOENT) + ")");
+}
+
+TEST_CASE("lvx2 writer: open / write preconditions", "[lvx2]")
+{
+  const auto path = temp_file("precond.lvx2");
+  const auto info = device_info();
+  Lvx2Writer w;
+  CHECK_FALSE(w.is_open());
+  CHECK(w.close());  // closing a writer that was never opened is a no-op
+
+  auto zero = w.open(path, std::span(&info, 1), 0);
+  REQUIRE(!zero);
+  CHECK(zero.error().kind == Lvx2Error::Kind::kInvalidArgument);
+  const std::vector<Lvx2DeviceInfo> too_many(256, info);
+  auto many = w.open(path, too_many);
+  REQUIRE(!many);
+  CHECK(many.error().kind == Lvx2Error::Kind::kInvalidArgument);
+  CHECK_FALSE(w.is_open());
+
+  REQUIRE(w.open(path, std::span(&info, 1)));
+  CHECK(w.is_open());
+  auto again = w.open(path, std::span(&info, 1));
+  REQUIRE(!again);
+  CHECK(again.error().kind == Lvx2Error::Kind::kInvalidArgument);
+  CHECK(w.is_open());  // the failed second open leaves the first file open
+
+  auto bad_index = w.write(1, make_packet(0, 0, 0).view);
+  REQUIRE(!bad_index);
+  CHECK(bad_index.error().kind == Lvx2Error::Kind::kInvalidArgument);
+  REQUIRE(w.write(0, make_packet(0, 0, 0).view));
+  REQUIRE(w.close());
+  CHECK_FALSE(w.is_open());
+  CHECK(w.stats().frames == 1);
+  CHECK(w.stats().bytes == std::filesystem::file_size(path));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("lvx2 reader: structural errors", "[lvx2]")
+{
+  const auto src = std::filesystem::path(LIVOX_MID360_TEST_DATA_DIR) / "mini.lvx2";
+  std::ifstream in(src, std::ios::binary);
+  std::vector<char> all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  REQUIRE(all.size() > 100);
+  const auto write_file = [](const std::filesystem::path & path, const std::vector<char> & data) {
+    std::ofstream(path, std::ios::binary)
+      .write(data.data(), static_cast<std::streamsize>(data.size()));
+  };
+  // Offsets: 29-byte file header, 63-byte device info, first frame header at 92.
+  constexpr std::size_t kFrame0 = 92;
+  constexpr std::size_t kPackage0 = kFrame0 + 24;
+
+  SECTION("next_packet before open")
+  {
+    Lvx2Reader r;
+    auto p = r.next_packet();
+    REQUIRE(!p);
+    CHECK(p.error().kind == Lvx2Error::Kind::kInvalidArgument);
+  }
+  SECTION("bad signature")
+  {
+    const auto path = temp_file("badsig.lvx2");
+    auto copy = all;
+    copy[0] = 'x';
+    write_file(path, copy);
+    Lvx2Reader r;
+    auto o = r.open(path);
+    REQUIRE(!o);
+    CHECK(o.error().kind == Lvx2Error::Kind::kBadFile);
+    CHECK(o.error().detail.find("signature") != std::string::npos);
+    std::filesystem::remove(path);
+  }
+  SECTION("file shorter than the header")
+  {
+    const auto path = temp_file("short.lvx2");
+    write_file(path, {all.begin(), all.begin() + 10});
+    Lvx2Reader r;
+    auto o = r.open(path);
+    REQUIRE(!o);
+    CHECK(o.error().kind == Lvx2Error::Kind::kBadFile);
+    std::filesystem::remove(path);
+  }
+  SECTION("unsupported version")
+  {
+    const auto path = temp_file("badver.lvx2");
+    auto copy = all;
+    copy[16] = 1;  // lvx (v1) has a different layout
+    write_file(path, copy);
+    Lvx2Reader r;
+    auto o = r.open(path);
+    REQUIRE(!o);
+    CHECK(o.error().kind == Lvx2Error::Kind::kBadFile);
+    CHECK(o.error().detail == "unsupported version 1");
+    std::filesystem::remove(path);
+  }
+  SECTION("device info block cut short")
+  {
+    const auto path = temp_file("cutinfo.lvx2");
+    write_file(path, {all.begin(), all.begin() + 60});
+    Lvx2Reader r;
+    auto o = r.open(path);
+    REQUIRE(!o);
+    CHECK(o.error().kind == Lvx2Error::Kind::kBadFile);
+    auto p = r.next_packet();  // a failed open leaves the reader closed
+    REQUIRE(!p);
+    CHECK(p.error().kind == Lvx2Error::Kind::kInvalidArgument);
+    std::filesystem::remove(path);
+  }
+  SECTION("frame header with the wrong current_offset")
+  {
+    const auto path = temp_file("badcur.lvx2");
+    auto copy = all;
+    copy[kFrame0] ^= 1;
+    write_file(path, copy);
+    Lvx2Reader r;
+    REQUIRE(r.open(path));
+    auto p = r.next_packet();
+    REQUIRE(!p);
+    CHECK(p.error().kind == Lvx2Error::Kind::kBadFile);
+    std::filesystem::remove(path);
+  }
+  SECTION("frame header whose next_offset points backwards")
+  {
+    const auto path = temp_file("badnext.lvx2");
+    auto copy = all;
+    for (std::size_t i = 0; i < 8; ++i) {
+      copy[kFrame0 + 8 + i] = 0;
+    }
+    write_file(path, copy);
+    Lvx2Reader r;
+    REQUIRE(r.open(path));
+    auto p = r.next_packet();
+    REQUIRE(!p);
+    CHECK(p.error().kind == Lvx2Error::Kind::kBadFile);
+    std::filesystem::remove(path);
+  }
+  SECTION("package length that is not a multiple of the point size")
+  {
+    const auto path = temp_file("badlen.lvx2");
+    auto copy = all;
+    copy[kPackage0 + 18] = static_cast<char>(copy[kPackage0 + 18] + 1);
+    write_file(path, copy);
+    Lvx2Reader r;
+    REQUIRE(r.open(path));
+    auto p = r.next_packet();
+    REQUIRE(!p);
+    CHECK(p.error().kind == Lvx2Error::Kind::kBadFile);
+    std::filesystem::remove(path);
+  }
+}
+
+TEST_CASE("lvx2 player: open errors", "[lvx2]")
+{
+  const auto src = std::filesystem::path(LIVOX_MID360_TEST_DATA_DIR) / "mini.lvx2";
+  Lvx2PlayOptions o;
+  o.rate = -1;
+  Lvx2Player negative(o);
+  auto r = negative.open(src);
+  REQUIRE(!r);
+  CHECK(r.error().kind == Lvx2Error::Kind::kInvalidArgument);
+
+  Lvx2Player missing;
+  auto m = missing.open(temp_file("does_not_exist.lvx2"));
+  REQUIRE(!m);
+  CHECK(m.error().kind == Lvx2Error::Kind::kIo);
 }

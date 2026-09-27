@@ -36,7 +36,8 @@ add_executable(mid360_core_tests
   test_log.cpp
   test_golden_vectors.cpp
   test_firmware_log.cpp
-  test_lvx2.cpp)
+  test_lvx2.cpp
+  test_to_string.cpp)
 target_link_libraries(mid360_core_tests PRIVATE livox::mid360_core Catch2::Catch2WithMain)
 target_include_directories(mid360_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 find_package(Python3 COMPONENTS Interpreter QUIET)
