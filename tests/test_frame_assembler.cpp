@@ -211,6 +211,88 @@ TEST_CASE("frame assembler: a late packet of a delivered frame does not split th
   CHECK(g->packets == 3);
 }
 
+TEST_CASE("frame assembler: a clock step back of a window or more closes the frame", "[frame]")
+{
+  constexpr std::uint64_t kHour = 3'600'000 * kMs;
+  FrameAssembler fa(window_policy(100ms), TimestampPolicy::kLidar);
+  std::uint16_t cnt = 0;
+  for (std::uint64_t t = 0; t < 30 * kMs; t += 10 * kMs) {
+    CHECK_FALSE(fa.push(make_packet(cnt++, 0, kHour + t).view, 0).has_value());
+  }
+  // Re-synchronised to a master an hour behind (#145): the frame closes at once instead of
+  // collecting an hour of points.
+  const auto before = fa.push(make_packet(cnt++, 0, 1000 * kMs).view, 0);
+  REQUIRE(before.has_value());
+  CHECK(before->base_time_ns == kHour);
+  CHECK(before->packets == 3);
+  // The next frame is timed from the new clock, its offsets unclamped, and closes on time.
+  for (std::uint64_t t = 1010 * kMs; t < 1100 * kMs; t += 10 * kMs) {
+    CHECK_FALSE(fa.push(make_packet(cnt++, 0, t).view, 0).has_value());
+  }
+  const auto after = fa.push(make_packet(cnt++, 0, 1100 * kMs).view, 0);
+  REQUIRE(after.has_value());
+  CHECK(after->base_time_ns == 1000 * kMs);
+  CHECK(after->packets == 10);
+  CHECK(after->points[4].offset_ns == 10 * kMs);
+  CHECK(after->end_time_ns < 1100 * kMs);
+}
+
+TEST_CASE("frame assembler: a step back of less than a window stays in the frame", "[frame]")
+{
+  FrameAssembler fa(window_policy(100ms), TimestampPolicy::kLidar);
+  const std::uint64_t base = 1000 * kMs;
+  CHECK_FALSE(fa.push(make_packet(0, 0, base).view, 0).has_value());
+  CHECK_FALSE(fa.push(make_packet(1, 0, base + 10 * kMs).view, 0).has_value());
+  // 99 ms before the base: a late packet or a small step, kept like a reordered one.
+  CHECK_FALSE(fa.push(make_packet(2, 0, base - 99 * kMs).view, 0).has_value());
+  // A whole window before the base: closes.
+  const auto f = fa.push(make_packet(3, 0, base - 100 * kMs).view, 0);
+  REQUIRE(f.has_value());
+  CHECK(f->packets == 3);
+  CHECK(f->base_time_ns == base);
+  CHECK(f->points[8].offset_ns == 0);  // clamped, not wrapped
+  CHECK(fa.flush()->base_time_ns == base - 100 * kMs);
+}
+
+TEST_CASE("frame assembler: a clock step back in frame counter mode", "[frame]")
+{
+  constexpr std::uint64_t kHour = 3'600'000 * kMs;
+  FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);
+  std::uint16_t cnt = 0;
+  CHECK_FALSE(fa.push(make_packet(cnt++, 0, kHour).view, 0).has_value());
+  CHECK_FALSE(fa.push(make_packet(cnt++, 0, kHour + 10 * kMs).view, 0).has_value());
+  // Same frame_cnt, but the points would all get offset_ns 0: the frame closes.
+  const auto f = fa.push(make_packet(cnt++, 0, 0).view, 0);
+  REQUIRE(f.has_value());
+  CHECK(f->packets == 2);
+  // The fallback is timed from the new clock, not held off until it is back at kHour.
+  for (std::uint64_t t = 10 * kMs; t < 200 * kMs; t += 10 * kMs) {
+    (void)fa.push(make_packet(cnt++, 0, t).view, 0);
+  }
+  CHECK(fa.counters().frame_cnt_fallback == 0);
+  (void)fa.push(make_packet(cnt++, 0, 200 * kMs).view, 0);
+  CHECK(fa.counters().frame_cnt_fallback == 1);
+  CHECK(fa.time_window_active());
+}
+
+TEST_CASE("frame assembler: a time_type change closes the frame", "[frame]")
+{
+  // Synchronisation acquired without a step (the master on the LiDAR's own time): the frame
+  // still closes, so that Frame::time_type holds for every point in it.
+  FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);
+  CHECK_FALSE(fa.push(make_packet(0, 0, 0).view, 0).has_value());
+  CHECK_FALSE(fa.push(make_packet(1, 0, 10 * kMs).view, 0).has_value());
+  const auto ptp = make_packet(2, 0, 20 * kMs, 4, DataType::kCartesian32, 3000, TimeType::kPtp);
+  const auto f = fa.push(ptp.view, 0);
+  REQUIRE(f.has_value());
+  CHECK(f->time_type == TimeType::kNoSync);
+  CHECK(f->packets == 2);
+  const auto rest = fa.flush();
+  REQUIRE(rest.has_value());
+  CHECK(rest->time_type == TimeType::kPtp);
+  CHECK(rest->base_time_ns == 20 * kMs);
+}
+
 TEST_CASE("frame assembler: udp_cnt wrap-around is in sequence", "[frame]")
 {
   DropCounter d;

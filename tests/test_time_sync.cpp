@@ -84,12 +84,13 @@ struct Rig
     return true;
   }
 
-  void open(TimestampPolicy policy)
+  void open(TimestampPolicy policy, FramePolicy frame_policy = {})
   {
     DeviceOptions o;
     o.session.host_command_port = 0;
     o.session.request = {.timeout = 500ms, .attempts = 3};
     o.timestamp_policy = policy;
+    o.frame_policy = frame_policy;
     auto d = Device::open(
       *context,
       DiscoveredDevice{
@@ -289,4 +290,36 @@ TEST_CASE("kHostOffsetOnce keeps its first offset while the LiDAR clock drifts",
   const std::int64_t gain = (last->base_ns - first->base_ns) - host_elapsed;
   CHECK(gain > host_elapsed / 20);      // > 5 %
   CHECK(gain < host_elapsed * 3 / 20);  // < 15 %
+}
+
+TEST_CASE("kTimeWindow keeps delivering frames across a step an hour back", "[time][sim]")
+{
+  Rig r;
+  if (!r.start()) {
+    SKIP("simulator unavailable: " << r.err);
+  }
+  r.open(TimestampPolicy::kLidar, {.mode = FramePolicy::Mode::kTimeWindow, .window = 100ms});
+
+  REQUIRE(r.time_sync(R"({"cmd":"time_sync","type":"ptp","offset_ns":0})").has_value());
+  const auto ptp = r.wait_frame(r.count(), [](const Seen & s) {
+    return s.type == TimeType::kPtp && near(s.base_ns, s.host_ns);
+  });
+  REQUIRE(ptp.has_value());
+
+  // Re-synchronised to a master an hour behind (#145): the frame being assembled closes at the
+  // step instead of collecting points until the clock is back where it was.
+  REQUIRE(
+    r.time_sync(R"({"cmd":"time_sync","type":"ptp","offset_ns":-3600000000000})").has_value());
+  const auto back =
+    r.wait_frame(r.count(), [](const Seen & s) { return near(s.base_ns, s.host_ns - kHour); });
+  REQUIRE(back.has_value());
+  CHECK(back->type == TimeType::kPtp);
+
+  // And the windows go on from the new time: about ten 100 ms frames a second.
+  const std::size_t from = r.count();
+  const auto later =
+    r.wait_frame(from, [&](const Seen & s) { return s.host_ns >= back->host_ns + 2 * kSecond; });
+  REQUIRE(later.has_value());
+  CHECK(near(later->base_ns, later->host_ns - kHour));
+  CHECK(r.count() - from >= 10);
 }
