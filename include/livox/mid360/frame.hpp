@@ -56,7 +56,7 @@ struct Point
 /// A group of points closed by FramePolicy. Owns its storage; delivered by value.
 struct Frame
 {
-  std::uint32_t index = 0;         ///< +1 per delivered frame, per Device
+  std::uint32_t index = 0;         ///< +1 per delivered frame, per Device (per Lvx2Player::run)
   std::uint64_t base_time_ns = 0;  ///< time of the first point (after timestamp policy)
   std::uint64_t end_time_ns = 0;   ///< time of the last point
   std::vector<Point> points;
