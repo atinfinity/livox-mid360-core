@@ -403,6 +403,11 @@ degrees) and a translation in metres (mm / 1000) added after the rotation, the
 livox_ros_driver2 convention. `apply()` transforms `x`, `y`, `z` in place and leaves
 reflectivity, tag, line and offset untouched; the `Frame&` overload covers `points`.
 
+If the firmware does apply key 0x0012 to its output, applying the same attitude on the host
+transforms the cloud twice. Use one or the other. The simulator's `--apply-attitude`
+([simulator.md](simulator.md), [#135](https://github.com/atinfinity/livox-mid360-core/issues/135)) models a device that applies the key, and
+`tests/test_scene.cpp` shows the double transform.
+
 | C++ | C |
 | --- | --- |
 | `set_install_attitude()` / `install_attitude()` | `livox_mid360_device_set_install_attitude(dev, const livox_mid360_install_attitude_t*, bool*)` / `..._install_attitude(dev, livox_mid360_install_attitude_t*)` |

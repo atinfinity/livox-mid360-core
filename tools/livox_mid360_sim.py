@@ -503,6 +503,10 @@ class DeviceModel:
                 out.append(struct.unpack('<iiiiI', self.settings[key])[:4])
         return out
 
+    def install_attitude(self) -> Attitude:
+        """Key 0x0012 as (roll, pitch, yaw) in float degrees and (x, y, z) in mm."""
+        return struct.unpack('<fffiii', self.settings[KEY_INSTALL_ATTITUDE])
+
     def keeps_point(self, data_type: int, sample: tuple) -> bool:
         """
         Decide whether a sample survives the [unverified] FOV cropping (see #11).
@@ -610,16 +614,60 @@ def ring_point(k: int) -> tuple[int, int, int, int, int]:
     return 1000 + 30 * k, 9000 - 100 * RING_PITCH_DEG[k % 4], k * 36000 // RING_POINTS, k, tag
 
 
-def ring_sample(data_type: int, k: int) -> tuple:
-    """Point k of the ring scene encoded as `data_type` (Cartesian rounded to mm or cm)."""
+def ring_sample(data_type: int, k: int, attitude: Attitude | None = None) -> tuple:
+    """
+    Point k of the ring scene encoded as `data_type` (Cartesian rounded to mm or cm).
+
+    A Cartesian point is moved by `attitude` before it is rounded; spherical ones never are.
+    """
     depth, theta, phi, refl, tag = ring_point(k)
     if data_type == 3:
         return depth, theta, phi, refl, tag
     t, p = math.radians(theta / 100), math.radians(phi / 100)
     r = depth * math.sin(t)
     xyz = (r * math.cos(p), r * math.sin(p), depth * math.cos(t))
+    if attitude is not None:
+        xyz = transform_mm(attitude, xyz)
+    return encode_cartesian(data_type, xyz, refl, tag)
+
+
+# --------------------------------------------------------------------------- install attitude
+# Key 0x0012 as stored: roll, pitch, yaw (float deg), x, y, z (int32 mm).
+Attitude = tuple[float, float, float, int, int, int]
+
+
+def transform_mm(attitude: Attitude, xyz: tuple[float, float, float]) -> tuple[float, ...]:
+    """
+    Rotate a point in mm by Rz(yaw) * Ry(pitch) * Rx(roll), then add the translation.
+
+    The same convention as the SDK's extrinsic_from() (#135); whether the firmware applies key
+    0x0012 at all, and how, is [unverified] (#11).
+    """
+    roll, pitch, yaw, tx, ty, tz = attitude
+    cr, sr = math.cos(math.radians(roll)), math.sin(math.radians(roll))
+    cp, sp = math.cos(math.radians(pitch)), math.sin(math.radians(pitch))
+    cy, sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    x, y, z = xyz
+    return (
+        cy * cp * x + (cy * sp * sr - sy * cr) * y + (cy * sp * cr + sy * sr) * z + tx,
+        sy * cp * x + (sy * sp * sr + cy * cr) * y + (sy * sp * cr - cy * sr) * z + ty,
+        -sp * x + cp * sr * y + cp * cr * z + tz,
+    )
+
+
+def encode_cartesian(data_type: int, xyz_mm: tuple[float, ...], refl: int, tag: int) -> tuple:
+    """Round a point in mm to a Cartesian32 (mm) or Cartesian16 (cm) sample, clamped to range."""
+    scale, lim = (1, 2**31 - 1) if data_type == 1 else (10, 2**15 - 1)
+    return (*(max(-lim - 1, min(lim, round(v / scale))) for v in xyz_mm), refl, tag)
+
+
+def attitude_sample(data_type: int, sample: tuple, attitude: Attitude) -> tuple:
+    """Move a Cartesian sample by `attitude`; return a spherical one unchanged."""
+    if data_type == 3:
+        return sample
     scale = 1 if data_type == 1 else 10
-    return (*(round(v / scale) for v in xyz), refl, tag)
+    xyz = transform_mm(attitude, tuple(v * scale for v in sample[:3]))
+    return encode_cartesian(data_type, xyz, *sample[3:])
 
 
 # --------------------------------------------------------------------------- simulator
@@ -652,6 +700,7 @@ class Simulator:
         self.model.factory_lidar_ipcfg = self.model.settings[KEY_LIDAR_IPCFG]
         self.points = PointSource(args.seed)
         self.scene = args.scene
+        self.apply_attitude = args.apply_attitude
         self.ring_next = 0  # index of the next ring point (#132); 0 at every frame_cnt change
         self.rate = args.rate_multiplier
         self.push_rate = args.push_rate
@@ -1336,22 +1385,27 @@ class Simulator:
         Up to MAX_FOV_DRAWS batches are drawn; a packet ends up shorter only for a tiny window.
         """
         m = self.model
+        # --apply-attitude (#135): Cartesian points leave in the attitude's frame; the FOV
+        # crops them before that, in the sensor frame [unverified, #11].
+        att = m.install_attitude() if self.apply_attitude and dt != 3 else None
         if self.scene == 'ring':
             # The next POINTS_PER_PACKET ring points, cropped on their exact angles whatever the
             # data type: the packet carries fewer points instead of drawing more.
             ks = range(self.ring_next, self.ring_next + POINTS_PER_PACKET)
             self.ring_next = (self.ring_next + POINTS_PER_PACKET) % RING_POINTS
-            return [ring_sample(dt, k) for k in ks if m.keeps_point(3, ring_point(k))]
+            return [ring_sample(dt, k, att) for k in ks if m.keeps_point(3, ring_point(k))]
         if not m.fov_windows():
-            return self.points.samples(dt, POINTS_PER_PACKET)
-        kept: list[tuple] = []
-        for _ in range(MAX_FOV_DRAWS):
-            kept.extend(
-                p for p in self.points.samples(dt, POINTS_PER_PACKET) if m.keeps_point(dt, p)
-            )
-            if len(kept) >= POINTS_PER_PACKET:
-                break
-        return kept[:POINTS_PER_PACKET]
+            kept = self.points.samples(dt, POINTS_PER_PACKET)
+        else:
+            kept = []
+            for _ in range(MAX_FOV_DRAWS):
+                kept.extend(
+                    p for p in self.points.samples(dt, POINTS_PER_PACKET) if m.keeps_point(dt, p)
+                )
+                if len(kept) >= POINTS_PER_PACKET:
+                    break
+            kept = kept[:POINTS_PER_PACKET]
+        return kept if att is None else [attitude_sample(dt, p, att) for p in kept]
 
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
@@ -1473,6 +1527,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SCENES,
         default='random',
         help='point cloud: seeded random points, or the deterministic ring (#132)',
+    )
+    p.add_argument(
+        '--apply-attitude',
+        action='store_true',
+        help='move Cartesian points by the install attitude in key 0x0012 (#135)',
     )
     p.add_argument(
         '--startup-delay', type=float, default=0.3, help='seconds spent in MOTORSTARTUP'
