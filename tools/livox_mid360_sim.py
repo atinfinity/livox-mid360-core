@@ -20,11 +20,12 @@ Behaviour the simulator assumes and that must be reconciled with hardware (#11):
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 import json
 import math
 import os
+import pathlib
 import random
 import selectors
 import socket
@@ -33,6 +34,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import livox_mid360_pcap as pcapfile  # noqa: E402
 import livox_mid360_proto as proto  # noqa: E402
 
 # --------------------------------------------------------------------------- constants
@@ -671,6 +673,72 @@ def attitude_sample(data_type: int, sample: tuple, attitude: Attitude) -> tuple:
 
 
 # --------------------------------------------------------------------------- simulator
+# --------------------------------------------------------------------------- pcap replay
+# LiDAR source port of a replayed datagram -> (stream, key naming its destination) (#134).
+REPLAY_STREAMS = {
+    proto.PORT_PUSH: ('push', KEY_STATE_HOST),
+    proto.PORT_PCL: ('pcl', KEY_PCL_HOST),
+    proto.PORT_IMU: ('imu', KEY_IMU_HOST),
+    proto.PORT_LOG: ('log', KEY_LOG_HOST),
+}
+REPLAY_STREAMS_BY_NAME = dict(REPLAY_STREAMS.values())  # stream -> destination key
+
+
+def replay_datagrams(path: pathlib.Path) -> Iterator[tuple[float, str, bytes]]:
+    """
+    Yield (capture time, stream, UDP payload) for each datagram sent from a LiDAR data port.
+
+    Command traffic (discovery, 0x0100 and their ACKs) and anything else in the capture is
+    skipped: the DeviceModel answers the SDK's own commands.
+    """
+    for ts, linktype, frame in pcapfile.iter_pcap(path):
+        u = pcapfile.parse_udp(linktype, frame)
+        if u is not None and u.sport in REPLAY_STREAMS:
+            yield ts, REPLAY_STREAMS[u.sport][0], u.payload
+
+
+class PcapReplay:
+    """One pass over a capture, datagram by datagram at the recorded spacing scaled by `rate`."""
+
+    def __init__(self, path: pathlib.Path, rate: float) -> None:
+        self.path = path
+        self.rate = rate  # 0 = as fast as possible
+        self.state = 'waiting'  # -> 'running' -> 'done'
+        self.sent = {stream: 0 for stream, _ in REPLAY_STREAMS.values()}
+        self.skipped = 0  # no host configured for the stream
+        self.started = 0.0
+        self._datagrams: Iterator[tuple[float, str, bytes]] = iter(())
+        self._next: tuple[float, str, bytes] | None = None
+        self._first_ts = 0.0
+
+    def start(self, now: float) -> None:
+        self.state = 'running'
+        self.started = now
+        self._datagrams = replay_datagrams(self.path)
+        self._next = next(self._datagrams, None)
+        self._first_ts = self._next[0] if self._next is not None else 0.0
+
+    def due(self) -> float:
+        """Return the monotonic time the next datagram is due at (inf when none is pending)."""
+        if self.state != 'running' or self._next is None:
+            return math.inf
+        if self.rate == 0:
+            return self.started
+        return self.started + max(0.0, self._next[0] - self._first_ts) / self.rate
+
+    def pop(self, now: float) -> tuple[str, bytes] | None:
+        """Return the next datagram as (stream, payload) if it is due at `now`."""
+        if self._next is None or self.due() > now:
+            return None
+        _, stream, payload = self._next
+        self._next = next(self._datagrams, None)
+        return stream, payload
+
+    @property
+    def exhausted(self) -> bool:
+        return self.state == 'running' and self._next is None
+
+
 class Simulator:
     """Sockets, threads and JSON control channel around one DeviceModel."""
 
@@ -708,6 +776,10 @@ class Simulator:
         self.drop_rate = args.drop_rate
         self._drop_rng = random.Random(args.seed ^ 0x5A5A)
         self.faults = {kind: PacketFaults() for kind in DATA_STREAMS}
+        # --pcap (#134): the capture's data streams replace the generated point cloud and IMU.
+        self.replay = (
+            PcapReplay(pathlib.Path(args.pcap), args.pcap_rate) if args.pcap is not None else None
+        )
 
         self.seq = 0  # LiDAR-originated frames (push)
         self.udp_cnt_pcl = 0
@@ -869,7 +941,9 @@ class Simulator:
             d.append(self.next_debug)
         if self.model.timed:
             d.append(self.model.state_deadline)
-        if self.model.sampling:
+        if self.replay is not None:
+            d.append(self.replay.due())
+        elif self.model.sampling:
             d.append(self.next_pcl)
             if self.model.imu_enabled:
                 d.append(self.next_imu)
@@ -992,6 +1066,13 @@ class Simulator:
                     'enabled': self.debug_dest is not None,
                     'dest': self.debug_dest,
                     'port': self.debug_sock.getsockname()[1] if self.debug_sock else None,
+                },
+                replay=None
+                if self.replay is None
+                else {
+                    'state': self.replay.state,
+                    'sent': self.replay.sent,
+                    'skipped': self.replay.skipped,
                 },
             )
         else:
@@ -1335,7 +1416,9 @@ class Simulator:
         # Runs during a silence too: the schedules and counters advance and the senders
         # withhold the datagrams, so the host sees a udp_cnt gap and no burst afterwards.
         m = self.model
-        if m.sampling:
+        if self.replay is not None:
+            self._send_replay(now)
+        elif m.sampling:
             pcl_host = m.host(KEY_PCL_HOST)
             interval = 1.0 / (PCL_PACKET_RATE * self.rate)
             budget = 256  # bound catch-up bursts
@@ -1360,7 +1443,8 @@ class Simulator:
                 if now - self.next_imu > 0.5:
                     self.next_imu = now
         if now >= self.next_push:
-            self._send_push()
+            if not self._replaying_pushes():
+                self._send_push()
             self.next_push += 1.0 / self.push_rate
         if self.log_streams and now >= self.next_log:
             for stream in list(self.log_streams.values()):
@@ -1377,6 +1461,46 @@ class Simulator:
         if now >= self.next_stats:
             self.emit(event='sent', **self.sent, state=m.work_state)
             self.next_stats += 1.0
+
+    def _replaying_pushes(self) -> bool:
+        """Return whether the capture's pushes stand in for the simulator's own right now."""
+        r = self.replay
+        return r is not None and r.state == 'running' and r.sent['push'] > 0
+
+    def _send_replay(self, now: float) -> None:
+        """
+        Start the replay once the SDK can receive it, then send the datagrams that are due.
+
+        The replay starts when the LiDAR samples and a host is configured for one of the
+        replayed streams, and then runs to the end of the capture whatever the work state.
+        """
+        r = self.replay
+        if r.state == 'waiting':
+            if not self.model.sampling or all(
+                self.model.host(key) is None for _, key in REPLAY_STREAMS.values()
+            ):
+                return
+            r.start(now)
+            self.emit(event='replay_start', file=str(r.path), rate=r.rate)
+        if r.state != 'running':
+            return
+        budget = 256  # bound bursts (rate 0, or catching up): commands still get answered
+        while budget > 0 and (datagram := r.pop(now)) is not None:
+            stream, payload = datagram
+            host = self.model.host(REPLAY_STREAMS_BY_NAME[stream])
+            if host is None:
+                r.skipped += 1
+            elif self._sendto(stream, payload, host):
+                r.sent[stream] += 1
+            budget -= 1
+        if r.exhausted:
+            r.state = 'done'
+            self.emit(
+                event='replay_done',
+                sent=r.sent,
+                skipped=r.skipped,
+                seconds=round(now - r.started, 6),
+            )
 
     def _cropped_samples(self, dt: int) -> list[tuple]:
         """
@@ -1534,6 +1658,17 @@ def build_parser() -> argparse.ArgumentParser:
         help='move Cartesian points by the install attitude in key 0x0012 (#135)',
     )
     p.add_argument(
+        '--pcap',
+        metavar='FILE',
+        help='replay the push / point cloud / IMU / log datagrams of a classic pcap (#134)',
+    )
+    p.add_argument(
+        '--pcap-rate',
+        type=float,
+        default=1.0,
+        help='--pcap speed: 2 = twice the recorded rate, 0 = as fast as possible (default 1)',
+    )
+    p.add_argument(
         '--startup-delay', type=float, default=0.3, help='seconds spent in MOTORSTARTUP'
     )
     p.add_argument(
@@ -1609,6 +1744,13 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if len(args.sn) > 16:
         sys.exit('--sn must be at most 16 characters')
+    if args.pcap_rate < 0:
+        sys.exit('--pcap-rate must not be negative')
+    if args.pcap is not None:
+        try:  # fail at start-up, not when the SDK connects
+            next(replay_datagrams(pathlib.Path(args.pcap)), None)
+        except (OSError, struct.error, SystemExit) as e:
+            sys.exit(f'--pcap {args.pcap}: {e}')
     sim = Simulator(args)
     try:
         sim.run()

@@ -50,7 +50,7 @@ docstring-quotes = "double"
 force-sort-within-sections = true
 order-by-type = false
 case-sensitive = false
-known-first-party = ["livox_mid360_proto", "livox_mid360_sim"]
+known-first-party = ["livox_mid360_pcap", "livox_mid360_proto", "livox_mid360_sim"]
 
 # No [tool.ruff.lint.pydocstyle] convention: ruff's "pep257" preset would also silence D213,
 # whereas ament_pep257 only ignores the codes listed above (so D213 is enforced).

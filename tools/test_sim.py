@@ -12,6 +12,7 @@ import io
 import json
 import math
 import os
+import pathlib
 import socket
 import struct
 import sys
@@ -20,6 +21,7 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import livox_mid360_pcap as pcapfile  # noqa: E402
 import livox_mid360_proto as proto  # noqa: E402
 import livox_mid360_sim as sim  # noqa: E402
 
@@ -1130,6 +1132,183 @@ class EndToEndTest(unittest.TestCase):
             time.sleep(0.02)
         self.assertIn('"event":"status"', self.out.getvalue())
         self.assertEqual(self.s.model.hms[0], 34603011)
+
+
+FIXTURE = pathlib.Path(__file__).resolve().parent.parent / 'tests' / 'data' / 'replay.pcap'
+REPLAY_KEYS = {
+    'push': sim.KEY_STATE_HOST,
+    'pcl': sim.KEY_PCL_HOST,
+    'imu': sim.KEY_IMU_HOST,
+    'log': sim.KEY_LOG_HOST,
+}
+RECORDED_CORE_TEMP = 4321  # tools/gen_replay_pcap.py PUSH_CORE_TEMP
+
+
+def recorded() -> dict[str, list[bytes]]:
+    """Return the fixture's LiDAR data-port payloads per stream, read without the simulator."""
+    by_port = {
+        proto.PORT_PUSH: 'push',
+        proto.PORT_PCL: 'pcl',
+        proto.PORT_IMU: 'imu',
+        proto.PORT_LOG: 'log',
+    }
+    out: dict[str, list[bytes]] = {stream: [] for stream in by_port.values()}
+    for _, linktype, frame in pcapfile.iter_pcap(FIXTURE):
+        u = pcapfile.parse_udp(linktype, frame)
+        if u is not None and u.src == '192.168.1.12' and u.sport in by_port:
+            out[by_port[u.sport]].append(u.payload)
+    return out
+
+
+def core_temp(push: bytes) -> int | None:
+    kvs = dict(proto.parse_info_push(proto.CommandFrame.parse(push).data))
+    return struct.unpack('<i', kvs[sim.KEY_CORE_TEMP])[0] if sim.KEY_CORE_TEMP in kvs else None
+
+
+class PcapReplayTest(unittest.TestCase):
+    """--pcap (#134): the committed fixture replayed into sockets standing in for the SDK."""
+
+    def start(self, *extra: str) -> None:
+        args = sim.build_parser().parse_args(
+            [
+                '--bind',
+                '127.0.0.1',
+                '--base-port',
+                '0',
+                '--startup-delay',
+                '0.05',
+                '--selfcheck-delay',
+                '0.05',
+                '--pcap',
+                str(FIXTURE),
+                *extra,
+            ]
+        )
+        self.out = io.StringIO()
+        self.s = sim.Simulator(args, out=self.out, control=None)
+        self.thread = threading.Thread(target=self.s.run, daemon=True)
+        self.thread.start()
+
+    def setUp(self) -> None:
+        self.s = None
+        self.rx: dict[str, socket.socket] = {}
+        for stream in REPLAY_KEYS:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+            s.bind(('127.0.0.1', 0))
+            self.rx[stream] = s
+        self.host = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.host.bind(('127.0.0.1', 0))
+        self.host.settimeout(3)
+
+    def tearDown(self) -> None:
+        if self.s is not None:
+            self.s.running = False
+            self.thread.join(timeout=5)
+            for s in self.s.socks.values():
+                s.close()
+        for s in [*self.rx.values(), self.host]:
+            s.close()
+
+    def events(self, name: str) -> list[dict]:
+        return [e for e in map(json.loads, self.out.getvalue().splitlines()) if e['event'] == name]
+
+    def configure(self, *streams: str) -> None:
+        """Point the given streams' host keys at their sockets with one 0x0100."""
+        kvs = [
+            (REPLAY_KEYS[s], proto.encode_host_ipcfg('127.0.0.1', self.rx[s].getsockname()[1], 0))
+            for s in streams
+        ]
+        req = proto.CommandFrame(1, sim.CMD_PARAM_CONFIG, 0, 0, proto.encode_param_config(kvs))
+        self.host.sendto(req.encode(), ('127.0.0.1', self.s.ports['cmd']))
+        ack = proto.CommandFrame.parse(self.host.recvfrom(2048)[0])
+        self.assertEqual(proto.parse_param_config_ack(ack.data), (0, 0))
+
+    def wait_done(self) -> dict:
+        deadline = time.monotonic() + 5
+        while not self.events('replay_done') and time.monotonic() < deadline:
+            time.sleep(0.01)
+        done = self.events('replay_done')
+        self.assertEqual(len(done), 1)
+        return done[0]
+
+    def received(self, stream: str) -> list[bytes]:
+        """Drain the stream's socket (everything replayed has been sent by now)."""
+        s = self.rx[stream]
+        s.settimeout(0.2)
+        got = []
+        try:
+            while True:
+                got.append(s.recvfrom(4096)[0])
+        except TimeoutError:
+            pass
+        return got
+
+    def test_fixture_holds_every_replayed_stream(self) -> None:
+        streams = [stream for _, stream, _ in sim.replay_datagrams(FIXTURE)]
+        self.assertEqual(
+            {s: streams.count(s) for s in REPLAY_KEYS}, {'push': 2, 'pcl': 24, 'imu': 12, 'log': 1}
+        )
+        self.assertEqual(
+            {s: len(v) for s, v in recorded().items()}, {'push': 2, 'pcl': 24, 'imu': 12, 'log': 1}
+        )
+
+    def test_replays_the_lidar_data_ports_byte_for_byte(self) -> None:
+        self.start('--pcap-rate', '0', '--push-rate', '0.1')
+        self.configure('push', 'pcl', 'imu', 'log')
+        done = self.wait_done()
+        self.assertEqual(done['sent'], {'push': 2, 'pcl': 24, 'imu': 12, 'log': 1})
+        self.assertEqual(done['skipped'], 0)
+        want = recorded()
+        for stream in REPLAY_KEYS:
+            with self.subTest(stream=stream):
+                self.assertEqual(self.received(stream), want[stream])
+        # Replaced, not merged: the simulator generated no point cloud or IMU of its own.
+        self.assertEqual(self.s.sent['pcl'] + self.s.sent['imu'], 0)
+        self.assertEqual(len(self.events('replay_start')), 1)
+
+    def test_waits_for_a_host_and_skips_streams_without_one(self) -> None:
+        self.start('--pcap-rate', '0', '--push-rate', '0.1')
+        time.sleep(0.3)  # sampling by now, but no host configured
+        self.assertEqual(self.s.replay.state, 'waiting')
+        self.assertEqual(self.events('replay_start'), [])
+        self.configure('pcl', 'imu')
+        done = self.wait_done()
+        self.assertEqual(done['sent'], {'push': 0, 'pcl': 24, 'imu': 12, 'log': 0})
+        self.assertEqual(done['skipped'], 3)
+        self.assertEqual(self.received('pcl'), recorded()['pcl'])
+
+    def test_recorded_spacing_scaled_by_the_rate(self) -> None:
+        self.start('--pcap-rate', '2', '--push-rate', '0.1')
+        self.configure('pcl')
+        done = self.wait_done()
+        # First replayed datagram at 5 ms, last at 125 ms: 120 ms of capture at twice the speed.
+        self.assertGreaterEqual(done['seconds'], 0.059)
+        self.assertEqual(done['sent']['pcl'], 24)
+
+    def test_recorded_pushes_stand_in_for_the_simulators_own(self) -> None:
+        self.start('--pcap-rate', '1', '--push-rate', '50')
+        self.configure('push', 'pcl')
+        self.wait_done()
+        time.sleep(0.1)  # the simulator's own pushes resume
+        self.s.running = False  # stop them: received() drains until the socket goes quiet
+        self.thread.join(timeout=5)
+        temps = [core_temp(d) for d in self.received('push')]
+        first = temps.index(RECORDED_CORE_TEMP)
+        # 95 ms between the recorded pushes: 4-5 of the simulator's would have fallen there.
+        self.assertEqual(temps[first + 1], RECORDED_CORE_TEMP)
+        self.assertNotIn(RECORDED_CORE_TEMP, temps[first + 2 :])
+        self.assertGreater(len(temps), first + 2)
+
+    def test_unreadable_capture_fails_at_start_up(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            sim.main(['--base-port', '0', '--pcap', str(FIXTURE.with_name('missing.pcap'))])
+        self.assertIn('missing.pcap', str(cm.exception))
+        with self.assertRaises(SystemExit) as cm:
+            sim.main(['--base-port', '0', '--pcap', str(FIXTURE.with_name('mini.lvx2'))])
+        self.assertIn('not a classic pcap', str(cm.exception))
+        with self.assertRaises(SystemExit):
+            sim.main(['--base-port', '0', '--pcap', str(FIXTURE), '--pcap-rate', '-1'])
 
 
 if __name__ == '__main__':
