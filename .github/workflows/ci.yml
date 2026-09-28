@@ -146,3 +146,22 @@ jobs:
         run: cmake --build build --target fuzzers
       - name: Run each fuzzer briefly
         run: scripts/fuzz.sh build 30
+
+  # livox-mid360-rerun (issue #147) is opt-in because it fetches the Rerun C++ SDK and builds
+  # Apache Arrow; build it and run its ctest on one configuration only.
+  rerun:
+    name: Rerun viewer tool (gcc-14)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-14 cmake ninja-build
+      - name: Configure
+        env: { CC: gcc-14, CXX: g++-14 }
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLIVOX_MID360_BUILD_RERUN=ON
+      - name: Build
+        run: cmake --build build --target livox-mid360-rerun
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -R '^rerun_'

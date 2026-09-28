@@ -83,6 +83,7 @@ over them and only add what the raw key does not express (waits, combined keys, 
 - [#93](https://github.com/atinfinity/livox-mid360-core/issues/93) debug raw data collection (`0x0303`): **done** (`debug_data.hpp`, `Device::start_debug_data()`, `livox-mid360-cli debug-data`, [debug_data.md](debug_data.md))
 - [#34](https://github.com/atinfinity/livox-mid360-core/issues/34) decoded point tag accessors (noise confidence per field): **done**
 - [#35](https://github.com/atinfinity/livox-mid360-core/issues/35) lvx2 record / replay CLI — done: `lvx2.hpp` codec + `livox-mid360-cli` (`tools/cli/`), docs/lvx2.md
+- [#147](https://github.com/atinfinity/livox-mid360-core/issues/147) Rerun viewer for live and lvx2 point clouds: **done** (`livox-mid360-rerun`, `tools/rerun/`, opt-in `LIVOX_MID360_BUILD_RERUN`, [rerun.md](rerun.md))
 - [#43](https://github.com/atinfinity/livox-mid360-core/issues/43) minimal point-cloud and IMU receive sample: **done** (`examples/minimal_receive.cpp`)
 - [#45](https://github.com/atinfinity/livox-mid360-core/issues/45) simulator: verify the `work_tgt_mode` list and transitions and model them faithfully
 
@@ -131,6 +132,7 @@ Fixed in phase 0 (2026-09-25) and not expected to change within v1.
 | Minimum firmware | Undecided. Firmware v13.18.0244 is the baseline for hardware verification ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). |
 | Tests | Catch2 v3 from apt when available, otherwise FetchContent. |
 | Repository split | Core library here; ROS 2 driver and CLI in sister repositories `livox-mid360-ros2` and `livox-mid360-cli`. |
+| Third-party code | None in the library or the default build. The one exception is the opt-in viewer `livox-mid360-rerun` (`LIVOX_MID360_BUILD_RERUN`, Rerun C++ SDK + Apache Arrow, [#147](https://github.com/atinfinity/livox-mid360-core/issues/147)), which lives in `tools/rerun/` and is not linked by the library. |
 | Lint | `.clang-format` (ROS 2 style: a verbatim copy of the `ament_clang_format` configuration, [#63](https://github.com/atinfinity/livox-mid360-core/issues/63)), `.clang-tidy` and `pyproject.toml` (ruff configured to match `ament_flake8` / `ament_pep257`, [#64](https://github.com/atinfinity/livox-mid360-core/issues/64)) are shared with `livox-mid360-ros2` through `ament_clang_format --config` (ruff has no ament equivalent; the ROS 2 side uses the `ament_flake8` / `ament_pep257` defaults, which the ruff configuration matches). Of `ament_lint_common`, only `ament_cppcheck` and `ament_lint_cmake` run here ([#65](https://github.com/atinfinity/livox-mid360-core/issues/65)); the driver's `colcon test` never lints this library. Not adopted: `ament_cpplint` (tool limitations, its real findings fixed once), `ament_copyright` (files keep the one-line SPDX header; the driver repository uses the ROS 2 header format), `ament_uncrustify` (the driver package uses `ament_cmake_clang_format` with this repository's `.clang-format`). |
 | Trademark | The README states up front that the project is unofficial and unaffiliated with Livox / DJI. |
 

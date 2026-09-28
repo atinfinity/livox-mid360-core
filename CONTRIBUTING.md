@@ -11,7 +11,8 @@ work and project decisions are in [docs/roadmap.md](docs/roadmap.md).
   or paraphrase code from Livox-SDK2 or other drivers; use them solely to compare behaviour
   on hardware. Record wiki ambiguities and their resolution in
   [docs/protocol_notes.md](docs/protocol_notes.md).
-- **Scope.** Base Mid-360, Ubuntu 24.04+, no third-party runtime dependencies. See the
+- **Scope.** Base Mid-360, Ubuntu 24.04+, no third-party runtime dependencies (the opt-in
+  `livox-mid360-rerun` viewer, [docs/rerun.md](docs/rerun.md), is the one exception). See the
   decisions table in [docs/roadmap.md](docs/roadmap.md#project-decisions) before proposing
   something outside that.
 - **Issues first.** Every feature and design decision has an issue; link it from the PR and
