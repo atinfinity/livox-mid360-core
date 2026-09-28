@@ -49,6 +49,7 @@ CMake options:
 | Option | Meaning | Default |
 | --- | --- | --- |
 | `LIVOX_MID360_BUILD_TESTS` | Build the Catch2 unit tests (including the simulator-backed tests) | `ON` when built top-level, `OFF` as a subproject |
+| `LIVOX_MID360_BUILD_RERUN` | Build `livox-mid360-rerun`, a [Rerun](https://rerun.io) viewer for live and lvx2 point clouds. Fetches the Rerun C++ SDK and builds Apache Arrow, the only third-party dependency in the repository ([docs/rerun.md](docs/rerun.md)) | `OFF` |
 | `LIVOX_MID360_BUILD_FUZZERS` | Build the libFuzzer targets (Clang only) | `OFF` |
 | `LIVOX_MID360_WARNINGS_AS_ERRORS` | Treat compiler warnings as errors (`-Werror`) | `ON` when built top-level, `OFF` as a subproject |
 | `LIVOX_MID360_ENABLE_ASAN` | Enable AddressSanitizer | `OFF` |
@@ -131,8 +132,9 @@ include/livox/mid360/   public headers (crc, protocol, keys, hms, bytes, transpo
 src/                    implementation
 tests/                  Catch2 tests, generated golden vectors, libFuzzer targets
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator,
-                        tools/cli: livox-mid360-cli (lvx2 record / replay, docs/lvx2.md)
-docs/                   roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md, lvx2.md (record / replay)
+                        tools/cli: livox-mid360-cli (lvx2 record / replay, docs/lvx2.md),
+                        tools/rerun: livox-mid360-rerun (Rerun viewer, docs/rerun.md)
+docs/                   roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md, lvx2.md (record / replay), rerun.md (viewer)
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
 
