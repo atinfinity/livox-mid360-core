@@ -86,6 +86,8 @@ if (!ctx) {
 // Find the LiDAR, point it at this host (commands block on the calling thread).
 auto devices = discover();  // broadcast 0x0000, 1 s
 if (!devices || devices->empty()) {
+  std::cerr << "discovery: " << (devices ? "no LiDAR answered" : to_string(devices.error()))
+            << "\n";
   return 1;
 }
 auto dev = Device::open(**ctx, devices->front(), {.session = {.bind_address = {192, 168, 1, 5}}});
