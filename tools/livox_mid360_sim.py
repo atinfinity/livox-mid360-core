@@ -590,6 +590,38 @@ class PointSource:
         )
 
 
+# Deterministic scene (#132): RING_POINTS points at known angles and depths, emitted in index
+# order from index 0 at every frame_cnt change and repeated within the frame.
+SCENES = ('random', 'ring')
+RING_POINTS = 256
+RING_PITCH_DEG = (0, 15, -5, 45)  # elevation of point k is RING_PITCH_DEG[k % 4]
+
+
+def ring_point(k: int) -> tuple[int, int, int, int, int]:
+    """
+    Return point k of the ring scene as a spherical sample (depth mm, theta, phi, refl, tag).
+
+    theta is the zenith angle and phi the azimuth, both in 0.01 deg. Azimuth steps by 360/256
+    deg (k = 0, 64, 128, 192 lie on the axes), depth is 1 m + 30 mm * k, reflectivity is k and
+    the tag cycles glue / particles / other through 0..2 (reserved bits 0).
+    """
+    k %= RING_POINTS
+    tag = k % 3 | (k // 3 % 3) << 2 | (k // 9 % 3) << 4
+    return 1000 + 30 * k, 9000 - 100 * RING_PITCH_DEG[k % 4], k * 36000 // RING_POINTS, k, tag
+
+
+def ring_sample(data_type: int, k: int) -> tuple:
+    """Point k of the ring scene encoded as `data_type` (Cartesian rounded to mm or cm)."""
+    depth, theta, phi, refl, tag = ring_point(k)
+    if data_type == 3:
+        return depth, theta, phi, refl, tag
+    t, p = math.radians(theta / 100), math.radians(phi / 100)
+    r = depth * math.sin(t)
+    xyz = (r * math.cos(p), r * math.sin(p), depth * math.cos(t))
+    scale = 1 if data_type == 1 else 10
+    return (*(round(v / scale) for v in xyz), refl, tag)
+
+
 # --------------------------------------------------------------------------- simulator
 class Simulator:
     """Sockets, threads and JSON control channel around one DeviceModel."""
@@ -619,6 +651,8 @@ class Simulator:
         self.model.settings[KEY_LIDAR_IPCFG] = own + self.model.settings[KEY_LIDAR_IPCFG][4:]
         self.model.factory_lidar_ipcfg = self.model.settings[KEY_LIDAR_IPCFG]
         self.points = PointSource(args.seed)
+        self.scene = args.scene
+        self.ring_next = 0  # index of the next ring point (#132); 0 at every frame_cnt change
         self.rate = args.rate_multiplier
         self.push_rate = args.push_rate
         self.frame_s = args.frame_ms / 1000.0
@@ -883,6 +917,12 @@ class Simulator:
             self.drop_rate = float(req.get('rate', 0.0))
         elif cmd in ('drop', 'reorder', 'duplicate'):
             self._add_fault(cmd, req)
+        elif cmd == 'scene':
+            name = req.get('name')
+            if name not in SCENES:
+                raise ValueError(f'unknown scene {name!r}')
+            self.scene = name
+            self.ring_next = 0
         elif cmd == 'frame_ms':
             self.frame_s = float(req.get('ms', 100.0)) / 1000.0
             self.frame_started = now
@@ -935,6 +975,7 @@ class Simulator:
         self.seq = 0
         self.udp_cnt_pcl = self.udp_cnt_imu = 0
         self.frame_cnt = 0
+        self.ring_next = 0
         up = now + self.args.reboot_silence
         self.silence_until = max(self.silence_until, up)
         # Powered down: the push and the log chunks resume after the silence, not during it.
@@ -1253,6 +1294,7 @@ class Simulator:
                 if self.frame_s > 0 and now - self.frame_started >= self.frame_s:
                     self.frame_cnt = (self.frame_cnt + 1) & 0xFF
                     self.frame_started += self.frame_s
+                    self.ring_next = 0
                 self._send_pcl(pcl_host, interval)
                 self.next_pcl += interval
                 budget -= 1
@@ -1294,6 +1336,12 @@ class Simulator:
         Up to MAX_FOV_DRAWS batches are drawn; a packet ends up shorter only for a tiny window.
         """
         m = self.model
+        if self.scene == 'ring':
+            # The next POINTS_PER_PACKET ring points, cropped on their exact angles whatever the
+            # data type: the packet carries fewer points instead of drawing more.
+            ks = range(self.ring_next, self.ring_next + POINTS_PER_PACKET)
+            self.ring_next = (self.ring_next + POINTS_PER_PACKET) % RING_POINTS
+            return [ring_sample(dt, k) for k in ks if m.keeps_point(3, ring_point(k))]
         if not m.fov_windows():
             return self.points.samples(dt, POINTS_PER_PACKET)
         kept: list[tuple] = []
@@ -1420,6 +1468,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--version-loader', default='0.0.0.1', help='key 0x8003 as a.b.c.d')
     p.add_argument('--version-hardware', default='0.0.0.1', help='key 0x8004 as a.b.c.d')
     p.add_argument('--seed', type=int, default=1)
+    p.add_argument(
+        '--scene',
+        choices=SCENES,
+        default='random',
+        help='point cloud: seeded random points, or the deterministic ring (#132)',
+    )
     p.add_argument(
         '--startup-delay', type=float, default=0.3, help='seconds spent in MOTORSTARTUP'
     )
