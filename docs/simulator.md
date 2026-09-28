@@ -69,6 +69,9 @@ The process is driven over its standard streams so that any test harness can use
 | `set_status` | any of `diag` (u16 bitfield), `core_temp` (0.01 °C), `time_sync_type`, `time_offset_ns`, `last_sync_time`, `powerup_cnt`, `bad_time_offset` (1: 0x800B answered truncated to 4 bytes), `omit_keys` (list of key ids left out of the push); a value that is not an integer applies nothing | overwrite the read-only status keys the push and 0x0101 report ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56) / [#55](https://github.com/atinfinity/livox-mid360-core/issues/55)) |
 | `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR); `work_tgt_mode` is untouched, so forcing a work substate makes the machine chase the target again |
 | `drop_rate` | `rate` | change the point-cloud drop fraction at run time |
+| `drop` | `stream` (`pcl` default, or `imu`), `count` (default 1) | do not send the next `count` packets of the stream; `udp_cnt` still advances, so the host sees a gap ([#131](https://github.com/atinfinity/livox-mid360-core/issues/131)) |
+| `reorder` | `stream`, `count` (default 1), `depth` (default 1, ≥ 1) | hold the next packet back and send it after `depth` more packets, `count` times one after the other (a late packet: `udp_cnt` goes backwards on the host) |
+| `duplicate` | `stream`, `count` (default 1) | send each of the next `count` packets twice |
 | `frame_ms` | `ms` | change the `frame_cnt` period at run time (`0` freezes it); the current frame restarts now |
 | `log_drop` | `n` | skip the next `n` log chunks (`trans_index` still advances → gap on the host) |
 | `log_new_file` | | end the current firmware log file(s) and start the next `file_index` |
@@ -81,7 +84,8 @@ The process is driven over its standard streams so that any test harness can use
 | `cmd` | `cmd_id`, `seq`, `ret`, `from` | a request was handled |
 | `ack_dropped` | `cmd_id`, `seq` | a request was handled but the ACK withheld (`drop_ack`) |
 | `bad_frame` | `from`, `error` | a datagram failed to parse |
-| `sent` | `pcl`, `imu`, `push`, `pcl_dropped`, `log`, `debug`, `silenced` (datagrams withheld by a silence), `state` | once per second, also while silent |
+| `sent` | `pcl`, `imu`, `push`, `pcl_dropped` (`--drop-rate` and `drop`), `pcl_reordered`, `pcl_duplicated`, `imu_dropped`, `imu_reordered`, `imu_duplicated`, `log`, `debug`, `silenced` (datagrams withheld by a silence), `state` | once per second, also while silent |
+| `packet_fault` | `stream`, `fault` (`drop`, `reorder`, `duplicate`), `udp_cnt` | one packet was affected by a `drop` / `reorder` / `duplicate` control (for `reorder`: when the held packet is sent) |
 | `log_dropped` | `file_index`, `trans` | a log chunk was withheld (`log_drop`) |
 | `log_ack` | `ret`, `log_type`, `file_index`, `trans` | the host acknowledged a log chunk |
 | `debug_data` | `enabled`, `dest`, `port` (both only when enabled) | `0x0303` switched the debug raw data stream; `port` is its source port |
@@ -105,6 +109,11 @@ The process is driven over its standard streams so that any test harness can use
   that a receiver can detect loss and corruption. The source socket is bound by the first
   enable, not at start-up, because 60301 lies inside the Linux ephemeral port range; it is not
   part of `ready.ports`. The point cloud keeps flowing.
+- **Packet faults** ([#131](https://github.com/atinfinity/livox-mid360-core/issues/131)): `drop`, `reorder` and `duplicate` act on a point-cloud or
+  IMU packet after its `udp_cnt` and `frame_cnt` are assigned, so the host sees what a network
+  would do to real packets. `--drop-rate` is applied first, then per packet a pending `drop`,
+  then a `reorder` (one packet held at a time), then the send (twice for a `duplicate`). A
+  packet still held back at a reboot is lost.
 
 - **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries `dev_type = 9`
   (provisional), the bound address and the real command port), `0x0100` configure, `0x0101`
@@ -157,7 +166,8 @@ The process is driven over its standard streams so that any test harness can use
 - `python3 -m unittest tools/test_sim.py`: the pure `DeviceModel` (transitions, configure
   rules, reboot / factory-reset persistence, GPS offset, push payload), `PointSource`
   determinism, and an in-process end-to-end run over UDP (discovery → configure → packets →
-  push → reboot silence → `udp_cnt` reset; `hms` and `drop_ack` controls).
+  push → reboot silence → `udp_cnt` reset; `hms` and `drop_ack` controls), and the packet
+  fault controls on both data streams.
 - `tests/test_sim_smoke.cpp` (Catch2, tag `[sim]`): spawns the simulator with `posix_spawn`
   through `tests/sim_process.hpp`, then discovery → 0x0100 → wait for SAMPLING via 0x0101 →
   receive ≥ 200 point-cloud and ≥ 10 IMU packets through `UdpSocket` / `Poller` → quit. The

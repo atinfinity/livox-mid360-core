@@ -165,6 +165,11 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
   const auto drop = drops_.observe(h.udp_cnt, frame_changed);
   counters_.dropped_packets += drop.dropped;
   counters_.reordered += drop.reordered ? 1u : 0u;
+  if (drop.reordered && frame_changed && !time_window_active()) {
+    // A late packet of a frame already delivered (#131): its points cannot rejoin that frame,
+    // and taking its frame_cnt as a change would split the current one. Counted in reordered.
+    return std::nullopt;
+  }
 
   const auto window = static_cast<std::uint64_t>(std::max<std::int64_t>(policy_.window.count(), 1));
   if (!first_time_) {
