@@ -26,6 +26,7 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--product-info` | `MID360-SIM` | key 0x8001 (≤ 64 chars) |
 | `--version-app` / `--version-loader` / `--version-hardware` | `0.0.0.1` | keys 0x8002–0x8004 as `a.b.c.d` |
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
+| `--scene` | `random` | point cloud content: seeded random points, or `ring`, a fixed scene of known points ([#132](https://github.com/atinfinity/livox-mid360-core/issues/132)) |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
@@ -72,6 +73,7 @@ The process is driven over its standard streams so that any test harness can use
 | `drop` | `stream` (`pcl` default, or `imu`), `count` (default 1) | do not send the next `count` packets of the stream; `udp_cnt` still advances, so the host sees a gap ([#131](https://github.com/atinfinity/livox-mid360-core/issues/131)) |
 | `reorder` | `stream`, `count` (default 1), `depth` (default 1, ≥ 1) | hold the next packet back and send it after `depth` more packets, `count` times one after the other (a late packet: `udp_cnt` goes backwards on the host) |
 | `duplicate` | `stream`, `count` (default 1) | send each of the next `count` packets twice |
+| `scene` | `name` (`random` or `ring`) | switch the point cloud content at run time; the ring restarts at point 0 |
 | `frame_ms` | `ms` | change the `frame_cnt` period at run time (`0` freezes it); the current frame restarts now |
 | `log_drop` | `n` | skip the next `n` log chunks (`trans_index` still advances → gap on the host) |
 | `log_new_file` | | end the current firmware log file(s) and start the next `file_index` |
@@ -151,28 +153,48 @@ The process is driven over its standard streams so that any test harness can use
   `0x0005`. Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps are
   `time.time_ns()` plus the GPS offset from 0x0202. The scheduler bounds catch-up bursts to
   256 packets and resynchronises if it falls more than 0.5 s behind.
-- **Data** is pseudo-random but deterministic for a seed; the C++ decoder only needs valid
-  framing, CRCs and counters.
+- **Data** with `--scene random` is pseudo-random but deterministic for a seed; the C++
+  decoder only needs valid framing, CRCs and counters.
+- **Ring scene** ([#132](https://github.com/atinfinity/livox-mid360-core/issues/132)): with `--scene ring` (or the `scene` control) every
+  point is one of 256 known points, so a test can check decoded values, not only framing.
+  Point `k` (0–255) has azimuth `k * 36000 // 256` in 0.01° (so `k = 0, 64, 128, 192` lie on
+  the axes), elevation `(0, 15, -5, 45)[k % 4]`°, depth `1000 + 30 * k` mm, reflectivity `k`
+  and tag `k % 3 | (k // 3 % 3) << 2 | (k // 9 % 3) << 4` (every glue / particle / other
+  value, reserved bits 0). Packets carry consecutive points, wrapping after 255, and the
+  cursor goes back to 0 whenever `frame_cnt` changes, at a reboot and at a `scene` control:
+  the first packet of a frame starts at point 0 and every packet at a multiple of 32.
+  Spherical packets carry the exact values (`theta` = 90° − elevation); Cartesian32 /
+  Cartesian16 ones the same point rounded to mm / cm. `tools/test_sim.py` (`ring_point`)
+  and `tests/test_scene.cpp` restate the definition.
 - **FOV cropping** [unverified]: when `fov_cfg_en` enables at least one window, a point is
   sent only if it lies inside an enabled window (yaw `[start, stop)` with wrap-around when
   `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
   `yaw = atan2(y, x)`, `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and
   `90° - theta`. Each packet draws up to 16 batches of 96 points to fill its 96 slots, so a
   narrow window only slows the generator. `dot_num` is the number of points kept, so a tiny
-  window sends shorter packets and an empty one packets with `dot_num = 0`.
+  window sends shorter packets and an empty one packets with `dot_num = 0`. The ring scene
+  instead crops its next 96 points on their exact angles, whatever the data type, and sends
+  what is left, so the kept set is known: a window of yaw `[0, 90)` and pitch `[0, 15]` keeps
+  exactly the `k < 64` with `k % 4` in {0, 1}.
 
 ## Tests
 
 - `python3 -m unittest tools/test_sim.py`: the pure `DeviceModel` (transitions, configure
   rules, reboot / factory-reset persistence, GPS offset, push payload), `PointSource`
   determinism, and an in-process end-to-end run over UDP (discovery → configure → packets →
-  push → reboot silence → `udp_cnt` reset; `hms` and `drop_ack` controls), and the packet
-  fault controls on both data streams.
+  push → reboot silence → `udp_cnt` reset; `hms` and `drop_ack` controls), the packet
+  fault controls on both data streams, and the ring scene in every data type and under a FOV
+  window.
 - `tests/test_sim_smoke.cpp` (Catch2, tag `[sim]`): spawns the simulator with `posix_spawn`
   through `tests/sim_process.hpp`, then discovery → 0x0100 → wait for SAMPLING via 0x0101 →
   receive ≥ 200 point-cloud and ≥ 10 IMU packets through `UdpSocket` / `Poller` → quit. The
   test is skipped when no Python interpreter is found; CMake passes `Python3_EXECUTABLE` as
   `LIVOX_MID360_PYTHON` and the script path as `LIVOX_MID360_SIM_SCRIPT`.
+
+- `tests/test_scene.cpp` (tag `[scene][sim]`): a `Device` against `--scene ring` decodes
+  every data type to the expected points (position, tag, `line`, per-point `offset_ns`),
+  keeps exactly the expected points under a FOV window, applies a host-side extrinsic, and
+  records spherical packets to lvx2 that read back as the same points.
 
 `SimProcess::control()` sends any control line and `wait_event()` blocks for a matching
 stdout line, so later session-layer tests can inject reboots, HMS codes or dropped ACKs.
