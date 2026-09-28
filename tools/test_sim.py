@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import socket
 import struct
@@ -430,6 +431,43 @@ class PointSourceTest(unittest.TestCase):
             self.assertEqual(v, {0, 1, 2}, k)
 
 
+class RingSceneTest(unittest.TestCase):
+    """The deterministic ring scene (#132)."""
+
+    def test_ring_points_are_known(self) -> None:
+        self.assertEqual(sim.ring_point(0), (1000, 9000, 0, 0, 0))
+        self.assertEqual(sim.ring_point(64), (2920, 9000, 9000, 64, 1 | 0 << 2 | 1 << 4))
+        self.assertEqual(sim.ring_point(1)[1], 9000 - 1500)  # pitch 15 deg
+        self.assertEqual(sim.ring_point(sim.RING_POINTS + 5), sim.ring_point(5))
+        pts = [sim.ring_point(k) for k in range(sim.RING_POINTS)]
+        self.assertEqual([p[3] for p in pts], list(range(256)))
+        seen = {'adjacent_glue': set(), 'particles': set(), 'other': set()}
+        for p in pts:
+            t = proto.decode_tag(p[4])
+            self.assertEqual(t['reserved'], 0)
+            for k in seen:
+                seen[k].add(t[k])
+        for k, v in seen.items():
+            self.assertEqual(v, {0, 1, 2}, k)
+
+    def test_data_types_encode_the_same_point(self) -> None:
+        for k in range(sim.RING_POINTS):
+            depth, theta, phi, refl, tag = sim.ring_sample(3, k)
+            t, p = math.radians(theta / 100), math.radians(phi / 100)
+            xyz = (
+                depth * math.sin(t) * math.cos(p),
+                depth * math.sin(t) * math.sin(p),
+                depth * math.cos(t),
+            )
+            for dt, unit in ((1, 1), (2, 10)):
+                sample = sim.ring_sample(dt, k)
+                self.assertEqual(sample[3:], (refl, tag))
+                for got, want in zip(sample[:3], xyz, strict=True):
+                    self.assertLessEqual(abs(got * unit - want), unit / 2, (dt, k))
+            self.assertEqual(len(proto.pack_samples(1, [sim.ring_sample(1, k)])), 14)
+            self.assertEqual(len(proto.pack_samples(2, [sim.ring_sample(2, k)])), 8)
+
+
 class SimulatorTest(unittest.TestCase):
     """Simulator methods called directly, without the main loop."""
 
@@ -548,6 +586,38 @@ class SimulatorTest(unittest.TestCase):
         self.s._do_reboot(time.monotonic())
         self.assertIsNone(self.s.faults['pcl'].held)
 
+    def ring_packets(self, n: int) -> list[proto.DataPacket]:
+        for _ in range(n):
+            self.s._send_pcl(self.rx_host, 0.001)
+        return [proto.DataPacket.parse(self.rx.recvfrom(2048)[0]) for _ in range(n)]
+
+    def test_ring_scene_emits_points_in_index_order(self) -> None:
+        self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
+        for dt in (1, 2, 3):
+            self.s.model.settings[sim.KEY_PCL_DATA_TYPE] = bytes([dt])
+            self.s.apply_control({'cmd': 'scene', 'name': 'ring'})  # restarts at index 0
+            pkts = self.ring_packets(3)
+            samples = [smp for pkt in pkts for smp in pkt.samples()]
+            self.assertEqual(len(samples), 3 * sim.POINTS_PER_PACKET)
+            self.assertEqual(samples, [sim.ring_sample(dt, k) for k in range(len(samples))])
+        self.s.apply_control({'cmd': 'scene', 'name': 'random'})
+        self.assertNotEqual([smp[3] for smp in self.ring_packets(1)[0].samples()], list(range(96)))
+        self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
+        self.ring_packets(1)
+        self.assertEqual(self.s.ring_next, sim.POINTS_PER_PACKET)
+        self.s._do_reboot(time.monotonic())  # starts a silence: check the cursor only
+        self.assertEqual(self.s.ring_next, 0)
+
+    def test_ring_scene_is_cropped_at_the_window_edges(self) -> None:
+        m = self.s.model
+        # yaw [0, 90) and pitch [0, 15]: k = 0 kept, k = 64 (yaw 90) not, pitch 15 kept, -5 not.
+        window = proto.encode_fov_cfg(0, 90, 0, 15)
+        m.configure([(sim.KEY_FOV0, window), (sim.KEY_FOV_EN, b'\x01')])
+        self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
+        kept = [smp[3] for pkt in self.ring_packets(8) for smp in pkt.samples()]
+        ring = [k for k in range(64) if k % 4 in (0, 1)]  # pitch 0 or 15
+        self.assertEqual(kept, ring * 3)  # 8 packets of 96 = 3 rings
+
     def test_malformed_control_lines_emit_error(self) -> None:
         for req in (
             [],
@@ -561,13 +631,15 @@ class SimulatorTest(unittest.TestCase):
             {'cmd': 'drop', 'stream': 'push'},
             {'cmd': 'duplicate', 'count': -1},
             {'cmd': 'reorder', 'depth': 0},
+            {'cmd': 'scene', 'name': 'cube'},
         ):
             self.s.apply_control(req)
         self.assertTrue(self.s.running)
         evs = self.events()
-        self.assertEqual([e['event'] for e in evs], ['error'] * 11)
+        self.assertEqual([e['event'] for e in evs], ['error'] * 12)
         self.assertEqual(self.s.faults, {k: sim.PacketFaults() for k in sim.DATA_STREAMS})
         self.assertEqual(self.s.fail_cmds, {})
+        self.assertEqual(self.s.scene, 'random')
 
 
 class EndToEndTest(unittest.TestCase):
