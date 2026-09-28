@@ -37,6 +37,7 @@ add_executable(mid360_core_tests
   test_point_format.cpp
   test_scene.cpp
   test_replay.cpp
+  test_time_sync.cpp
   test_settings_keys.cpp
   test_reconnect.cpp
   test_reconnect_failures.cpp

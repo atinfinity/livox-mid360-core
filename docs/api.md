@@ -490,8 +490,8 @@ key the LiDAR omits or that fails to decode makes the whole call `kDecodeFailed`
 key (`pushed_status()` keeps the same four keys as optionals for the tolerant flavour).
 `Device::set_gps_time(pps_time_ns)` is 0x0202, the host's GPS time of the last PPS edge (the
 IN0 / IN1 pins of the function IO config, [#52](https://github.com/atinfinity/livox-mid360-core/issues/52)); it is not validated and nothing is read back,
-so a caller that wants confirmation reads `time_sync_status()` (`type` becomes `kGps`, the
-simulator also shifts its clock by the difference).
+so a caller that wants confirmation reads `time_sync_status()` (`type` becomes `kGps`; the
+simulator steps its clock to the GPS time, see [simulator.md](simulator.md)).
 
 `TimestampPolicy` is not coupled to these keys. Each data packet says in `time_type` whether
 its stamp is synchronised, and `kHostOffsetOnce` acts on that per packet: synced stamps pass

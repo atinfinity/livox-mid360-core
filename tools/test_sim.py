@@ -369,12 +369,20 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.diag_status, 0)
         self.assertEqual(self.m.push_omit, set())
 
-    def test_gps_time_sets_offset_and_sync_type(self) -> None:
-        self.m.set_gps_time(ns=1_000, now_ns=400)
-        self.assertEqual(self.m.time_offset_ns, 600)
-        self.assertEqual(self.m.time_sync_type, 2)
-        ret, kvs = self.m.inquire([sim.KEY_TIME_OFFSET, sim.KEY_TIME_SYNC_TYPE], 0)
-        self.assertEqual(struct.unpack('<q', dict(kvs)[sim.KEY_TIME_OFFSET])[0], 600)
+    def test_gps_time_steps_the_clock_and_reports_the_sync(self) -> None:
+        self.m.power_on(10.0)
+        self.m.set_gps_time(ns=5_000_000_000, mono=10.4, wall_ns=1_000)
+        self.assertEqual(self.m.clock.sync_type, sim.TIME_SYNC_GPS)
+        self.assertEqual(self.m.clock.now_ns(10.4, 1_000), 5_000_000_000)
+        keys = [sim.KEY_LAST_SYNC_TIME, sim.KEY_TIME_OFFSET, sim.KEY_TIME_SYNC_TYPE]
+        ret, kvs = self.m.inquire(keys, 0)
+        kvs = dict(kvs)
+        self.assertEqual(struct.unpack('<Q', kvs[sim.KEY_LAST_SYNC_TIME])[0], 5_000_000_000)
+        # local - source: 0.4 s since power-on against the GPS time.
+        self.assertEqual(
+            struct.unpack('<q', kvs[sim.KEY_TIME_OFFSET])[0], 400_000_000 - 5_000_000_000
+        )
+        self.assertEqual(kvs[sim.KEY_TIME_SYNC_TYPE], bytes([sim.TIME_SYNC_GPS]))
 
     def test_set_status_updates_pushed_keys(self) -> None:
         self.assertEqual(
@@ -383,9 +391,9 @@ class DeviceModelTest(unittest.TestCase):
         kvs = dict(proto.parse_info_push(self.m.push_payload(5)))
         self.assertEqual(struct.unpack('<H', kvs[sim.KEY_DIAG_STATUS])[0], 0x0021)
         self.assertEqual(struct.unpack('<i', kvs[sim.KEY_CORE_TEMP])[0], 4321)
-        self.m.set_gps_time(ns=1_000, now_ns=400)
+        self.m.set_gps_time(ns=1_000, mono=0.0, wall_ns=400)
         kvs = dict(proto.parse_info_push(self.m.push_payload(5)))
-        self.assertEqual(struct.unpack('<Q', kvs[sim.KEY_LAST_SYNC_TIME])[0], 400)
+        self.assertEqual(struct.unpack('<Q', kvs[sim.KEY_LAST_SYNC_TIME])[0], 1_000)
         self.assertEqual(self.m.set_status({'omit_keys': [sim.KEY_CORE_TEMP]}), [])
         kvs = dict(proto.parse_info_push(self.m.push_payload(5)))
         self.assertNotIn(sim.KEY_CORE_TEMP, kvs)
@@ -408,6 +416,67 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(kvs[sim.KEY_LOCAL_TIME], struct.pack('<Q', 123))
         # Every read-only key is pushed [unverified].
         self.assertEqual(sorted(kvs), sorted(range(0x8000, 0x800D)) + [0x800E, 0x8010, 0x8011])
+
+
+class LidarClockTest(unittest.TestCase):
+    """The LiDAR clock (#133), driven with explicit host times."""
+
+    WALL = 1_700_000_000_000_000_000  # host wall clock at mono 100.0
+
+    def setUp(self) -> None:
+        self.c = sim.LidarClock()
+        self.c.power_on(100.0)
+
+    def wall(self, mono: float) -> int:
+        return self.WALL + round((mono - 100.0) * 1e9)
+
+    def now(self, mono: float) -> int:
+        return self.c.now_ns(mono, self.wall(mono))
+
+    def test_free_running_counts_from_power_on(self) -> None:
+        self.assertEqual(self.now(100.0), 0)
+        self.assertEqual(self.now(102.5), 2_500_000_000)
+        self.assertEqual(self.now(99.0), 0)  # before power-on (a reboot's silence)
+
+    def test_drift_changes_the_rate_without_a_step(self) -> None:
+        self.c.set_drift(100.0, 101.0)  # +100 ppm from 1 s after power-on
+        self.assertEqual(self.now(101.0), 1_000_000_000)
+        self.assertEqual(self.now(111.0), 11_001_000_000)
+        with self.assertRaises(ValueError):
+            self.c.set_drift(-1e6, 111.0)
+        self.assertEqual(self.c.drift_ppm, 100.0)
+
+    def test_sync_steps_to_the_master_and_records_the_step(self) -> None:
+        self.c.sync(sim.TIME_SYNC_PTP, 3_000, 102.0, self.wall(102.0))
+        master = self.wall(102.0) + 3_000
+        self.assertEqual(self.now(102.0), master)
+        self.assertEqual(self.now(103.0), master + 1_000_000_000)
+        self.assertEqual(self.c.last_sync_ns, master)
+        self.assertEqual(self.c.offset_ns, 2_000_000_000 - master)  # local - source
+
+    def test_synchronised_clock_ignores_the_drift(self) -> None:
+        self.c.set_drift(500.0, 100.0)
+        self.c.sync(sim.TIME_SYNC_GPS, 0, 101.0, self.wall(101.0))
+        self.assertEqual(self.now(111.0), self.wall(111.0))
+
+    def test_losing_sync_free_runs_from_the_master_time(self) -> None:
+        self.c.set_drift(1_000.0, 100.0)
+        self.c.sync(sim.TIME_SYNC_PTP, 0, 101.0, self.wall(101.0))
+        self.c.lose_sync(102.0, self.wall(102.0))
+        self.assertEqual(self.c.sync_type, sim.TIME_SYNC_NONE)
+        self.assertEqual(self.now(102.0), self.wall(102.0))  # no step
+        self.assertEqual(self.now(112.0), self.wall(102.0) + 10_010_000_000)  # +1000 ppm
+        self.assertEqual(self.c.last_sync_ns, self.wall(101.0))  # the last sync stays
+        self.c.lose_sync(113.0, self.wall(113.0))  # already free running: nothing to do
+        self.assertEqual(self.now(113.0), self.wall(102.0) + 11_011_000_000)
+
+    def test_power_on_resets_the_sync_but_keeps_the_drift(self) -> None:
+        self.c.set_drift(20.0, 100.0)
+        self.c.sync(sim.TIME_SYNC_GPS, 0, 101.0, self.wall(101.0))
+        self.c.power_on(200.0)
+        self.assertEqual(self.now(200.0), 0)
+        self.assertEqual((self.c.sync_type, self.c.last_sync_ns, self.c.offset_ns), (0, 0, 0))
+        self.assertEqual(self.c.drift_ppm, 20.0)
 
 
 class PointSourceTest(unittest.TestCase):
@@ -695,6 +764,30 @@ class SimulatorTest(unittest.TestCase):
         inside = [k % 256 for k in range(3 * 96) if k % 256 < 64 and k % 4 in (0, 1)]
         self.assertEqual(kept, [sim.ring_sample(1, k, att) for k in inside])
 
+    def test_time_sync_sets_the_packet_time(self) -> None:
+        (free,) = self.ring_packets(1)
+        self.assertEqual(free.time_type, sim.TIME_SYNC_NONE)
+        self.assertLess(free.timestamp_ns, 60_000_000_000)  # since power-on, not the epoch
+
+        hour = 3600 * 10**9
+        self.s.apply_control({'cmd': 'time_sync', 'type': 'ptp', 'offset_ns': hour})
+        (ev,) = [e for e in self.events() if e['event'] == 'time_sync']
+        self.assertEqual(ev['type'], 'ptp')
+        self.assertLess(ev['offset_ns'], 0)  # local (since power-on) - source (epoch + 1 h)
+        (ptp,) = self.ring_packets(1)
+        self.assertEqual(ptp.time_type, sim.TIME_SYNC_PTP)
+        self.assertAlmostEqual(ptp.timestamp_ns - time.time_ns(), hour, delta=10**9)
+
+        self.s.apply_control({'cmd': 'time_sync', 'type': 'none'})
+        (lost,) = self.ring_packets(1)
+        self.assertEqual(lost.time_type, sim.TIME_SYNC_NONE)
+        self.assertGreaterEqual(lost.timestamp_ns, ptp.timestamp_ns)  # no step back
+        self.assertAlmostEqual(lost.timestamp_ns - time.time_ns(), hour, delta=10**9)
+
+        self.s._do_reboot(time.monotonic())
+        self.assertEqual(self.s.model.clock.sync_type, sim.TIME_SYNC_NONE)
+        self.assertLess(self.s.now_ns(), 60_000_000_000)
+
     def test_malformed_control_lines_emit_error(self) -> None:
         for req in (
             [],
@@ -709,11 +802,14 @@ class SimulatorTest(unittest.TestCase):
             {'cmd': 'duplicate', 'count': -1},
             {'cmd': 'reorder', 'depth': 0},
             {'cmd': 'scene', 'name': 'cube'},
+            {'cmd': 'time_sync', 'type': 'ntp'},
+            {'cmd': 'time_sync', 'type': 'ptp', 'drift_ppm': 2e6},
         ):
             self.s.apply_control(req)
         self.assertTrue(self.s.running)
         evs = self.events()
-        self.assertEqual([e['event'] for e in evs], ['error'] * 12)
+        self.assertEqual([e['event'] for e in evs], ['error'] * 14)
+        self.assertEqual(self.s.model.clock.sync_type, sim.TIME_SYNC_NONE)
         self.assertEqual(self.s.faults, {k: sim.PacketFaults() for k in sim.DATA_STREAMS})
         self.assertEqual(self.s.fail_cmds, {})
         self.assertEqual(self.s.scene, 'random')
