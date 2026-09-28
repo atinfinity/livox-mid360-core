@@ -141,8 +141,11 @@ struct Fixture
 
   explicit Fixture(std::vector<std::string> extra = {})
   {
+    // 100 pkt/s (10 packets per frame): under Debug+ASan on 2 CPUs the receiver cannot keep
+    // up with 500 pkt/s, and the 4 MB socket buffer then delays every frame by seconds, past
+    // a format switch the tests wait for.
     extra.insert(
-      extra.end(), {"--scene", "ring", "--rate-multiplier", "0.25", "--push-rate", "10"});
+      extra.end(), {"--scene", "ring", "--rate-multiplier", "0.05", "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(extra));
     if (sim) {
       ContextOptions o;
