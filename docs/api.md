@@ -45,7 +45,7 @@ auto found = discover();
 auto dev = Device::open(**ctx, found->front(), {});            // connect + host setup
 dev->on_frame([&](Frame && f) { queue.push(std::move(f)); });  // before start
 dev->start_sampling();                                         // work_tgt_mode + wait
-...
+// ...
 dev->stop_sampling();
 dev.reset();  // before ctx
 ```
@@ -222,11 +222,15 @@ network config, ...) are thin wrappers over these; use `set<K>` directly when no
 yet, and the raw `configure()` / `inquire()` for keys chosen at run time.
 
 ```cpp
-auto r = dev->set<Key::kDetectMode>(DetectMode::kSensitive);      // one 0x0100
-if (r && r->reboot_required) { /* ret 0x21: effective after reboot */ }
-auto sn = dev->get<Key::kSn>();                                   // std::string
+auto r = dev->set<Key::kDetectMode>(DetectMode::kSensitive);  // one 0x0100
+if (r && r->reboot_required) {
+  // ret 0x21: effective after reboot
+}
+auto sn = dev->get<Key::kSn>();  // std::string
 auto all = dev->get_many<Key::kFovCfg0, Key::kFovCfgEn, Key::kCoreTemp>();
-if (all) { auto & [fov0, en, temp] = *all; }
+if (all) {
+  auto & [fov0, en, temp] = *all;
+}
 dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 ```
 
@@ -272,11 +276,13 @@ a key list, a decoder over any parsed key-value list (an `InquireResult` or a 0x
 one-line `to_string()` with the wire key names (`name=value`, greppable in logs).
 
 ```cpp
-auto id = dev->identity();                      // one 0x0101 of kIdentityKeys, not cached
+auto id = dev->identity();  // one 0x0101 of kIdentityKeys, not cached
 if (id) {
   LOG(to_string(*id));
   // sn=47MDL9K0010001 product_info=... version_app=13.18.0.244 ... mac=..
-  if (id->version_app.v[0] < 13) { /* firmware too old */ }
+  if (id->version_app.v[0] < 13) {
+    // firmware too old
+  }
 }
 ```
 
@@ -307,10 +313,14 @@ if (id) {
   `pushed_status()->lidar_diag_status`.
 
 ```cpp
-auto st = dev->status();                          // 0x0101; or dev->pushed_status()
-if (st && st->core_temp && *st->core_temp > 8000) { /* 80 °C */ }
+auto st = dev->status();  // 0x0101; or dev->pushed_status()
+if (st && st->core_temp && *st->core_temp > 8000) {
+  // 80 °C
+}
 auto cfg = dev->settings();
-if (cfg && cfg->fov_cfg_en && cfg->fov_cfg_en->fov0) { /* FOV 0 in use */ }
+if (cfg && cfg->fov_cfg_en && cfg->fov_cfg_en->fov0) {
+  // FOV 0 in use
+}
 ```
 
 | C++ | C |
@@ -329,14 +339,23 @@ cloud.
 
 ```cpp
 FovSettings fov{
-  .fov0 = FovConfig{.yaw_start_deg = 0, .yaw_stop_deg = 90, .pitch_start_deg = -5,
-                    .pitch_stop_deg = 5, .rsvd = 0},
-  .fov1 = std::nullopt,                       // leave window 1 as stored
+  .fov0 =
+    FovConfig{
+      .yaw_start_deg = 0,
+      .yaw_stop_deg = 90,
+      .pitch_start_deg = -5,
+      .pitch_stop_deg = 5,
+      .rsvd = 0},
+  .fov1 = std::nullopt,  // leave window 1 as stored
   .enable = FovEnable{.fov0 = true, .fov1 = false}};
-auto r = dev->set_fov(fov);                   // one 0x0100 with 0x0015 and 0x0017
-if (!r && r.error().kind == DeviceError::Kind::kInvalidArgument) { /* r.error().key */ }
-auto cur = dev->fov();                        // one 0x0101 of the three keys
-if (cur) { LOG(to_string(*cur)); }            // fov0=yaw0-90/pitch-5-5 fov1=... enable=fov0:1,fov1:0
+auto r = dev->set_fov(fov);  // one 0x0100 with 0x0015 and 0x0017
+if (!r && r.error().kind == DeviceError::Kind::kInvalidArgument) {
+  // r.error().key
+}
+auto cur = dev->fov();  // one 0x0101 of the three keys
+if (cur) {
+  LOG(to_string(*cur));  // fov0=yaw0-90/pitch-5-5 fov1=... enable=fov0:1,fov1:0
+}
 ```
 
 - `set_fov()` sends the present fields in one request, so the LiDAR applies all or none. It
@@ -368,8 +387,10 @@ and in which convention, is [unverified] ([#11](https://github.com/atinfinity/li
 To transform on the host, `frame.hpp` provides an opt-in extrinsic:
 
 ```cpp
-const Extrinsic e = extrinsic_from(*dev->install_attitude());   // or any InstallAttitude
-dev->on_frame([e](Frame f) { apply(e, f); /* f.points are now p' = r * p + t */ });
+const Extrinsic e = extrinsic_from(*dev->install_attitude());  // or any InstallAttitude
+dev->on_frame([e](Frame f) {
+  apply(e, f);  // f.points are now p' = r * p + t
+});
 ```
 
 `extrinsic_from()` builds `Rz(yaw) * Ry(pitch) * Rx(roll)` (intrinsic ZYX, right-handed,
@@ -407,9 +428,11 @@ point-cloud frame rate":
   `kInvalidArgument`. `frame_policy()` returns the last requested policy.
 
 ```cpp
-dev->set_point_format(DataType::kSpherical);           // frames from now on: source_type kSpherical
+dev->set_point_format(DataType::kSpherical);  // frames from now on: source_type kSpherical
 dev->set_frame_policy({.mode = FramePolicy::Mode::kTimeWindow, .window = 50ms});  // 20 Hz frames
-if (auto p = dev->set_scan_pattern(ScanPattern::kRepetitive); !p) { /* kLidarRejected */ }
+if (auto p = dev->set_scan_pattern(ScanPattern::kRepetitive); !p) {
+  // kLidarRejected
+}
 ```
 
 **Reconnect replay rule.** The `HostSetup` replayed after a reconnect is not frozen at
@@ -468,7 +491,9 @@ clock jumped with the sync). `DeviceStats::time_offset_ns` follows each measurem
 
 ```cpp
 dev->set_gps_time(gps_ns_of_last_pps);
-if (auto s = dev->time_sync_status(); s && s->type == TimeSyncType::kGps) { /* synced */ }
+if (auto s = dev->time_sync_status(); s && s->type == TimeSyncType::kGps) {
+  // synced
+}
 ```
 
 | C++ | C |
@@ -507,13 +532,15 @@ inquire naming the key with `ret_code` 0x20, which surfaces as the ordinary `kSe
 
 ```cpp
 dev->set_detect_mode(DetectMode::kSensitive);
-dev->set_imu_sensor_config({.output_rate = ImuOutputRate::k500Hz,
-                            .accel_range = ImuAccelRange::k8g,
-                            .gyro_range = ImuGyroRange::k1000dps});
+dev->set_imu_sensor_config(
+  {.output_rate = ImuOutputRate::k500Hz,
+   .accel_range = ImuAccelRange::k8g,
+   .gyro_range = ImuGyroRange::k1000dps});
 if (auto r = dev->imu_sensor_config(); !r) {
   const auto & e = r.error();
-  if (e.kind == DeviceError::Kind::kSession && e.session->kind == SessionErrorKind::kLidarRejected &&
-      e.session->ret_code == RetCode::kParamNotSupport) {
+  if (
+    e.kind == DeviceError::Kind::kSession && e.session->kind == SessionErrorKind::kLidarRejected &&
+    e.session->ret_code == RetCode::kParamNotSupport) {
     // firmware without key 0x002B: the IMU runs at its fixed 200 Hz
   }
 }
@@ -539,11 +566,10 @@ exactly as received (whether an unchanged value also answers 0x21 is [unverified
 SDK never reboots on its own.
 
 ```cpp
-auto r = dev->set_lidar_ip_config({.ip = {192, 168, 1, 12},
-                                   .netmask = {255, 255, 255, 0},
-                                   .gateway = {192, 168, 1, 1}});
+auto r = dev->set_lidar_ip_config(
+  {.ip = {192, 168, 1, 12}, .netmask = {255, 255, 255, 0}, .gateway = {192, 168, 1, 1}});
 if (r && r->reboot_required) {
-  dev->reboot();   // kDisconnected{kRebootRequested}, then kReconnected at the new address
+  dev->reboot();  // kDisconnected{kRebootRequested}, then kReconnected at the new address
 }
 ```
 
@@ -645,8 +671,8 @@ installs a handler. `log.hpp` provides one process-wide level and one process-wi
 
 ```cpp
 set_log_level(LogLevel::kInfo);
-set_log_handler(stderr_log_handler());                 // or:
-auto file = file_log_handler("/var/log/mid360.log");   // expected<LogHandler, DeviceError>
+set_log_handler(stderr_log_handler());                // or:
+auto file = file_log_handler("/var/log/mid360.log");  // expected<LogHandler, DeviceError>
 if (file) set_log_handler(*file);
 set_log_handler([](const LogRecord & r) { my_logger(r.level, r.serial_number, r.message); });
 ```
