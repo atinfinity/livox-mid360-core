@@ -194,7 +194,14 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
 - **Time window mode**: packets are never split; a packet whose first point is at or past
   `base_time_ns + window` starts a new frame. `base_time_ns` is the first point of the first
   packet of the frame.
-- A packet whose `offset_ns` would overflow `uint32` (4.29 s) forces a close. Empty frames are
+- A packet whose `offset_ns` would overflow `uint32` (4.29 s) forces a close. So do, in both
+  modes, a change of the header `time_type` (synchronisation acquired or lost: one time base
+  per frame, as `Frame::time_type` says) and a packet a whole `window` or more before
+  `base_time_ns`, a clock stepped back by a re-synchronisation
+  ([#145](https://github.com/atinfinity/livox-mid360-core/issues/145)); a smaller step back
+  stays in the frame like a reordered packet, its `offset_ns` clamped to 0. The frame-counter
+  fallback measures its `2 × window` from the earliest packet time seen, so a step back
+  restarts it. Empty frames are
   never delivered; `Frame::index` counts delivered frames. The receive thread closes a partial
   frame after `window` without packets (idle close, both modes); `stop_sampling()` and the
   destructor deliver nothing.

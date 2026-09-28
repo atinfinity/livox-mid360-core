@@ -172,7 +172,9 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
   }
 
   const auto window = static_cast<std::uint64_t>(std::max<std::int64_t>(policy_.window.count(), 1));
-  if (!first_time_) {
+  if (!first_time_ || t0 < *first_time_) {
+    // Also on a step back of the clock (#145), which would otherwise hold off the fallback
+    // until the clock caught up with the time it had before the step.
     first_time_ = t0;
   }
   if (policy_.mode == FramePolicy::Mode::kFrameCounter && !fallback_) {
@@ -189,6 +191,15 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
     bool close = time_window_active() ? t0 >= cur_.base_time_ns + window : frame_changed;
     if (h.data_type != cur_.source_type) {
       close = true;  // the point format changed (set_point_format()): one format per Frame
+    }
+    if (h.time_type != cur_.time_type) {
+      close = true;  // PTP / GPS acquired or lost: one time base per Frame (#145)
+    }
+    if (t0 + window <= cur_.base_time_ns) {
+      // The clock stepped back by a window or more (a re-synchronisation, #145). A reordered
+      // packet is late by far less, and without this close the time window would not close
+      // until the clock was back at base_time_ns + window.
+      close = true;
     }
     const std::uint64_t span_ns = static_cast<std::uint64_t>(h.time_interval) * 100u;
     if (
