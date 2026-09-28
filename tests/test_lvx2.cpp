@@ -391,10 +391,18 @@ TEST_CASE("lvx2 player: frames, loop, stop token and lidar_id filter", "[lvx2]")
         stop.request_stop();
       }
     });
+    std::vector<std::uint32_t> indices;
+    pl.on_frame([&](const Frame & f) { indices.push_back(f.index); });
     auto s = pl.run(stop.get_token());
     REQUIRE(s);
     CHECK(s->loops == 2);
     CHECK(s->packets == 45);
+    // Issue #149: the index keeps counting across passes instead of restarting at 0.
+    REQUIRE(indices.size() == s->frames);
+    CHECK(indices.size() > 8);  // 4 frames per pass, two passes and part of a third
+    for (std::size_t i = 0; i < indices.size(); ++i) {
+      CHECK(indices[i] == i);
+    }
   }
   SECTION("paced playback takes about the recorded time")
   {

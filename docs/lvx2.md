@@ -89,7 +89,9 @@ auto stats = player.run(stop_token);
 - `rate` is relative to the recorded timestamps (1.0 = real time, 0 = as fast as possible). A
   backward timestamp jump does not wait.
 - With `loop`, the file is reopened and the frame assembler reset after each pass; the
-  partial frame is flushed at the end of every pass.
+  partial frame is flushed at the end of every pass. `Frame::index` is not reset: it starts at
+  0 for each `run()` and keeps counting across passes
+  ([#149](https://github.com/atinfinity/livox-mid360-core/issues/149)).
 - `lidar_id` filters a multi-device file to one LiDAR.
 - Errors are `std::expected<_, Lvx2Error>` with `kIo` (+ `errno_value`), `kInvalidArgument`,
   `kUnsupportedDataType` and `kBadFile` (+ `detail`).

@@ -583,12 +583,16 @@ std::expected<Lvx2PlayStats, Lvx2Error> Lvx2Player::run(const std::stop_token & 
   }
   Lvx2PlayStats stats;
   const bool paced = im.options.rate > 0;
+  // Each pass gets a fresh assembler, so Frame::index is numbered here to keep counting
+  // across `loop` passes (issue #149).
+  std::uint32_t next_index = 0;
   while (!stop.stop_requested()) {
     detail::FrameAssembler assembler(im.options.frame_policy, TimestampPolicy::kLidar);
     auto deliver = [&](std::optional<Frame> f) {
       if (!f) {
         return;
       }
+      f->index = next_index++;
       ++stats.frames;
       stats.points += f->points.size();
       if (im.frame_cb) {
