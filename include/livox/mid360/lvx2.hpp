@@ -185,8 +185,9 @@ public:
   void on_packet(PacketCallback cb);
   void on_frame(std::function<void(Frame &&)> cb);
   /// Plays until the end of the file (once, or forever with `loop`) or until `stop` is
-  /// requested; the partial frame is flushed at the end of each pass. A read error ends the
-  /// run early and is returned.
+  /// requested; the partial frame is flushed at the end of each pass. Frame::index starts at
+  /// 0 for each call and keeps counting across `loop` passes. A read error ends the run early
+  /// and is returned.
   [[nodiscard]] std::expected<Lvx2PlayStats, Lvx2Error> run(const std::stop_token & stop = {});
 
 private:
