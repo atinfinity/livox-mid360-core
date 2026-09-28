@@ -16,6 +16,7 @@ one is due for verification on real hardware ([#11](https://github.com/atinfinit
 python3 tools/livox_mid360_sim.py                     # 0.0.0.0, ports 56000/56100/56200/56300/56400
 python3 tools/livox_mid360_sim.py --bind 127.0.0.1 --base-port 0   # loopback, free ports
 python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
+python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay a capture at half speed
 ```
 
 | Option | Default | Meaning |
@@ -28,6 +29,8 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
 | `--scene` | `random` | point cloud content: seeded random points, or `ring`, a fixed scene of known points ([#132](https://github.com/atinfinity/livox-mid360-core/issues/132)) |
 | `--apply-attitude` | | move Cartesian points by the install attitude in key `0x0012` before sending them ([#135](https://github.com/atinfinity/livox-mid360-core/issues/135)); off by default, because whether the firmware does this is [unverified] |
+| `--pcap` | | replay the point cloud, IMU, push and firmware log datagrams of a classic pcap instead of generating them ([#134](https://github.com/atinfinity/livox-mid360-core/issues/134), see Behaviour) |
+| `--pcap-rate` | 1.0 | `--pcap` speed: `2` replays twice as fast as recorded, `0` as fast as possible |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
@@ -93,7 +96,9 @@ The process is driven over its standard streams so that any test harness can use
 | `log_ack` | `ret`, `log_type`, `file_index`, `trans` | the host acknowledged a log chunk |
 | `debug_data` | `enabled`, `dest`, `port` (both only when enabled) | `0x0303` switched the debug raw data stream; `port` is its source port |
 | `control` | `cmd` | a control command was applied |
-| `status` | `state`, `sent`, `hosts{pcl,imu,push,log}`, `log_enabled`, `log_acks_received`, `debug_data{enabled,dest,port}` | answer to `status` |
+| `status` | `state`, `sent`, `hosts{pcl,imu,push,log}`, `log_enabled`, `log_acks_received`, `debug_data{enabled,dest,port}`, `replay{state,sent,skipped}` (`null` without `--pcap`) | answer to `status` |
+| `replay_start` | `file`, `rate` | the `--pcap` replay began |
+| `replay_done` | `sent{push,pcl,imu,log}`, `skipped` (datagrams of a stream without a host), `seconds` | the `--pcap` replay sent the capture's last datagram |
 | `rebound` | `ip`, `ports` | a reboot moved every socket to the key 0x0004 address |
 | `error` | `error` | malformed or unknown control line, or one with a missing or invalid field (nothing of it is applied, the simulator keeps running) |
 | `exit` | `sent` | leaving the main loop |
@@ -175,6 +180,25 @@ The process is driven over its standard streams so that any test harness can use
   next packet. Spherical points are sent unchanged. The FOV crops in the sensor frame, before
   the attitude. A host that also applies `extrinsic_from()` then transforms the cloud twice
   (see [api.md](api.md#install-attitude-and-host-side-extrinsic)).
+- **Pcap replay** ([#134](https://github.com/atinfinity/livox-mid360-core/issues/134)): with `--pcap FILE` the point cloud and IMU come from a
+  capture instead of the generator. The file is read with `tools/livox_mid360_pcap.py`:
+  classic pcap only (convert pcapng with `editcap -F pcap`), Ethernet (with VLAN), raw IPv4
+  or Linux cooked, IPv4 UDP. Every datagram sent *from* a LiDAR data port (push 56200, point
+  cloud 56300, IMU 56400, log 56500) is replayed byte for byte, from the simulator's socket
+  of that stream to the host the SDK configured for it (keys `0x0005`, `0x0006`, `0x0007`,
+  `0x0009`); one without a host is counted as `skipped`. Command traffic in the capture
+  (discovery, `0x0100`, their ACKs) is not replayed: the `DeviceModel` answers the SDK as
+  usual, so a replay connects like the live simulator. The replay starts once the work state
+  is SAMPLING and a host is configured for one of these streams (usually by the SDK's first
+  `0x0100`), keeps the recorded spacing divided by `--pcap-rate`, then runs to the end of
+  the file whatever the work state, and ends with `replay_done`. It runs once; afterwards no
+  point cloud or IMU is sent. From the first replayed push to `replay_done` the capture's
+  pushes replace the simulator's own, which then resume. Packets keep their recorded
+  `udp_cnt`, `frame_cnt` and timestamps. The capture should hold one LiDAR: datagrams from
+  several are replayed as if they were one. `tests/data/replay.pcap` is a synthetic
+  capture written by `tools/gen_replay_pcap.py` (three frames of eight ring-scene packets,
+  twelve IMU packets, two pushes with `core_temp` 43.21 °C, one log chunk, and command and
+  unrelated traffic that must be skipped); CI regenerates it and fails on a difference.
 - **FOV cropping** [unverified]: when `fov_cfg_en` enables at least one window, a point is
   sent only if it lies inside an enabled window (yaw `[start, stop)` with wrap-around when
   `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
@@ -193,7 +217,10 @@ The process is driven over its standard streams so that any test harness can use
   determinism, and an in-process end-to-end run over UDP (discovery → configure → packets →
   push → reboot silence → `udp_cnt` reset; `hms` and `drop_ack` controls), the packet
   fault controls on both data streams, and the ring scene in every data type and under a FOV
-  window, and the `--apply-attitude` transform.
+  window, and the `--apply-attitude` transform. `PcapReplayTest` replays
+  `tests/data/replay.pcap` into sockets and compares every datagram byte for byte with the
+  capture, and checks the start condition, the skipped streams, the rate and the push
+  hand-over.
 - `tests/test_sim_smoke.cpp` (Catch2, tag `[sim]`): spawns the simulator with `posix_spawn`
   through `tests/sim_process.hpp`, then discovery → 0x0100 → wait for SAMPLING via 0x0101 →
   receive ≥ 200 point-cloud and ≥ 10 IMU packets through `UdpSocket` / `Poller` → quit. The
@@ -206,6 +233,9 @@ The process is driven over its standard streams so that any test harness can use
   records spherical packets to lvx2 that read back as the same points. With
   `--apply-attitude` the Cartesian frames equal the scene moved by key `0x0012`, spherical
   ones stay as they are, and an `extrinsic_from()` on top gives the double transform.
+- `tests/test_replay.cpp` (tag `[replay][sim]`): `--pcap tests/data/replay.pcap` into a
+  `Device`, which counts exactly the capture's packets, frames, points, IMU samples and
+  pushes, no drops, and reports the recorded `core_temp`.
 
 `SimProcess::control()` sends any control line and `wait_event()` blocks for a matching
 stdout line, so later session-layer tests can inject reboots, HMS codes or dropped ACKs.

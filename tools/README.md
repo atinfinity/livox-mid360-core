@@ -6,6 +6,7 @@ Python reference implementation and helpers. No third-party packages required (P
 |---|---|
 | `livox_mid360_proto.py` | Independent pure-Python implementation of the Mid-360 wire protocol (CRC, command frames, key-value lists, data packets). Used to cross-check the C++ library. |
 | `gen_golden_vectors.py` | Regenerates `tests/generated/golden_vectors.hpp` from the Python implementation. Run after changing either implementation intentionally. |
+| `gen_replay_pcap.py` | Regenerates `tests/data/replay.pcap`, the synthetic capture the simulator's `--pcap` replay is tested with. |
 | `livox_mid360_pcap.py` | Decodes classic pcap captures of Mid-360 traffic (control frames, push, point cloud, IMU) to JSON/CSV and counts `udp_cnt` gaps. |
 | `livox_mid360_sim.py` | Mid-360 simulator: control commands, work-state machine, point-cloud/IMU/push streaming, JSON control channel on stdin. See `docs/simulator.md`. |
 | `cli/` | C++ `livox-mid360-cli` (`record` to lvx2 / `replay`, `debug-data`), built with `LIVOX_MID360_BUILD_TOOLS`. See `docs/lvx2.md` and `docs/debug_data.md`. |
@@ -17,5 +18,6 @@ python3 tools/gen_golden_vectors.py
 python3 tools/livox_mid360_pcap.py capture.pcap --json | head
 python3 tools/livox_mid360_pcap.py capture.pcap --points > points.csv
 python3 tools/livox_mid360_sim.py --bind 127.0.0.1 --base-port 0 --verbose
+python3 tools/livox_mid360_sim.py --bind 127.0.0.1 --pcap capture.pcap --pcap-rate 0
 python3 -m unittest tools/test_sim.py
 ```
