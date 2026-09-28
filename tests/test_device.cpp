@@ -821,10 +821,14 @@ TEST_CASE("Device: time window mode and kHostReceive", "[sim][device]")
   CHECK(rec.ok);
   CHECK_FALSE(dev->stats().time_offset_valid);
   const std::lock_guard lock(rec.mutex);
+  std::uint64_t packets = 0;
   for (const Frame & fr : rec.kept) {
     CHECK(fr.end_time_ns - fr.base_time_ns < 40'000'000);
-    CHECK(fr.packets < 30);
+    packets += fr.packets;
   }
+  // 30 ms at 500 pkt/s = 15 packets, against 50 per frame_cnt frame. Bound the average: with
+  // kHostReceive a stall of the receive thread packs one window with a burst (#139).
+  CHECK(packets / rec.kept.size() < 30);
 }
 
 TEST_CASE("Device: idle close delivers the partial frame", "[sim][device]")
