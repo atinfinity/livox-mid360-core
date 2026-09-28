@@ -75,7 +75,9 @@ struct ImuData
   ImuSample sample{};
 };
 
-/// How a Device cuts the packet stream into Frames (#6).
+/// How a Device cuts the packet stream into Frames (#6). In both modes a change of the header
+/// time_type, or a packet `window` or more before the frame's base time (a clock stepped back,
+/// #145), also closes the frame.
 struct FramePolicy
 {
   enum class Mode : std::uint8_t
@@ -84,7 +86,9 @@ struct FramePolicy
     kTimeWindow,    ///< close every `window` of point time (livox_ros_driver2 publish period)
   };
   Mode mode = Mode::kFrameCounter;
-  std::chrono::nanoseconds window{std::chrono::milliseconds{100}};  ///< kTimeWindow only
+  /// kTimeWindow's period. Also, in both modes, the step back that closes a frame, the idle
+  /// close, and half the time kFrameCounter waits for a frame_cnt change before falling back.
+  std::chrono::nanoseconds window{std::chrono::milliseconds{100}};
 };
 
 /// How point/IMU timestamps are produced from the packet timestamp (#6).
