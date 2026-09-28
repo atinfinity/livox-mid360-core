@@ -468,6 +468,57 @@ class RingSceneTest(unittest.TestCase):
             self.assertEqual(len(proto.pack_samples(2, [sim.ring_sample(2, k)])), 8)
 
 
+class AttitudeTest(unittest.TestCase):
+    """The install attitude transform of --apply-attitude (#135)."""
+
+    def assert_close(self, got, want) -> None:
+        for g, w in zip(got, want, strict=True):
+            self.assertAlmostEqual(g, w, places=9)
+
+    def test_single_axis_rotations(self) -> None:
+        self.assert_close(sim.transform_mm((0, 0, 90, 0, 0, 0), (1, 2, 3)), (-2, 1, 3))
+        self.assert_close(sim.transform_mm((0, 90, 0, 0, 0, 0), (1, 2, 3)), (3, 2, -1))
+        self.assert_close(sim.transform_mm((90, 0, 0, 0, 0, 0), (1, 2, 3)), (1, -3, 2))
+        self.assert_close(sim.transform_mm((0, 0, 0, 10, -20, 30), (1, 2, 3)), (11, -18, 33))
+
+    def test_rotation_order_is_z_y_x_then_translation(self) -> None:
+        def rot(axis: int, deg: float) -> list[list[float]]:
+            c, s_ = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+            i, j = [(1, 2), (2, 0), (0, 1)][axis]
+            m = [[float(r == c_) for c_ in range(3)] for r in range(3)]
+            m[i][i], m[i][j], m[j][i], m[j][j] = c, -s_, s_, c
+            return m
+
+        def mul(a, b):
+            return [
+                [sum(a[r][k] * b[k][c_] for k in range(3)) for c_ in range(3)] for r in range(3)
+            ]
+
+        att = (10.0, -20.0, 30.0, 100, -200, 300)
+        r = mul(rot(2, att[2]), mul(rot(1, att[1]), rot(0, att[0])))
+        p = (1234.0, -567.0, 89.0)
+        want = [sum(r[i][k] * p[k] for k in range(3)) + att[3 + i] for i in range(3)]
+        self.assert_close(sim.transform_mm(att, p), want)
+
+    def test_samples_are_rounded_clamped_and_spherical_is_untouched(self) -> None:
+        zero = (0.0, 0.0, 0.0, 0, 0, 0)
+        for dt in (1, 2, 3):
+            for smp in sim.PointSource(3).samples(dt, 50):
+                self.assertEqual(sim.attitude_sample(dt, smp, zero), smp)
+            for k in range(sim.RING_POINTS):
+                self.assertEqual(sim.ring_sample(dt, k, zero), sim.ring_sample(dt, k))
+        shift = (0.0, 0.0, 0.0, 100, -200, 300)
+        self.assertEqual(sim.attitude_sample(1, (10, 20, 30, 5, 6), shift), (110, -180, 330, 5, 6))
+        self.assertEqual(sim.attitude_sample(2, (10, 20, 30, 5, 6), shift), (20, 0, 60, 5, 6))
+        self.assertEqual(
+            sim.attitude_sample(3, (1000, 9000, 0, 5, 6), shift), (1000, 9000, 0, 5, 6)
+        )
+        far = (0.0, 0.0, 0.0, 10000, -10000, 0)
+        self.assertEqual(
+            sim.attitude_sample(2, (32000, -32000, 0, 1, 2), far), (32767, -32768, 0, 1, 2)
+        )
+
+
 class SimulatorTest(unittest.TestCase):
     """Simulator methods called directly, without the main loop."""
 
@@ -617,6 +668,30 @@ class SimulatorTest(unittest.TestCase):
         kept = [smp[3] for pkt in self.ring_packets(8) for smp in pkt.samples()]
         ring = [k for k in range(64) if k % 4 in (0, 1)]  # pitch 0 or 15
         self.assertEqual(kept, ring * 3)  # 8 packets of 96 = 3 rings
+
+    def test_apply_attitude_moves_cartesian_points_only(self) -> None:
+        self.assertFalse(self.s.apply_attitude)  # off unless --apply-attitude
+        att = (10.0, -20.0, 30.0, 100, -200, 300)
+        m = self.s.model
+        m.configure([(sim.KEY_INSTALL_ATTITUDE, struct.pack('<fffiii', *att))])
+        self.assertEqual(m.install_attitude(), att)
+        for apply in (False, True):
+            self.s.apply_attitude = apply
+            for dt in (1, 2, 3):
+                m.settings[sim.KEY_PCL_DATA_TYPE] = bytes([dt])
+                self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
+                samples = [smp for pkt in self.ring_packets(2) for smp in pkt.samples()]
+                moved = apply and dt != 3
+                want = [sim.ring_sample(dt, k, att if moved else None) for k in range(192)]
+                self.assertEqual(samples, want, (apply, dt))
+        # The FOV crops in the sensor frame: the same ring points survive the window.
+        window = proto.encode_fov_cfg(0, 90, 0, 15)
+        m.configure([(sim.KEY_FOV0, window), (sim.KEY_FOV_EN, b'\x01')])
+        m.settings[sim.KEY_PCL_DATA_TYPE] = b'\x01'
+        self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
+        kept = [smp for pkt in self.ring_packets(3) for smp in pkt.samples()]
+        inside = [k % 256 for k in range(3 * 96) if k % 256 < 64 and k % 4 in (0, 1)]
+        self.assertEqual(kept, [sim.ring_sample(1, k, att) for k in inside])
 
     def test_malformed_control_lines_emit_error(self) -> None:
         for req in (

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // The simulator's deterministic ring scene (issue #132): decoded point values in every data
 // type, per-point time offsets, FOV cropping at a window's edges, the host-side extrinsic and
-// lvx2 record -> read back, all checked against the scene's known geometry.
+// lvx2 record -> read back, all checked against the scene's known geometry; and the
+// simulator's --apply-attitude (issue #135) against the same scene moved by key 0x0012.
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -72,6 +73,24 @@ RingPoint ring_point(unsigned k)
     .tag = static_cast<std::uint8_t>(k % 3 | (k / 3 % 3) << 2 | (k / 9 % 3) << 4)};
 }
 
+/// `p` moved by Rz(yaw) * Ry(pitch) * Rx(roll), then the translation: the convention of
+/// extrinsic_from(), restated here from the three rotations.
+RingPoint moved(const InstallAttitude & a, RingPoint p)
+{
+  constexpr double kDegToRad = std::numbers::pi / 180.0;
+  const double roll = static_cast<double>(a.roll_deg) * kDegToRad;
+  const double pitch = static_cast<double>(a.pitch_deg) * kDegToRad;
+  const double yaw = static_cast<double>(a.yaw_deg) * kDegToRad;
+  const double y1 = std::cos(roll) * p.y - std::sin(roll) * p.z;  // Rx(roll)
+  const double z1 = std::sin(roll) * p.y + std::cos(roll) * p.z;
+  const double x2 = std::cos(pitch) * p.x + std::sin(pitch) * z1;  // Ry(pitch)
+  const double z2 = -std::sin(pitch) * p.x + std::cos(pitch) * z1;
+  const double x3 = std::cos(yaw) * x2 - std::sin(yaw) * y1;  // Rz(yaw)
+  const double y3 = std::sin(yaw) * x2 + std::cos(yaw) * y1;
+  return RingPoint{
+    .x = x3 + a.x_mm / 1000.0, .y = y3 + a.y_mm / 1000.0, .z = z2 + a.z_mm / 1000.0, .tag = p.tag};
+}
+
 /// Quantisation of each data type in metres, plus float rounding.
 double tolerance(DataType t)
 {
@@ -85,19 +104,20 @@ double tolerance(DataType t)
   }
 }
 
-/// Largest deviation of `points` from the ring point their reflectivity names; counts a
-/// wrong tag as a mismatch.
+/// Largest deviation of `points` from `expect(k)` for the ring point k their reflectivity
+/// names; counts a wrong tag as a mismatch.
 struct Deviation
 {
   double max_m = 0;
   std::size_t tag_mismatches = 0;
 };
 
-Deviation deviation(const std::vector<Point> & points)
+Deviation deviation(
+  const std::vector<Point> & points, const std::function<RingPoint(unsigned)> & expect = ring_point)
 {
   Deviation d;
   for (const Point & p : points) {
-    const RingPoint e = ring_point(p.reflectivity);
+    const RingPoint e = expect(p.reflectivity);
     d.max_m = std::max(
       {d.max_m, std::abs(static_cast<double>(p.x) - e.x), std::abs(static_cast<double>(p.y) - e.y),
        std::abs(static_cast<double>(p.z) - e.z)});
@@ -108,16 +128,22 @@ Deviation deviation(const std::vector<Point> & points)
   return d;
 }
 
+const InstallAttitude kAttitude{
+  .roll_deg = 10, .pitch_deg = -20, .yaw_deg = 30, .x_mm = 100, .y_mm = -200, .z_mm = 300};
+/// Cartesian32 rounding after a rotation: sqrt(3) * 0.5 mm on any axis, plus float rounding.
+constexpr double kRotatedCartesian32 = 0.0009;
+
 struct Fixture
 {
   std::optional<SimProcess> sim;
   std::string err;
   std::unique_ptr<Context> context;
 
-  Fixture()
+  explicit Fixture(std::vector<std::string> extra = {})
   {
-    sim =
-      SimProcess::start(err, {"--scene", "ring", "--rate-multiplier", "0.25", "--push-rate", "10"});
+    extra.insert(
+      extra.end(), {"--scene", "ring", "--rate-multiplier", "0.25", "--push-rate", "10"});
+    sim = SimProcess::start(err, std::move(extra));
     if (sim) {
       ContextOptions o;
       o.bind_address = {127, 0, 0, 1};
@@ -291,7 +317,8 @@ TEST_CASE("ring scene: FOV cropping keeps exactly the points inside the window",
       want.insert(k);
     }
   }
-  for (const DataType t : {DataType::kCartesian32, DataType::kSpherical}) {
+  // Spherical first: a slow receiver may still hold Cartesian32 frames sent before set_fov().
+  for (const DataType t : {DataType::kSpherical, DataType::kCartesian32}) {
     CAPTURE(to_string(t));
     REQUIRE(dev->set_point_format(t).has_value());
     std::set<unsigned> seen;
@@ -320,42 +347,12 @@ TEST_CASE("ring scene: the host-side extrinsic moves the decoded points", "[scen
   Frame fr = std::move(rec.collect(DataType::kCartesian32, 1).front());
   REQUIRE_FALSE(fr.points.empty());
 
-  const InstallAttitude a{
-    .roll_deg = 10, .pitch_deg = -20, .yaw_deg = 30, .x_mm = 100, .y_mm = -200, .z_mm = 300};
+  const InstallAttitude a = kAttitude;
   apply(extrinsic_from(a), fr);
-  // Expected: Rz(yaw) * Ry(pitch) * Rx(roll) * p + t, built here from the three rotations.
-  constexpr double kDegToRad = std::numbers::pi / 180.0;
-  const double roll = static_cast<double>(a.roll_deg) * kDegToRad;
-  const double pitch = static_cast<double>(a.pitch_deg) * kDegToRad;
-  const double yaw = static_cast<double>(a.yaw_deg) * kDegToRad;
-  const double cr = std::cos(roll);
-  const double sr = std::sin(roll);
-  const double cp = std::cos(pitch);
-  const double sp = std::sin(pitch);
-  const double cy = std::cos(yaw);
-  const double sy = std::sin(yaw);
-  double max_m = 0;
-  std::size_t tag_mismatches = 0;
-  for (const Point & p : fr.points) {
-    const RingPoint e = ring_point(p.reflectivity);
-    const double x1 = e.x;  // Rx(roll)
-    const double y1 = cr * e.y - sr * e.z;
-    const double z1 = sr * e.y + cr * e.z;
-    const double x2 = cp * x1 + sp * z1;  // Ry(pitch)
-    const double z2 = -sp * x1 + cp * z1;
-    const double x3 = cy * x2 - sy * y1;  // Rz(yaw)
-    const double y3 = sy * x2 + cy * y1;
-    max_m = std::max(
-      {max_m, std::abs(static_cast<double>(p.x) - (x3 + 0.1)),
-       std::abs(static_cast<double>(p.y) - (y3 - 0.2)),
-       std::abs(static_cast<double>(p.z) - (z2 + 0.3))});
-    if (p.tag != e.tag) {
-      ++tag_mismatches;
-    }
-  }
+  const Deviation d = deviation(fr.points, [&](unsigned k) { return moved(a, ring_point(k)); });
   // The rotation mixes the per-axis 0.5 mm rounding: at most sqrt(3) * 0.5 mm on any axis.
-  CHECK(max_m <= 0.0009);
-  CHECK(tag_mismatches == 0);
+  CHECK(d.max_m <= kRotatedCartesian32);
+  CHECK(d.tag_mismatches == 0);
 }
 
 TEST_CASE(
@@ -431,4 +428,72 @@ TEST_CASE(
   const Deviation d = deviation(points);
   CHECK(d.max_m <= tolerance(DataType::kCartesian32));
   CHECK(d.tag_mismatches == 0);
+}
+
+TEST_CASE("ring scene: --apply-attitude moves Cartesian points by key 0x0012", "[scene][sim]")
+{
+  Fixture f({"--apply-attitude"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  // The attitude is written before each format switch below, so every frame collected in the
+  // new format left the simulator after it.
+  REQUIRE(dev->set_install_attitude(kAttitude).has_value());
+  const auto once = [](unsigned k) { return moved(kAttitude, ring_point(k)); };
+  const auto twice = [](unsigned k) { return moved(kAttitude, moved(kAttitude, ring_point(k))); };
+
+  SECTION("Cartesian points leave the device already moved; spherical ones do not")
+  {
+    for (const DataType t : {DataType::kCartesian16, DataType::kSpherical}) {
+      CAPTURE(to_string(t));
+      REQUIRE(dev->set_point_format(t).has_value());
+      for (const Frame & fr : rec.collect(t, 2)) {
+        const Deviation d =
+          t == DataType::kSpherical ? deviation(fr.points) : deviation(fr.points, once);
+        CHECK(d.max_m <= tolerance(t));
+        CHECK(d.tag_mismatches == 0);
+      }
+    }
+  }
+
+  SECTION("the host-side extrinsic on top transforms the cloud twice")
+  {
+    // Through Cartesian16 so that no Cartesian32 frame from before the attitude is collected.
+    REQUIRE(dev->set_point_format(DataType::kCartesian16).has_value());
+    rec.collect(DataType::kCartesian16, 1);
+    REQUIRE(dev->set_point_format(DataType::kCartesian32).has_value());
+    for (Frame & fr : rec.collect(DataType::kCartesian32, 2)) {
+      const Deviation device_only = deviation(fr.points, once);
+      CHECK(device_only.max_m <= tolerance(DataType::kCartesian32));
+      apply(extrinsic_from(kAttitude), fr);
+      // The pitfall of docs/api.md: the points are now off by a whole attitude.
+      CHECK(deviation(fr.points, once).max_m > 0.1);
+      const Deviation d = deviation(fr.points, twice);
+      CHECK(d.max_m <= kRotatedCartesian32);
+      CHECK(d.tag_mismatches == 0);
+    }
+  }
+}
+
+TEST_CASE("ring scene: without --apply-attitude key 0x0012 leaves the points alone", "[scene][sim]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(dev->set_install_attitude(kAttitude).has_value());
+  REQUIRE(dev->set_point_format(DataType::kCartesian16).has_value());
+  for (const Frame & fr : rec.collect(DataType::kCartesian16, 2)) {
+    const Deviation d = deviation(fr.points);
+    CHECK(d.max_m <= tolerance(DataType::kCartesian16));
+    CHECK(d.tag_mismatches == 0);
+  }
 }

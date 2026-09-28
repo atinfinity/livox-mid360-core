@@ -27,6 +27,7 @@ python3 tools/livox_mid360_sim.py --verbose --drop-rate 0.01
 | `--version-app` / `--version-loader` / `--version-hardware` | `0.0.0.1` | keys 0x8002–0x8004 as `a.b.c.d` |
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
 | `--scene` | `random` | point cloud content: seeded random points, or `ring`, a fixed scene of known points ([#132](https://github.com/atinfinity/livox-mid360-core/issues/132)) |
+| `--apply-attitude` | | move Cartesian points by the install attitude in key `0x0012` before sending them ([#135](https://github.com/atinfinity/livox-mid360-core/issues/135)); off by default, because whether the firmware does this is [unverified] |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
@@ -166,6 +167,14 @@ The process is driven over its standard streams so that any test harness can use
   Spherical packets carry the exact values (`theta` = 90° − elevation); Cartesian32 /
   Cartesian16 ones the same point rounded to mm / cm. `tools/test_sim.py` (`ring_point`)
   and `tests/test_scene.cpp` restate the definition.
+- **Install attitude** ([#135](https://github.com/atinfinity/livox-mid360-core/issues/135)) [unverified]: key `0x0012` is stored and read back, and by
+  default it does not touch the points. With `--apply-attitude` every Cartesian32 /
+  Cartesian16 point is moved by `Rz(yaw) * Ry(pitch) * Rx(roll)`, then by the translation
+  (the convention of `extrinsic_from()`), before it is rounded to mm / cm; values past the
+  field range are clamped. The key's current value is used, so a write takes effect with the
+  next packet. Spherical points are sent unchanged. The FOV crops in the sensor frame, before
+  the attitude. A host that also applies `extrinsic_from()` then transforms the cloud twice
+  (see [api.md](api.md#install-attitude-and-host-side-extrinsic)).
 - **FOV cropping** [unverified]: when `fov_cfg_en` enables at least one window, a point is
   sent only if it lies inside an enabled window (yaw `[start, stop)` with wrap-around when
   `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
@@ -184,7 +193,7 @@ The process is driven over its standard streams so that any test harness can use
   determinism, and an in-process end-to-end run over UDP (discovery → configure → packets →
   push → reboot silence → `udp_cnt` reset; `hms` and `drop_ack` controls), the packet
   fault controls on both data streams, and the ring scene in every data type and under a FOV
-  window.
+  window, and the `--apply-attitude` transform.
 - `tests/test_sim_smoke.cpp` (Catch2, tag `[sim]`): spawns the simulator with `posix_spawn`
   through `tests/sim_process.hpp`, then discovery → 0x0100 → wait for SAMPLING via 0x0101 →
   receive ≥ 200 point-cloud and ≥ 10 IMU packets through `UdpSocket` / `Poller` → quit. The
@@ -194,7 +203,9 @@ The process is driven over its standard streams so that any test harness can use
 - `tests/test_scene.cpp` (tag `[scene][sim]`): a `Device` against `--scene ring` decodes
   every data type to the expected points (position, tag, `line`, per-point `offset_ns`),
   keeps exactly the expected points under a FOV window, applies a host-side extrinsic, and
-  records spherical packets to lvx2 that read back as the same points.
+  records spherical packets to lvx2 that read back as the same points. With
+  `--apply-attitude` the Cartesian frames equal the scene moved by key `0x0012`, spherical
+  ones stay as they are, and an `extrinsic_from()` on top gives the double transform.
 
 `SimProcess::control()` sends any control line and `wait_event()` blocks for a matching
 stdout line, so later session-layer tests can inject reboots, HMS codes or dropped ACKs.
@@ -226,6 +237,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
 | `pattern_mode` | only 0 accepted; 1 / 2 → `0x20`, others → `0x03`; never restarts the motor | the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code |
 | `pcl_data_type` change while SAMPLING | the next packet is already in the new format | the wiki does not say whether the switch is immediate or aligned to a frame |
+| Install attitude `0x0012` | stored only; with `--apply-attitude`, Cartesian points moved by `Rz * Ry * Rx` + translation after the FOV crop, spherical untouched | whether the firmware applies the key to its output at all, in which convention and to which data types ([#110](https://github.com/atinfinity/livox-mid360-core/issues/110)) |
 | FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window | the wiki defines neither the edge inclusivity nor the wrap-around |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
 | `frame_cnt` period | 100 ms | |
