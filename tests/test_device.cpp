@@ -677,6 +677,84 @@ TEST_CASE("Device: drop_rate shows up in dropped_packets", "[sim][device]")
   CHECK(per_frame > 0);
 }
 
+// Packet faults injected by the simulator (#131). Drops are checked as "at least": a sanitizer
+// build on a small runner may also lose datagrams in the kernel. Reorders cannot come from there.
+TEST_CASE("Device: dropped point-cloud and IMU packets count as drops", "[sim][device]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 2 && rec.imu >= 5; }));
+  const DeviceStats before = dev->stats();
+  REQUIRE(f.sim->control(R"({"cmd":"drop","stream":"pcl","count":3})"));
+  REQUIRE(f.sim->control(R"({"cmd":"drop","stream":"imu","count":2})"));
+  for (int i = 0; i < 5; ++i) {
+    REQUIRE(f.sim->wait_event(R"("fault":"drop")").has_value());
+  }
+  CHECK(wait_until([&] { return dev->stats().dropped_packets >= before.dropped_packets + 5; }));
+  const auto frames = rec.frames.load();
+  REQUIRE(wait_until([&] { return rec.frames >= frames + 2; }));
+  CHECK(dev->stats().reordered == before.reordered);
+  CHECK(rec.ok);
+}
+
+TEST_CASE("Device: duplicated and reordered packets count as reordered", "[sim][device]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 2 && rec.imu >= 5; }));
+  const DeviceStats before = dev->stats();
+  REQUIRE(f.sim->control(R"({"cmd":"duplicate","stream":"pcl","count":2})"));
+  REQUIRE(f.sim->control(R"({"cmd":"duplicate","stream":"imu","count":2})"));
+  REQUIRE(f.sim->control(R"({"cmd":"reorder","stream":"pcl","count":2,"depth":3})"));
+  REQUIRE(f.sim->control(R"({"cmd":"reorder","stream":"imu","count":2,"depth":2})"));
+  REQUIRE(wait_until([&] { return dev->stats().reordered >= before.reordered + 8; }));
+  const auto frames = rec.frames.load();
+  const auto imu = rec.imu.load();
+  REQUIRE(wait_until([&] { return rec.frames >= frames + 2 && rec.imu >= imu + 5; }));
+  CHECK(dev->stats().reordered == before.reordered + 8);
+  CHECK(rec.ok);
+}
+
+TEST_CASE("Device: a late packet of the previous frame does not split the next", "[sim][device]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 2; }));
+  const DeviceStats before = dev->stats();
+  // 50 packets per 100 ms frame at this rate: held back for 60, the packet crosses a boundary.
+  REQUIRE(f.sim->control(R"({"cmd":"reorder","stream":"pcl","count":1,"depth":60})"));
+  REQUIRE(f.sim->wait_event(R"("fault":"reorder")").has_value());
+  // A sanitizer build can lag well behind the simulator: wait for the receive side itself.
+  REQUIRE(wait_until([&] { return dev->stats().reordered > before.reordered; }, 10s));
+  const auto frames = rec.frames.load();
+  REQUIRE(wait_until([&] { return rec.frames >= frames + 2; }));
+  CHECK(dev->stats().reordered == before.reordered + 1);
+  CHECK(rec.ok);
+  const std::lock_guard lock(rec.mutex);
+  for (std::size_t i = 1; i < rec.kept.size(); ++i) {
+    // Each frame_cnt is delivered once, in order (no 1-packet frame of the late packet).
+    CHECK(rec.kept[i].frame_cnt == static_cast<std::uint8_t>(rec.kept[i - 1].frame_cnt + 1));
+  }
+}
+
 TEST_CASE("Device: --frame-ms drives frame_cnt splitting", "[sim][device]")
 {
   Fixture f({"--frame-ms", "20"});
