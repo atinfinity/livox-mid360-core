@@ -376,7 +376,17 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
   // The first push records the state without a kStateChanged. The simulator powers up
   // SELFCHECK -> IDLE -> MOTORSTARTUP -> READY -> SAMPLING (docs/protocol_notes.md); which
   // of those the pushes catch depends on timing, so only the chain is checked.
-  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  // work_state() is visible before the push's event callback has run. stats().pushes is
+  // counted after the callbacks, so once it moves past the value read here the event of the
+  // push that established the state has been recorded.
+  auto settled = [&](WorkState s) {
+    if (!wait_until([&] { return dev->work_state() == s; })) {
+      return false;
+    }
+    const std::uint64_t pushes = dev->stats().pushes;
+    return wait_until([&] { return dev->stats().pushes > pushes; });
+  };
+  REQUIRE(settled(WorkState::kSampling));
   CHECK(dev->stats().pushes >= 1);
   CHECK(dev->stats().last_push_time_ns != 0);
   CHECK(rec.state_events <= 4);
@@ -403,7 +413,7 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
   // IDLE -> SAMPLING restarts the motor: the 10 Hz pushes may or may not catch the
   // 0.1 s MOTORSTARTUP (a dedicated test below makes it observable).
   REQUIRE(dev->start_sampling().has_value());
-  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
+  REQUIRE(settled(WorkState::kSampling));
   REQUIRE(rec.state_events >= base + 1);
   {
     const Event e = rec.event(base);
@@ -432,10 +442,12 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
 
   // Same set in another slot order: no event.
   REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[131074,65539]})"));
+  // A lagging receive thread may still be on pushes sent before the control: wait until one
+  // with the new order is processed (hms() reflects wire order), then until its callbacks ran.
+  REQUIRE(wait_until([&] { return dev->hms()[0].raw == kWarn; }));
   const auto pushes_before = dev->stats().pushes;
-  REQUIRE(wait_until([&] { return dev->stats().pushes >= pushes_before + 3; }));
+  REQUIRE(wait_until([&] { return dev->stats().pushes >= pushes_before + 2; }));
   CHECK(rec.hms_events == 1);
-  CHECK(dev->hms()[0].raw == kWarn);  // hms() still reflects wire order
 
   // Error cleared: level drops to warning; then everything cleared: level none.
   REQUIRE(f.sim->control(R"({"cmd":"hms","codes":[131074]})"));
