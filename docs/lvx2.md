@@ -73,14 +73,15 @@ writer.close();
 
 Lvx2Reader reader;
 reader.open("capture.lvx2");
-while (auto p = reader.next_packet(); p && *p) {   // nullopt = end of file
+while (auto p = reader.next_packet(); p && *p) {      // nullopt = end of file
   DataPacketView view = (*p)->to_data_packet_view();  // dot_num from the length, no CRC
 }
 
 Lvx2Player player({.frame_policy = {}, .rate = 1.0, .loop = false});
 player.open("capture.lvx2");
 player.on_frame([](Frame && f) { /* same Frame as Device::on_frame */ });
-auto stats = player.run(stop_token);  // Lvx2PlayStats{packets, frames, points, dropped_packets, loops}
+// Lvx2PlayStats{packets, frames, points, dropped_packets, loops}
+auto stats = player.run(stop_token);
 ```
 
 - `Lvx2Player` feeds the recorded timestamps as they are (`TimestampPolicy::kLidar`); frames
