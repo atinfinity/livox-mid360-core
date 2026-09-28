@@ -390,7 +390,7 @@ TEST_CASE("Device::time_sync_status and set_gps_time through the simulator", "[s
   CHECK(before->offset_ns == 0);
   CHECK(before->local_time_ns != 0);
 
-  // One year ahead of the host clock: the simulator's clock follows the pushed time.
+  // One year ahead of the host clock: the simulator's clock steps to the pushed time.
   const std::uint64_t host_now =
     static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                  std::chrono::system_clock::now().time_since_epoch())
@@ -400,9 +400,12 @@ TEST_CASE("Device::time_sync_status and set_gps_time through the simulator", "[s
   const auto after = dev->time_sync_status();
   REQUIRE(after.has_value());
   CHECK(after->type == TimeSyncType::kGps);
-  CHECK(after->last_sync_time_ns != 0);
-  CHECK(after->offset_ns > 300LL * 24 * 3600 * 1'000'000'000LL);
-  CHECK(after->local_time_ns > gps);
+  CHECK(after->last_sync_time_ns == gps);
+  // local - source: the free-running clock (time since power-on) minus the GPS time.
+  const std::int64_t local_at_sync = after->offset_ns + static_cast<std::int64_t>(gps);
+  CHECK(local_at_sync >= static_cast<std::int64_t>(before->local_time_ns));
+  CHECK(local_at_sync < static_cast<std::int64_t>(before->local_time_ns) + 5'000'000'000LL);
+  CHECK(after->local_time_ns >= gps);
   CHECK(after->local_time_ns < gps + 5'000'000'000ULL);
   CHECK(to_string(*after).find("type=gps") != std::string::npos);
 

@@ -14,7 +14,8 @@ Events:  JSON lines on stdout, e.g. {"event": "ready", "ports": {...}, "ip": "..
 Behaviour the simulator assumes and that must be reconciled with hardware (#11):
   * unicast discovery is answered like broadcast discovery,
   * settings persist across 0x0200 reboot except work_tgt_mode,
-  * dev_type in the discovery ACK is a provisional value.
+  * dev_type in the discovery ACK is a provisional value,
+  * losing time synchronisation leaves the clock where it was (no step back, #133).
 """
 
 from __future__ import annotations
@@ -210,6 +211,76 @@ class PacketFaults:
     held: tuple[bytes, int, int] | None = None  # (datagram, udp_cnt, packets still to pass)
 
 
+TIME_SYNC_NONE, TIME_SYNC_PTP, TIME_SYNC_GPS = 0, 1, 2  # key 0x800C / data packet time_type
+TIME_SYNC_TYPES = {'none': TIME_SYNC_NONE, 'ptp': TIME_SYNC_PTP, 'gps': TIME_SYNC_GPS}
+TIME_SYNC_NAMES = {v: k for k, v in TIME_SYNC_TYPES.items()}
+
+
+@dataclass
+class LidarClock:
+    """
+    The LiDAR's clock (#133): the time in data packets and in keys 0x8009-0x800C.
+
+    Free-running (type none) it counts from power-on at 1 + drift_ppm / 1e6 of the host's
+    rate. Synchronised (PTP or GPS) it follows the master, the host's wall clock plus
+    `master_offset_ns`, stepping to it when synchronisation is acquired. Losing it falls
+    back to free running from where the master left the clock [unverified, #109].
+    Times are passed in: `mono` is time.monotonic() seconds, `wall_ns` time.time_ns().
+    """
+
+    drift_ppm: float = 0.0
+    sync_type: int = TIME_SYNC_NONE
+    master_offset_ns: int = 0  # master - host wall clock, while synchronised
+    last_sync_ns: int = 0  # 0x800A: the master time the clock last stepped to, 0 = never
+    offset_ns: int = 0  # 0x800B: local - source at that step
+    anchor_mono: float = 0.0  # the free-running clock read anchor_ns at anchor_mono
+    anchor_ns: int = 0
+
+    def power_on(self, mono: float) -> None:
+        """Start counting from zero, unsynchronised; the drift is the oscillator's and stays."""
+        self.sync_type = TIME_SYNC_NONE
+        self.master_offset_ns = self.last_sync_ns = self.offset_ns = 0
+        self.anchor_mono, self.anchor_ns = mono, 0
+
+    def free_ns(self, mono: float) -> int:
+        elapsed = (mono - self.anchor_mono) * 1e9 * (1.0 + self.drift_ppm * 1e-6)
+        return max(0, self.anchor_ns + round(elapsed))
+
+    def now_ns(self, mono: float, wall_ns: int) -> int:
+        if self.sync_type != TIME_SYNC_NONE:
+            return wall_ns + self.master_offset_ns
+        return self.free_ns(mono)
+
+    def sync(self, sync_type: int, master_offset_ns: int, mono: float, wall_ns: int) -> None:
+        """Acquire (or re-acquire) synchronisation: step to the master's time."""
+        local = self.now_ns(mono, wall_ns)
+        self.sync_type, self.master_offset_ns = sync_type, master_offset_ns
+        self.last_sync_ns = wall_ns + master_offset_ns
+        self.offset_ns = local - self.last_sync_ns
+
+    def lose_sync(self, mono: float, wall_ns: int) -> None:
+        """Fall back to free running without a step; 0x800A / 0x800B keep the last sync."""
+        if self.sync_type != TIME_SYNC_NONE:
+            self.anchor_mono, self.anchor_ns = mono, self.now_ns(mono, wall_ns)
+            self.sync_type = TIME_SYNC_NONE
+
+    def set_drift(self, ppm: float, mono: float) -> None:
+        """Change the free-running rate from now on, without a step."""
+        if not -1e6 < ppm < 1e6:
+            raise ValueError(f'drift_ppm {ppm} out of (-1e6, 1e6)')
+        self.anchor_mono, self.anchor_ns = mono, self.free_ns(mono)
+        self.drift_ppm = ppm
+
+    def describe(self, mono: float, wall_ns: int) -> dict:
+        return {
+            'type': TIME_SYNC_NAMES[self.sync_type],
+            'time_ns': self.now_ns(mono, wall_ns),
+            'last_sync_ns': self.last_sync_ns,
+            'offset_ns': self.offset_ns,
+            'drift_ppm': self.drift_ppm,
+        }
+
+
 def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
     ip = '.'.join(map(str, v[:4]))
     dst, src = struct.unpack_from('<HH', v, 4)
@@ -243,12 +314,10 @@ class DeviceModel:
     settings: dict[int, bytes] = field(default_factory=factory_settings)
     work_state: int = WS_SELFCHECK
     hms: list[int] = field(default_factory=lambda: [0] * 8)
-    time_offset_ns: int = 0
-    time_sync_type: int = 0
+    clock: LidarClock = field(default_factory=LidarClock)
     powerup_cnt: int = 1
     diag_status: int = 0
     core_temp: int = 3500  # 0.01 degC
-    last_sync_time_ns: int = 0
     push_omit: set[int] = field(default_factory=set)  # keys left out of the push (tests)
     bad_time_offset: int = 0  # 1: answer 0x800B truncated to 4 bytes (tests)
     # key -> value the inquiry answers instead of the real one, or 'omit' / 'unsupported' (tests)
@@ -258,6 +327,7 @@ class DeviceModel:
 
     # -- lifecycle ---------------------------------------------------------
     def power_on(self, now: float) -> None:
+        self.clock.power_on(now)
         self._enter_timed(WS_SELFCHECK, now)
 
     def reboot(self, now: float) -> None:
@@ -270,8 +340,6 @@ class DeviceModel:
         if self.factory_lidar_ipcfg is not None:
             self.settings[KEY_LIDAR_IPCFG] = self.factory_lidar_ipcfg
         self.hms = [0] * 8
-        self.time_offset_ns = 0
-        self.time_sync_type = 0
         self.reboot(now)
 
     # -- work-state machine ------------------------------------------------
@@ -411,11 +479,11 @@ class DeviceModel:
             KEY_CORE_TEMP: struct.pack('<i', self.core_temp),
             KEY_POWERUP_CNT: struct.pack('<I', self.powerup_cnt),
             KEY_LOCAL_TIME: struct.pack('<Q', now_ns),
-            KEY_LAST_SYNC_TIME: struct.pack('<Q', self.last_sync_time_ns),
-            KEY_TIME_OFFSET: struct.pack('<q', self.time_offset_ns)[
+            KEY_LAST_SYNC_TIME: struct.pack('<Q', self.clock.last_sync_ns),
+            KEY_TIME_OFFSET: struct.pack('<q', self.clock.offset_ns)[
                 : 4 if self.bad_time_offset else 8
             ],
-            KEY_TIME_SYNC_TYPE: bytes([self.time_sync_type]),
+            KEY_TIME_SYNC_TYPE: bytes([self.clock.sync_type]),
             KEY_DIAG_STATUS: struct.pack('<H', self.diag_status),
             KEY_FW_TYPE: b'\x00',
             KEY_HMS: struct.pack('<8I', *self.hms),
@@ -445,18 +513,14 @@ class DeviceModel:
         kvs = [(k, self.read_key(k, now_ns)) for k in keys if k not in self.push_omit]
         return struct.pack('<HH', len(kvs), 0) + proto.encode_kv_list(kvs)
 
-    def set_gps_time(self, ns: int, now_ns: int) -> None:
-        self.time_offset_ns = ns - now_ns
-        self.time_sync_type = 2
-        self.last_sync_time_ns = now_ns
+    def set_gps_time(self, ns: int, mono: float, wall_ns: int) -> None:
+        """0x0202: `ns` is the GPS time of the PPS edge, taken to be now."""
+        self.clock.sync(TIME_SYNC_GPS, ns - wall_ns, mono, wall_ns)
 
     # Control command `set_status`: any subset of the read-only status fields.
     STATUS_FIELDS = {
         'diag': 'diag_status',
         'core_temp': 'core_temp',
-        'time_sync_type': 'time_sync_type',
-        'time_offset_ns': 'time_offset_ns',
-        'last_sync_time': 'last_sync_time_ns',
         'bad_time_offset': 'bad_time_offset',
         'powerup_cnt': 'powerup_cnt',
     }
@@ -1028,6 +1092,8 @@ class Simulator:
             for stream in self.log_streams.values():
                 self._send_log_chunk(stream, end=True)
                 stream.new_file()
+        elif cmd == 'time_sync':
+            self._time_sync(req, now)
         elif cmd == 'reboot':
             self._do_reboot(now)
             self._apply_pending_rebind()
@@ -1074,6 +1140,7 @@ class Simulator:
                     'sent': self.replay.sent,
                     'skipped': self.replay.skipped,
                 },
+                time=self.model.clock.describe(now, time.time_ns()),
             )
         else:
             self.emit(event='error', error=f'unknown control cmd: {cmd!r}')
@@ -1099,6 +1166,23 @@ class Simulator:
                 raise ValueError(f'depth must be at least 1, got {depth}')
             f.reorder += count
             f.depth = depth
+
+    def _time_sync(self, req: dict, now: float) -> None:
+        """Control `time_sync`: acquire or lose synchronisation, and set the drift (#133)."""
+        kind = req.get('type')
+        if kind is not None and kind not in TIME_SYNC_TYPES:
+            raise ValueError(f'unknown time sync type {kind!r}')
+        offset = int(req.get('offset_ns', 0))
+        drift = float(req['drift_ppm']) if 'drift_ppm' in req else None
+        clock = self.model.clock
+        if drift is not None:
+            clock.set_drift(drift, now)  # validates before anything changes
+        wall = time.time_ns()
+        if kind == 'none':
+            clock.lose_sync(now, wall)
+        elif kind is not None:
+            clock.sync(TIME_SYNC_TYPES[kind], offset, now, wall)
+        self.emit(event='time_sync', **clock.describe(now, wall))
 
     def _do_reboot(self, now: float, factory: bool = False) -> None:
         """0x0200 reboot, or 0x0201 factory reset when `factory` (settings back to defaults)."""
@@ -1239,7 +1323,7 @@ class Simulator:
             if len(f.data) < 9 or f.data[0] != 2:
                 return RET_FAIL, struct.pack('<B', RET_FAIL)
             (ns,) = struct.unpack_from('<Q', f.data, 1)
-            m.set_gps_time(ns, now_ns)
+            m.set_gps_time(ns, now, time.time_ns())
             return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_COLLECTION_LOG:
             if len(f.data) < 2 or f.data[0] not in LOG_TYPES:
@@ -1407,7 +1491,7 @@ class Simulator:
         self.sent['debug'] += 1
 
     def now_ns(self) -> int:
-        return time.time_ns() + self.model.time_offset_ns
+        return self.model.clock.now_ns(time.monotonic(), time.time_ns())
 
     def silenced(self) -> bool:
         return time.monotonic() < self.silence_until
@@ -1540,7 +1624,7 @@ class Simulator:
             udp_cnt=self.udp_cnt_pcl,
             frame_cnt=self.frame_cnt,
             data_type=dt,
-            time_type=self.model.time_sync_type,
+            time_type=self.model.clock.sync_type,
             timestamp_ns=self.now_ns(),
             data=proto.pack_samples(dt, samples),
         )
@@ -1559,7 +1643,7 @@ class Simulator:
             udp_cnt=self.udp_cnt_imu,
             frame_cnt=self.frame_cnt,
             data_type=0,
-            time_type=self.model.time_sync_type,
+            time_type=self.model.clock.sync_type,
             timestamp_ns=self.now_ns(),
             data=proto.pack_samples(0, [self.points.imu()]),
         )
