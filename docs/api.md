@@ -201,7 +201,12 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
 - **Drop counting** is per source port (point cloud and IMU separately):
   `expected = previous + 1 mod 65536`, `gap = counter − expected mod 65536`. `udp_cnt == 0`
   together with a `frame_cnt` change is the documented per-frame reset (no gap). A gap above
-  32768 is a reordered or duplicated packet, counted in `reordered`, not as a drop. The first
+  32768 is a reordered or duplicated packet, counted in `reordered`, not as a drop. A late
+  packet has already been counted as a gap when its successor arrived, so it shows up in both
+  counters. In `kFrameCounter` mode, a reordered packet whose `frame_cnt` differs from the
+  current frame's belongs to a frame already delivered. It is discarded (only `reordered`
+  counts it), so it neither splits the current frame nor starts a frame of its own
+  ([#131](https://github.com/atinfinity/livox-mid360-core/issues/131)). The time window keeps it in the current frame. The first
   packet after open only sets the baseline. CRC failures go to `bad_packets`.
 - **Timestamps**: `kHostOffsetOnce` measures `offset = receive time − packet timestamp` once,
   at the first point-cloud packet, and applies it to every unsynchronised packet (points and

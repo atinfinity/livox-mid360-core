@@ -492,6 +492,62 @@ class SimulatorTest(unittest.TestCase):
         self.assertIsNone(self.s.debug_dest)
         self.assertEqual(self.s.model.pcl_data_type, 1)
 
+    def send_stream(self, kind: str, n: int) -> list[int]:
+        """Generate n packets of `kind` and return the udp_cnt of each datagram received."""
+        send = self.s._send_pcl if kind == 'pcl' else self.s._send_imu
+        for _ in range(n):
+            send(self.rx_host, 0.001)
+        self.rx.settimeout(0.2)
+        got = []
+        try:
+            while True:
+                d, _ = self.rx.recvfrom(2048)
+                got.append(proto.DataPacket.parse(d).udp_cnt)
+        except TimeoutError:
+            pass
+        return got
+
+    def faults(self) -> list[tuple[str, str, int]]:
+        return [
+            (e['stream'], e['fault'], e['udp_cnt'])
+            for e in self.events()
+            if e['event'] == 'packet_fault'
+        ]
+
+    def test_drop_skips_packets_but_udp_cnt_advances(self) -> None:
+        for kind in sim.DATA_STREAMS:
+            self.s.apply_control({'cmd': 'drop', 'stream': kind, 'count': 2})
+        self.assertEqual(self.send_stream('pcl', 5), [2, 3, 4])
+        self.assertEqual(self.send_stream('imu', 5), [2, 3, 4])
+        self.assertEqual(self.s.sent['pcl_dropped'], 2)
+        self.assertEqual(self.s.sent['imu_dropped'], 2)
+        self.assertEqual(self.s.sent['pcl'], 3)
+        self.assertEqual(
+            self.faults(),
+            [('pcl', 'drop', 0), ('pcl', 'drop', 1), ('imu', 'drop', 0), ('imu', 'drop', 1)],
+        )
+
+    def test_reorder_sends_each_held_packet_after_depth_others(self) -> None:
+        self.s.apply_control({'cmd': 'reorder', 'stream': 'imu', 'count': 2, 'depth': 2})
+        self.assertEqual(self.send_stream('imu', 7), [1, 2, 0, 4, 5, 3, 6])
+        self.assertEqual(self.s.sent['imu'], 7)
+        self.assertEqual(self.s.sent['imu_reordered'], 2)
+        self.assertEqual(self.faults(), [('imu', 'reorder', 0), ('imu', 'reorder', 3)])
+        self.assertEqual(self.send_stream('pcl', 3), [0, 1, 2])  # the other stream untouched
+
+    def test_duplicate_sends_the_same_datagram_twice(self) -> None:
+        self.s.apply_control({'cmd': 'duplicate', 'count': 1})  # stream defaults to pcl
+        self.assertEqual(self.send_stream('pcl', 3), [0, 0, 1, 2])
+        self.assertEqual(self.s.sent['pcl'], 3)
+        self.assertEqual(self.s.sent['pcl_duplicated'], 1)
+        self.assertEqual(self.faults(), [('pcl', 'duplicate', 0)])
+
+    def test_reboot_loses_a_held_packet(self) -> None:
+        self.s.apply_control({'cmd': 'reorder', 'count': 1, 'depth': 5})
+        self.send_stream('pcl', 2)
+        self.s._do_reboot(time.monotonic())
+        self.assertIsNone(self.s.faults['pcl'].held)
+
     def test_malformed_control_lines_emit_error(self) -> None:
         for req in (
             [],
@@ -502,11 +558,15 @@ class SimulatorTest(unittest.TestCase):
             {'cmd': 'hms', 'codes': 5},
             {'cmd': 'inquire_override', 'key': 1, 'value': 'zz'},
             {'cmd': 'silence', 'seconds': None},
+            {'cmd': 'drop', 'stream': 'push'},
+            {'cmd': 'duplicate', 'count': -1},
+            {'cmd': 'reorder', 'depth': 0},
         ):
             self.s.apply_control(req)
         self.assertTrue(self.s.running)
         evs = self.events()
-        self.assertEqual([e['event'] for e in evs], ['error'] * 8)
+        self.assertEqual([e['event'] for e in evs], ['error'] * 11)
+        self.assertEqual(self.s.faults, {k: sim.PacketFaults() for k in sim.DATA_STREAMS})
         self.assertEqual(self.s.fail_cmds, {})
 
 

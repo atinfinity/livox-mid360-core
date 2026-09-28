@@ -185,6 +185,32 @@ TEST_CASE("frame assembler: reordered packets are not drops", "[frame]")
   CHECK(f->dropped_packets == 1);
 }
 
+TEST_CASE("frame assembler: a late packet of a delivered frame does not split the next", "[frame]")
+{
+  FrameAssembler fa(counter_policy(), TimestampPolicy::kLidar);
+  (void)fa.push(make_packet(10, 0, 1000).view, 0);
+  (void)fa.push(make_packet(12, 1, 2000).view, 0);  // closes frame 0; 11 is still in flight
+  (void)fa.push(make_packet(13, 1, 3000).view, 0);
+  CHECK_FALSE(fa.push(make_packet(11, 0, 1500).view, 0).has_value());  // frame 0's straggler
+  CHECK_FALSE(fa.push(make_packet(14, 1, 4000).view, 0).has_value());
+  CHECK(fa.counters().reordered == 1);
+  CHECK(fa.counters().packets == 4);
+  auto f = fa.flush();
+  REQUIRE(f.has_value());
+  CHECK(f->frame_cnt == 1);
+  CHECK(f->packets == 3);  // 12, 13, 14
+
+  // In time-window mode frame_cnt is not a boundary: the late packet joins the current frame.
+  FrameAssembler tw(window_policy(), TimestampPolicy::kLidar);
+  (void)tw.push(make_packet(20, 0, 1000).view, 0);
+  (void)tw.push(make_packet(22, 1, 2000).view, 0);
+  (void)tw.push(make_packet(21, 0, 1500).view, 0);
+  CHECK(tw.counters().reordered == 1);
+  auto g = tw.flush();
+  REQUIRE(g.has_value());
+  CHECK(g->packets == 3);
+}
+
 TEST_CASE("frame assembler: udp_cnt wrap-around is in sequence", "[frame]")
 {
   DropCounter d;

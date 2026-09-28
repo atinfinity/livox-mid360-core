@@ -189,6 +189,25 @@ class LogStream:
         self.trans_index = 0
 
 
+DATA_STREAMS = ('pcl', 'imu')
+
+
+@dataclass
+class PacketFaults:
+    """
+    Pending network faults of one data stream (#131), applied after udp_cnt is assigned.
+
+    Priority per packet: drop, then hold back (reorder), then send (twice for a duplicate).
+    A held packet is released after `depth` more packets have been sent.
+    """
+
+    drop: int = 0  # the next N packets are not sent
+    reorder: int = 0  # packets still to hold back, one at a time
+    depth: int = 1
+    duplicate: int = 0  # the next N sent packets go out twice
+    held: tuple[bytes, int, int] | None = None  # (datagram, udp_cnt, packets still to pass)
+
+
 def parse_host_ipcfg(v: bytes) -> tuple[str, int, int] | None:
     ip = '.'.join(map(str, v[:4]))
     dst, src = struct.unpack_from('<HH', v, 4)
@@ -605,6 +624,7 @@ class Simulator:
         self.frame_s = args.frame_ms / 1000.0
         self.drop_rate = args.drop_rate
         self._drop_rng = random.Random(args.seed ^ 0x5A5A)
+        self.faults = {kind: PacketFaults() for kind in DATA_STREAMS}
 
         self.seq = 0  # LiDAR-originated frames (push)
         self.udp_cnt_pcl = 0
@@ -616,7 +636,12 @@ class Simulator:
             'pcl': 0,
             'imu': 0,
             'push': 0,
-            'pcl_dropped': 0,
+            'pcl_dropped': 0,  # --drop-rate and the drop control
+            'pcl_reordered': 0,
+            'pcl_duplicated': 0,
+            'imu_dropped': 0,
+            'imu_reordered': 0,
+            'imu_duplicated': 0,
             'log': 0,
             'debug': 0,
             'silenced': 0,  # datagrams generated but withheld by `silence` / reboot silence
@@ -856,6 +881,8 @@ class Simulator:
             self.model.force_state(state, now)
         elif cmd == 'drop_rate':
             self.drop_rate = float(req.get('rate', 0.0))
+        elif cmd in ('drop', 'reorder', 'duplicate'):
+            self._add_fault(cmd, req)
         elif cmd == 'frame_ms':
             self.frame_s = float(req.get('ms', 100.0)) / 1000.0
             self.frame_started = now
@@ -883,6 +910,26 @@ class Simulator:
             return
         self.emit(event='control', cmd=cmd)
 
+    def _add_fault(self, cmd: str, req: dict) -> None:
+        """Validate and queue a drop / reorder / duplicate control (#131)."""
+        stream = req.get('stream', 'pcl')
+        if stream not in DATA_STREAMS:
+            raise ValueError(f'unknown stream {stream!r}')
+        count = int(req.get('count', 1))
+        if count < 0:
+            raise ValueError(f'negative count {count}')
+        f = self.faults[stream]
+        if cmd == 'drop':
+            f.drop += count
+        elif cmd == 'duplicate':
+            f.duplicate += count
+        else:
+            depth = int(req.get('depth', 1))
+            if depth < 1:
+                raise ValueError(f'depth must be at least 1, got {depth}')
+            f.reorder += count
+            f.depth = depth
+
     def _do_reboot(self, now: float, factory: bool = False) -> None:
         """0x0200 reboot, or 0x0201 factory reset when `factory` (settings back to defaults)."""
         self.seq = 0
@@ -898,6 +945,8 @@ class Simulator:
         else:
             self.model.reboot(up)
         self.debug_dest = None  # [unverified] assumed not to survive a reboot
+        for f in self.faults.values():
+            f.held = None  # still in the LiDAR when it powered down
         self.debug_seq = 0
         # A changed 0x0004 takes effect now [unverified: the wiki only says "after reboot"].
         # Deferred so the reboot ACK still leaves the old socket.
@@ -1275,8 +1324,7 @@ class Simulator:
         if self.drop_rate > 0 and self._drop_rng.random() < self.drop_rate:
             self.sent['pcl_dropped'] += 1
             return
-        if self._sendto('pcl', pkt.encode(), host):
-            self.sent['pcl'] += 1
+        self._send_data('pcl', pkt.encode(), pkt.udp_cnt, host)
 
     def _send_imu(self, host, interval_s: float) -> None:
         pkt = proto.DataPacket(
@@ -1292,8 +1340,37 @@ class Simulator:
         self.udp_cnt_imu = (self.udp_cnt_imu + 1) & 0xFFFF
         if host is None:
             return
-        if self._sendto('imu', pkt.encode(), host):
-            self.sent['imu'] += 1
+        self._send_data('imu', pkt.encode(), pkt.udp_cnt, host)
+
+    def _send_data(self, kind: str, data: bytes, udp_cnt: int, host) -> None:
+        """Send one point-cloud / IMU datagram through the stream's PacketFaults (#131)."""
+        f = self.faults[kind]
+        if f.drop > 0:
+            f.drop -= 1
+            self.sent[f'{kind}_dropped'] += 1
+            self.emit(event='packet_fault', stream=kind, fault='drop', udp_cnt=udp_cnt)
+            return
+        if f.held is None and f.reorder > 0:
+            f.reorder -= 1
+            f.held = (data, udp_cnt, f.depth)
+            return
+        if self._sendto(kind, data, host):
+            self.sent[kind] += 1
+        if f.duplicate > 0:
+            f.duplicate -= 1
+            if self._sendto(kind, data, host):
+                self.sent[f'{kind}_duplicated'] += 1
+            self.emit(event='packet_fault', stream=kind, fault='duplicate', udp_cnt=udp_cnt)
+        if f.held is not None:
+            held, held_cnt, left = f.held
+            if left > 1:
+                f.held = (held, held_cnt, left - 1)
+                return
+            f.held = None
+            if self._sendto(kind, held, host):
+                self.sent[kind] += 1
+                self.sent[f'{kind}_reordered'] += 1
+            self.emit(event='packet_fault', stream=kind, fault='reorder', udp_cnt=held_cnt)
 
     def _send_push(self) -> None:
         host = self.model.host(KEY_STATE_HOST)
