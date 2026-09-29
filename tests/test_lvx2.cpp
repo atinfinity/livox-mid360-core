@@ -88,10 +88,10 @@ TEST_CASE("lvx2 writer -> reader round trip", "[lvx2]")
   const auto info = device_info();
   Lvx2Writer w;
   REQUIRE(w.open(path, std::span(&info, 1)));
-  // Three packets in 50 ms bins 0, 0, 1 → two file frames.
+  // Three packets 0, 39 and 50 ms into the recording → two file frames of 50 ms.
   const auto p0 = make_packet(10, 1, 10 * kMs);
   const auto p1 = make_packet(11, 1, 49 * kMs, 6, DataType::kCartesian16);
-  const auto p2 = make_packet(12, 2, 50 * kMs);
+  const auto p2 = make_packet(12, 2, 60 * kMs);
   REQUIRE(w.write(0, p0.view).value());
   REQUIRE(w.write(0, p1.view).value());
   REQUIRE(w.write(0, p2.view).value());
@@ -133,7 +133,7 @@ TEST_CASE("lvx2 writer -> reader round trip", "[lvx2]")
   CHECK(std::vector<std::byte>(pk[0].points.begin(), pk[0].points.end()) == p0.data);
   CHECK(pk[1].data_type == DataType::kCartesian16);
   CHECK(std::vector<std::byte>(pk[1].points.begin(), pk[1].points.end()) == p1.data);
-  CHECK(pk[2].timestamp_ns == 50 * kMs);
+  CHECK(pk[2].timestamp_ns == 60 * kMs);
 
   const auto v = pk[1].to_data_packet_view();
   CHECK(v.header.dot_num == 6);
@@ -341,7 +341,7 @@ TEST_CASE("lvx2 player: frames, loop, stop token and lidar_id filter", "[lvx2]")
   }
   REQUIRE(w.write(1, make_packet(0, 0, 100 * kMs).view));
   REQUIRE(w.close());
-  CHECK(w.stats().frames == 9);  // 8 bins + the out-of-order device-2 packet reopens bin 2
+  CHECK(w.stats().frames == 8);  // device 2's clock joins at the newest time: the last frame
 
   SECTION("single pass, counter mode")
   {
@@ -786,6 +786,88 @@ TEST_CASE("lvx2 writer rejects an unknown data_type", "[lvx2]")
   CHECK(pk[1].udp_counter == 1);
   CHECK(pk[1].timestamp_ns == 20 * kMs);
   CHECK_FALSE(reader.truncated());
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("lvx2 writer: frames on the recording's time line (#173)", "[lvx2]")
+{
+  const auto path = temp_file("writer_frames.lvx2");
+  // Frame index of every package of the file, in file order.
+  const auto frame_indexes = [&] {
+    Lvx2Reader r;
+    REQUIRE(r.open(path));
+    std::vector<std::vector<std::byte>> storage;
+    std::vector<std::uint64_t> out;
+    for (const auto & p : read_all(r, storage)) {
+      out.push_back(p.frame_index);
+    }
+    return out;
+  };
+
+  SECTION("unsynchronised devices share the frames")
+  {
+    std::vector<Lvx2DeviceInfo> infos(2, device_info());
+    infos[1].lidar_id = 2;
+    Lvx2Writer w;
+    REQUIRE(w.open(path, infos));
+    // One package per device every 5 ms for 1 s; device 2's clock is 2.66 s ahead.
+    for (std::uint16_t k = 0; k < 200; ++k) {
+      const std::uint64_t t = 4'000 * kMs + std::uint64_t{k} * 5 * kMs;
+      REQUIRE(w.write(0, make_packet(k, 0, t).view));
+      REQUIRE(w.write(1, make_packet(k, 0, t + 2'660 * kMs).view));
+    }
+    REQUIRE(w.close());
+    CHECK(w.stats().frames == 20);
+    const auto idx = frame_indexes();
+    REQUIRE(idx.size() == 400);
+    for (std::size_t i = 0; i < idx.size(); ++i) {
+      CHECK(idx[i] == i / 20);  // 10 packages of each device per 50 ms
+    }
+  }
+
+  SECTION("a device that starts later joins the open frame")
+  {
+    std::vector<Lvx2DeviceInfo> infos(2, device_info());
+    infos[1].lidar_id = 2;
+    Lvx2Writer w;
+    REQUIRE(w.open(path, infos));
+    REQUIRE(w.write(0, make_packet(0, 0, 0).view));
+    REQUIRE(w.write(0, make_packet(1, 0, 70 * kMs).view));
+    REQUIRE(w.write(1, make_packet(0, 0, 900'000 * kMs).view));  // at 70 ms
+    REQUIRE(w.write(1, make_packet(1, 0, 900'040 * kMs).view));  // at 110 ms
+    REQUIRE(w.write(0, make_packet(2, 0, 90 * kMs).view));
+    REQUIRE(w.close());
+    CHECK(frame_indexes() == std::vector<std::uint64_t>{0, 1, 1, 2, 2});
+  }
+
+  SECTION("a reordered package stays in the open frame")
+  {
+    const auto info = device_info();
+    Lvx2Writer w;
+    REQUIRE(w.open(path, std::span(&info, 1)));
+    for (const std::uint64_t t : {0ULL, 45ULL, 52ULL, 48ULL, 60ULL, 101ULL}) {
+      REQUIRE(w.write(0, make_packet(0, 0, t * kMs).view));
+    }
+    REQUIRE(w.close());
+    CHECK(w.stats().frames == 3);
+    CHECK(frame_indexes() == std::vector<std::uint64_t>{0, 0, 1, 1, 1, 2});
+  }
+
+  SECTION("a clock jump continues the time line")
+  {
+    const auto info = device_info();
+    Lvx2Writer w;
+    REQUIRE(w.open(path, std::span(&info, 1)));
+    // Time synchronisation locks after 80 ms: the clock jumps from boot time to epoch time.
+    constexpr std::uint64_t kEpoch = 1'790'000'000'000 * kMs;
+    for (const std::uint64_t t :
+         {0 * kMs, 40 * kMs, 80 * kMs, kEpoch, kEpoch + 10 * kMs, kEpoch + 30 * kMs}) {
+      REQUIRE(w.write(0, make_packet(0, 0, t).view));
+    }
+    REQUIRE(w.close());
+    // At 0, 40, 80, then 80, 90, 110 ms of recording time.
+    CHECK(frame_indexes() == std::vector<std::uint64_t>{0, 0, 1, 1, 1, 2});
+  }
   std::filesystem::remove(path);
 }
 

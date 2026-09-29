@@ -81,10 +81,11 @@ struct Lvx2Packet
   [[nodiscard]] DataPacketView to_data_packet_view() const noexcept;
 };
 
-/// Writes an lvx2 file from raw data packets. Frames are cut on the packet timestamp in
-/// `frame_duration_ms` bins; spherical packets are converted to Cartesian32; IMU packets are
-/// ignored (write() returns false). Not thread-safe; call from one thread (the on_packet
-/// callback is fine).
+/// Writes an lvx2 file from raw data packets. Frames are cut every `frame_duration_ms` of
+/// recording time, which starts at the first package; each device's timestamps join it at the
+/// device's first package and after a clock jump (docs/lvx2.md). Spherical packets are
+/// converted to Cartesian32; IMU packets are ignored (write() returns false). Not
+/// thread-safe; call from one thread (the on_packet callback is fine).
 class Lvx2Writer
 {
 public:
