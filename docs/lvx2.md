@@ -82,6 +82,17 @@ livox-mid360-cli replay Indoor_sampledata.lvx2 --frame-mode window
 livox-mid360-cli replay Outdoor_sampledata.lvx2 --frame-mode window --lidar-id 738306240
 ```
 
+In [`livox-mid360-rerun`](rerun.md), one frame of each file looks like this:
+
+```sh
+livox-mid360-rerun play Indoor_sampledata.lvx2
+livox-mid360-rerun play Outdoor_sampledata.lvx2 --lidar-id 2080483520
+```
+
+![Indoor_sampledata.lvx2 in the Rerun web viewer](images/lvx2-sample-indoor.webp)
+
+![Outdoor_sampledata.lvx2, lidar_id 2080483520, in the Rerun web viewer](images/lvx2-sample-outdoor.webp)
+
 What they contain:
 
 | Field | Value |
