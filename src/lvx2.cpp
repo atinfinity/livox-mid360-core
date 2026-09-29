@@ -544,7 +544,40 @@ struct Lvx2Player::Impl
   Lvx2Reader reader;
   PacketCallback packet_cb;
   std::function<void(Frame &&)> frame_cb;
+  DeviceFrameCallback device_frame_cb;
 };
+
+namespace
+{
+/// One device of a run (#169): its frames, pacing and counts. Frames of several LiDARs cannot
+/// share an assembler (#163), and their clocks cannot share a pacing base: without time
+/// synchronisation each counts from its own boot (the Outdoor sample's are 2.66 s apart).
+struct PlayedDevice
+{
+  PlayedDevice(const Lvx2DeviceInfo & device, const FramePolicy & policy)
+  : info(&device), assembler(policy, TimestampPolicy::kLidar)
+  {
+    stats.lidar_id = device.lidar_id;
+  }
+
+  const Lvx2DeviceInfo * info;
+  detail::FrameAssembler assembler;  ///< fresh for each pass
+  std::uint32_t next_index = 0;      ///< Frame::index keeps counting across passes (#149)
+  std::optional<std::uint64_t> base_ts;
+  std::chrono::steady_clock::time_point base_wall;
+  std::uint64_t prev_ts = 0;
+  Lvx2DevicePlayStats stats;
+};
+
+std::string lidar_ids(const std::vector<Lvx2DeviceInfo> & devices)
+{
+  std::string ids;
+  for (const auto & d : devices) {
+    ids += std::format("{}{}", ids.empty() ? "" : ", ", d.lidar_id);
+  }
+  return ids;
+}
+}  // namespace
 
 Lvx2Player::Lvx2Player(Lvx2PlayOptions options) : impl_(std::make_unique<Impl>())
 {
@@ -563,21 +596,12 @@ std::expected<void, Lvx2Error> Lvx2Player::open(const std::filesystem::path & pa
   if (auto r = impl_->reader.open(path); !r) {
     return r;
   }
-  // One FrameAssembler cannot take several LiDARs: their packets would interleave into
-  // meaningless frames (#163). A lidar_id that the file does not list would play nothing.
+  // A lidar_id that the file does not list would play nothing.
   const auto & devices = impl_->reader.devices();
   const auto & id = impl_->options.lidar_id;
-  std::string ids;
-  for (const auto & d : devices) {
-    ids += std::format("{}{}", ids.empty() ? "" : ", ", d.lidar_id);
-  }
   if (id && std::ranges::none_of(devices, [&](const auto & d) { return d.lidar_id == *id; })) {
-    return std::unexpected(
-      invalid_argument(std::format("lidar_id {} is not in the file (lidar_id {})", *id, ids)));
-  }
-  if (!id && devices.size() > 1) {
     return std::unexpected(invalid_argument(
-      std::format("the file holds {} devices (lidar_id {}); choose one", devices.size(), ids)));
+      std::format("lidar_id {} is not in the file (lidar_id {})", *id, lidar_ids(devices))));
   }
   impl_->path = path;
   return {};
@@ -590,6 +614,7 @@ const std::vector<Lvx2DeviceInfo> & Lvx2Player::devices() const noexcept
 }
 void Lvx2Player::on_packet(PacketCallback cb) { impl_->packet_cb = std::move(cb); }
 void Lvx2Player::on_frame(std::function<void(Frame &&)> cb) { impl_->frame_cb = std::move(cb); }
+void Lvx2Player::on_device_frame(DeviceFrameCallback cb) { impl_->device_frame_cb = std::move(cb); }
 
 std::expected<Lvx2PlayStats, Lvx2Error> Lvx2Player::run(const std::stop_token & stop)
 {
@@ -598,64 +623,100 @@ std::expected<Lvx2PlayStats, Lvx2Error> Lvx2Player::run(const std::stop_token & 
   if (im.path.empty()) {
     return std::unexpected(invalid_argument("not open"));
   }
+  // The devices to play. A file with one device (or none) plays every package as that device,
+  // whatever its lidar_id; with several, packages go to the device of their lidar_id.
+  const auto & infos = im.reader.devices();
+  const Lvx2DeviceInfo unnamed{};  // a file without device info
+  std::vector<PlayedDevice> played;
+  for (const auto & d : infos) {
+    if (!im.options.lidar_id || d.lidar_id == *im.options.lidar_id) {
+      played.emplace_back(d, im.options.frame_policy);
+    }
+  }
+  if (played.empty()) {
+    played.emplace_back(unnamed, im.options.frame_policy);
+  }
+  const bool by_id = played.size() > 1;
+  if (by_id && im.frame_cb && !im.device_frame_cb) {
+    return std::unexpected(invalid_argument(std::format(
+      "the file holds {} devices (lidar_id {}); set lidar_id or use on_device_frame", infos.size(),
+      lidar_ids(infos))));
+  }
+  const auto device_of = [&](const Lvx2Packet & p) -> PlayedDevice * {
+    if (!by_id) {
+      return im.options.lidar_id && p.lidar_id != *im.options.lidar_id ? nullptr : played.data();
+    }
+    const auto it = std::ranges::find_if(
+      played, [&](const PlayedDevice & d) { return d.info->lidar_id == p.lidar_id; });
+    return it == played.end() ? nullptr : &*it;
+  };
+
   Lvx2PlayStats stats;
   const bool paced = im.options.rate > 0;
-  // Each pass gets a fresh assembler, so Frame::index is numbered here to keep counting
-  // across `loop` passes (issue #149).
-  std::uint32_t next_index = 0;
+  const auto deliver = [&](PlayedDevice & dev, std::optional<Frame> f) {
+    if (!f) {
+      return;
+    }
+    f->index = dev.next_index++;
+    ++dev.stats.frames;
+    dev.stats.points += f->points.size();
+    if (im.frame_cb) {
+      im.frame_cb(im.device_frame_cb ? Frame(*f) : std::move(*f));
+    }
+    if (im.device_frame_cb) {
+      im.device_frame_cb(*dev.info, std::move(*f));
+    }
+  };
+  const auto wait_for = [&](PlayedDevice & dev, std::uint64_t ts) {
+    const auto base_ts = dev.base_ts;
+    if (!base_ts || ts < dev.prev_ts) {  // first packet, or a backward jump
+      dev.base_ts = ts;
+      dev.base_wall = clock::now();
+    } else {
+      const auto rel = static_cast<double>(ts - *base_ts) / im.options.rate;
+      const auto due = dev.base_wall + std::chrono::nanoseconds(static_cast<std::int64_t>(rel));
+      while (clock::now() < due && !stop.stop_requested()) {
+        std::this_thread::sleep_until(std::min(due, clock::now() + std::chrono::milliseconds(50)));
+      }
+    }
+    dev.prev_ts = ts;
+  };
+
   while (!stop.stop_requested()) {
-    detail::FrameAssembler assembler(im.options.frame_policy, TimestampPolicy::kLidar);
-    auto deliver = [&](std::optional<Frame> f) {
-      if (!f) {
-        return;
-      }
-      f->index = next_index++;
-      ++stats.frames;
-      stats.points += f->points.size();
-      if (im.frame_cb) {
-        im.frame_cb(std::move(*f));
-      }
-    };
-    std::optional<std::uint64_t> base_ts;
-    clock::time_point base_wall{};
-    std::uint64_t prev_ts = 0;
+    for (auto & dev : played) {
+      dev.assembler = detail::FrameAssembler(im.options.frame_policy, TimestampPolicy::kLidar);
+      dev.base_ts.reset();
+    }
     while (!stop.stop_requested()) {
       auto next = im.reader.next_packet();
       if (!next) {
         return std::unexpected(next.error());
       }
-      if (!*next) {
+      const auto & packet = *next;
+      if (!packet) {
         break;
       }
-      const Lvx2Packet & p = **next;
-      if (im.options.lidar_id && p.lidar_id != *im.options.lidar_id) {
+      const Lvx2Packet & p = *packet;
+      PlayedDevice * dev = device_of(p);
+      if (dev == nullptr) {
+        if (by_id) {
+          ++stats.unlisted_packets;
+        }
         continue;
       }
       if (paced) {
-        if (!base_ts || p.timestamp_ns < prev_ts) {  // first packet, or a backward jump
-          base_ts = p.timestamp_ns;
-          base_wall = clock::now();
-        } else {
-          const auto rel = static_cast<double>(p.timestamp_ns - *base_ts) / im.options.rate;
-          const auto due = base_wall + std::chrono::nanoseconds(static_cast<std::int64_t>(rel));
-          while (clock::now() < due) {
-            if (stop.stop_requested()) {
-              break;
-            }
-            std::this_thread::sleep_until(
-              std::min(due, clock::now() + std::chrono::milliseconds(50)));
-          }
-        }
-        prev_ts = p.timestamp_ns;
+        wait_for(*dev, p.timestamp_ns);
       }
-      ++stats.packets;
+      ++dev->stats.packets;
       if (im.packet_cb) {
         im.packet_cb(p);
       }
-      deliver(assembler.push(p.to_data_packet_view(), p.timestamp_ns));
+      deliver(*dev, dev->assembler.push(p.to_data_packet_view(), p.timestamp_ns));
     }
-    deliver(assembler.flush());
-    stats.dropped_packets += assembler.counters().dropped_packets;
+    for (auto & dev : played) {
+      deliver(dev, dev.assembler.flush());
+      dev.stats.dropped_packets += dev.assembler.counters().dropped_packets;
+    }
     if (stop.stop_requested()) {
       break;
     }
@@ -666,6 +727,13 @@ std::expected<Lvx2PlayStats, Lvx2Error> Lvx2Player::run(const std::stop_token & 
     if (auto r = im.reader.open(im.path); !r) {
       return std::unexpected(r.error());
     }
+  }
+  for (const auto & dev : played) {
+    stats.packets += dev.stats.packets;
+    stats.frames += dev.stats.frames;
+    stats.points += dev.stats.points;
+    stats.dropped_packets += dev.stats.dropped_packets;
+    stats.devices.push_back(dev.stats);
   }
   return stats;
 }

@@ -69,8 +69,15 @@ Options common to both sub-commands:
 
 - Paces the file by its recorded time. `--rate 0` plays as fast as possible.
 - `--loop` repeats the file until SIGINT.
-- A file with several LiDARs needs `--lidar-id` with one of the `lidar_id`s it prints; without
-  it, `play` exits with 2 ([#163](https://github.com/atinfinity/livox-mid360-core/issues/163)).
+- A file with several LiDARs plays all of them, each to its own entity,
+  `lidar/<lidar_id>/points`. With `--extrinsic` each one is moved by its own extrinsic.
+  `--lidar-id` plays one of them to `lidar/points`
+  ([#169](https://github.com/atinfinity/livox-mid360-core/issues/169)). LiDARs without time
+  synchronisation have their own clocks, so their frames do not line up on `sensor_time`; use
+  the `frame` timeline. In `Outdoor_sampledata.lvx2`, two of the extrinsics' translations look
+  like centimetres, so with `--extrinsic` those two LiDARs appear about 80 m up
+  ([lvx2.md](lvx2.md#livox-sample-files),
+  [#108](https://github.com/atinfinity/livox-mid360-core/issues/108)).
 
 Both print `logged frames=N points=P` at the end. Exit codes:
 
@@ -102,7 +109,8 @@ panel collapsed.*
 | --- | --- |
 | `lidar` (static) | `ViewCoordinates::RIGHT_HAND_Z_UP`, the LiDAR frame |
 | `lidar/points` | One `Points3D` per frame, coloured by reflectivity with the turbo colour map (0 blue, 255 red). Points at the origin (no return) are skipped |
-| timeline `frame` | A counter kept by the tool: +1 per logged frame |
+| `lidar/<lidar_id>/points` | `play` of a file with several LiDARs: as `lidar/points`, one entity per LiDAR |
+| timeline `frame` | A counter kept by the tool for each entity: +1 per logged frame, so frame N of every LiDAR is on step N |
 | timeline `sensor_time` | `Frame::base_time_ns`. `live`: a timestamp (host time, `TimestampPolicy::kHostOffsetOnce`). `play`: a duration, because the recorded LiDAR time has no known epoch |
 
 The `frame` timeline counts logged frames rather than using `Frame::index`. `Frame::index` is

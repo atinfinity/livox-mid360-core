@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // lvx2 writer / reader / player (issue #35).
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cerrno>
 #include <chrono>
@@ -10,6 +11,7 @@
 #include <stop_token>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "livox/mid360/bytes.hpp"
@@ -364,32 +366,95 @@ TEST_CASE("lvx2 player: frames, loop, stop token and lidar_id filter", "[lvx2]")
     CHECK(s->dropped_packets == 0);
     CHECK(frames[0].points.size() == 20);
   }
-  SECTION("lidar_id: required for a multi-device file, and must be listed (#163)")
+  SECTION("every device, each through its own assembler (#169)")
   {
     Lvx2PlayOptions o;
     o.rate = 0;
     Lvx2Player all(o);
-    auto r = all.open(path);
+    REQUIRE(all.open(path));
+    std::vector<std::pair<std::uint32_t, Frame>> frames;
+    all.on_device_frame(
+      [&](const Lvx2DeviceInfo & d, Frame && f) { frames.emplace_back(d.lidar_id, std::move(f)); });
+    std::size_t plain = 0;
+    all.on_frame([&](const Frame &) { ++plain; });
+    auto s = all.run();
+    REQUIRE(s);
+    CHECK(s->packets == 21);
+    CHECK(s->frames == 5);
+    CHECK(s->points == 84);
+    CHECK(s->unlisted_packets == 0);
+    CHECK(plain == 5);  // on_frame, when set as well, gets every frame too
+    REQUIRE(s->devices.size() == 2);
+    CHECK(s->devices[0].lidar_id == infos[0].lidar_id);
+    CHECK(s->devices[0].packets == 20);
+    CHECK(s->devices[0].frames == 4);
+    CHECK(s->devices[0].points == 80);
+    CHECK(s->devices[1].lidar_id == 2);
+    CHECK(s->devices[1].packets == 1);
+    CHECK(s->devices[1].frames == 1);
+    CHECK(s->devices[1].points == 4);
+    // Each device's frames hold its own points only, and each device counts Frame::index.
+    std::vector<std::uint32_t> first_indices;
+    for (const auto & [id, f] : frames) {
+      if (id == infos[0].lidar_id) {
+        CHECK(f.points.size() == 20);
+        first_indices.push_back(f.index);
+      } else {
+        CHECK(id == 2);
+        CHECK(f.points.size() == 4);
+        CHECK(f.index == 0);
+      }
+    }
+    CHECK(first_indices == std::vector<std::uint32_t>{0, 1, 2, 3});
+  }
+  SECTION("several devices: on_frame alone is refused (#163)")
+  {
+    Lvx2PlayOptions o;
+    o.rate = 0;
+    Lvx2Player all(o);
+    REQUIRE(all.open(path));
+    all.on_frame([](const Frame &) {});
+    auto r = all.run();
     REQUIRE(!r);
     CHECK(r.error().kind == Lvx2Error::Kind::kInvalidArgument);
-    CHECK(r.error().detail == "the file holds 2 devices (lidar_id 167880896, 2); choose one");
-    auto not_open = all.run();
-    REQUIRE(!not_open);
-    CHECK(not_open.error().kind == Lvx2Error::Kind::kInvalidArgument);
-
+    CHECK(
+      r.error().detail ==
+      "the file holds 2 devices (lidar_id 167880896, 2); set lidar_id or use on_device_frame");
+    // Packets only need no device, so they play.
+    Lvx2Player packets_only(o);
+    REQUIRE(packets_only.open(path));
+    std::size_t packets = 0;
+    packets_only.on_packet([&](const Lvx2Packet &) { ++packets; });
+    REQUIRE(packets_only.run());
+    CHECK(packets == 21);
+  }
+  SECTION("lidar_id must be listed")
+  {
+    Lvx2PlayOptions o;
+    o.rate = 0;
     o.lidar_id = 99;
     Lvx2Player unknown(o);
     auto u = unknown.open(path);
     REQUIRE(!u);
+    CHECK(u.error().kind == Lvx2Error::Kind::kInvalidArgument);
     CHECK(u.error().detail == "lidar_id 99 is not in the file (lidar_id 167880896, 2)");
+    auto not_open = unknown.run();
+    REQUIRE(!not_open);
+    CHECK(not_open.error().kind == Lvx2Error::Kind::kInvalidArgument);
 
     o.lidar_id = infos[1].lidar_id;
     Lvx2Player second(o);
     REQUIRE(second.open(path));
+    std::vector<std::uint32_t> ids;
+    second.on_device_frame(
+      [&](const Lvx2DeviceInfo & d, const Frame &) { ids.push_back(d.lidar_id); });
     auto s = second.run();
     REQUIRE(s);
     CHECK(s->packets == 1);
     CHECK(s->frames == 1);
+    CHECK(ids == std::vector<std::uint32_t>{2});
+    REQUIRE(s->devices.size() == 1);
+    CHECK(s->devices[0].lidar_id == 2);
 
     // A failed open leaves the player closed, not playing the file of an earlier open.
     const auto mini = std::filesystem::path(LIVOX_MID360_TEST_DATA_DIR) / "mini.lvx2";
@@ -615,6 +680,62 @@ TEST_CASE("lvx2 reader: structural errors", "[lvx2]")
     CHECK(p.error().kind == Lvx2Error::Kind::kBadFile);
     std::filesystem::remove(path);
   }
+}
+
+TEST_CASE("lvx2 player: interleaved devices with unsynchronised clocks (#169)", "[lvx2]")
+{
+  const auto path = temp_file("devices.lvx2");
+  std::vector<Lvx2DeviceInfo> infos(3, device_info());
+  for (std::uint32_t i = 0; i < 3; ++i) {
+    infos[i].lidar_id = i + 1;
+  }
+  Lvx2Writer w;
+  REQUIRE(w.open(path, infos));
+  // Packets alternate between the devices. Device 2's clock is a minute ahead and its
+  // frame_cnt differs, so in one shared assembler every packet would close a frame.
+  for (std::uint16_t k = 0; k < 20; ++k) {
+    const std::uint64_t t = std::uint64_t{k} * 20 * kMs;
+    const auto cnt = static_cast<std::uint8_t>(t / (100 * kMs));
+    REQUIRE(w.write(0, make_packet(k, cnt, t).view));
+    REQUIRE(w.write(1, make_packet(k, cnt + 7, t + 60'000 * kMs, 2).view));
+    REQUIRE(w.write(2, make_packet(k, cnt, t, 1).view));
+  }
+  REQUIRE(w.close());
+  {
+    // Device 3's entry now says lidar_id 33, so its packages (lidar_id 3) are unlisted.
+    std::fstream f(path, std::ios::binary | std::ios::in | std::ios::out);
+    f.seekp(24 + 5 + 2 * 63 + 32);
+    const std::array<char, 4> id{33, 0, 0, 0};
+    f.write(id.data(), id.size());
+  }
+
+  Lvx2PlayOptions o;
+  o.rate = 4.0;  // 380 ms of data per device -> ~95 ms, not the minute between the clocks
+  Lvx2Player pl(o);
+  REQUIRE(pl.open(path));
+  std::vector<std::pair<std::uint32_t, std::size_t>> frames;  // lidar_id, points
+  pl.on_device_frame([&](const Lvx2DeviceInfo & d, const Frame & f) {
+    frames.emplace_back(d.lidar_id, f.points.size());
+  });
+  const auto t0 = std::chrono::steady_clock::now();
+  auto s = pl.run();
+  const auto took = std::chrono::steady_clock::now() - t0;
+  REQUIRE(s);
+  CHECK(took >= 80ms);
+  CHECK(took < 2s);
+  CHECK(s->unlisted_packets == 20);
+  CHECK(s->packets == 40);
+  REQUIRE(s->devices.size() == 3);
+  CHECK(s->devices[0].frames == 4);
+  CHECK(s->devices[1].frames == 4);
+  CHECK(s->devices[2].lidar_id == 33);
+  CHECK(s->devices[2].packets == 0);
+  CHECK(s->devices[2].frames == 0);
+  CHECK(s->frames == 8);
+  for (const auto & [id, points] : frames) {
+    CHECK(points == (id == 1 ? 20U : 10U));  // five packets of 4 or 2 points
+  }
+  std::filesystem::remove(path);
 }
 
 TEST_CASE("lvx2 player: open errors", "[lvx2]")
