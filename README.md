@@ -148,7 +148,8 @@ Lint, fuzzing, coverage and how to reproduce CI locally are described in
 
 - Protocol: <https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/livox_eth_protocol_mid360.html> (rev v1.4.12)
 - HMS codes: <https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/hms_code_mid360.html>
-- Downloads (manual, firmware, Livox Viewer 2): <https://www.livoxtech.com/mid-360/downloads>
+- Mid-360 downloads (manual, firmware, Livox Viewer 2, sample point clouds): <https://www.livoxtech.com/mid-360/downloads>
+- All Livox downloads (Livox Viewer releases, LVX file specifications, SDK API reference): <https://www.livoxtech.com/downloads>
 
 The official Livox-SDK2 is used only as a behavioural reference for hardware testing. No code is
 copied from it.
