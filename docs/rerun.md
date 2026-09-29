@@ -78,6 +78,10 @@ Options common to both sub-commands:
   like centimetres, so with `--extrinsic` those two LiDARs appear about 80 m up
   ([lvx2.md](lvx2.md#livox-sample-files),
   [#108](https://github.com/atinfinity/livox-mid360-core/issues/108)).
+- `--extrinsic` exits with 2 when a played device has no enabled extrinsic. It also exits with
+  2 when an angle is not finite or outside ±180°, or when a translation is not finite or does
+  not fit in `int32` millimetres
+  ([#174](https://github.com/atinfinity/livox-mid360-core/issues/174)).
 
 Both print `logged frames=N points=P` at the end. Exit codes:
 
@@ -167,6 +171,8 @@ codes, that frames were logged and that each `.rrd` file is not empty:
 - It plays a copy of that file with one point zeroed into a no-return, with and without
   `--extrinsic`, and checks that both log the same number of points
   ([#171](https://github.com/atinfinity/livox-mid360-core/issues/171)).
+- It plays a copy with a NaN roll with `--extrinsic`, and checks that `play` refuses it with
+  exit code 2 ([#174](https://github.com/atinfinity/livox-mid360-core/issues/174)).
 - It runs `live` against the simulator for 2 s into a second `.rrd` file.
 
 The CI job `rerun` builds the tool and runs that test.

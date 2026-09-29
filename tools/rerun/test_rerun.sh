@@ -1,7 +1,8 @@
 #!/bin/sh
 # Issue #147: `live` for 2 s from the simulator and `play` of tests/data/mini.lvx2, both into an
 # .rrd file (no viewer needed). Checks the exit codes, that frames were logged and that the file
-# is not empty. Issue #171: a no-return point is skipped with `--extrinsic` too.
+# is not empty. Issue #171: a no-return point is skipped with `--extrinsic` too. Issue #174: a
+# non-finite file extrinsic is refused.
 # Usage: test_rerun.sh <rerun binary> <sim script> <mini.lvx2> <out dir>.
 # Exit 77 = no python3.
 set -u
@@ -10,7 +11,7 @@ sim=$2
 lvx2=$3
 out=$4
 mkdir -p "$out"
-rm -f "$out/live.rrd" "$out/play.rrd" "$out/noret.rrd"
+rm -f "$out/live.rrd" "$out/play.rrd" "$out/noret.rrd" "$out/nan.rrd"
 
 # frames=N from the tool's last line; fails unless N > 0 and the .rrd is not empty.
 check() {
@@ -59,6 +60,18 @@ if [ $status -ne 0 ] || [ -z "$plain" ] || [ "$plain" != "$ext" ]; then
   exit 1
 fi
 echo "ok: no-return skipped with --extrinsic, points=$ext"
+
+# mini.lvx2 with a NaN roll (byte 68: device info 29 + 39): --extrinsic refuses it (#174).
+cp "$lvx2" "$out/nan.lvx2"
+printf '\000\000\300\177' | dd of="$out/nan.lvx2" bs=1 seek=68 count=4 conv=notrunc 2> /dev/null
+"$bin" play "$out/nan.lvx2" --rate 0 --save "$out/nan.rrd" --extrinsic 2> "$out/nan.log"
+status=$?
+cat "$out/nan.log"
+if [ $status -ne 2 ] || ! grep -q "extrinsic for lidar_id .* is not usable" "$out/nan.log"; then
+  echo "nan extrinsic: exit $status, expected 2 and 'not usable'"
+  exit 1
+fi
+echo "ok: a NaN extrinsic is refused"
 
 py=$(command -v python3 || true)
 if [ -z "$py" ]; then

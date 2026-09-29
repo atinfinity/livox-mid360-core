@@ -104,7 +104,9 @@ public:
   Lvx2Writer(Lvx2Writer &&) noexcept;
   Lvx2Writer & operator=(Lvx2Writer &&) noexcept;
 
-  /// Creates (truncates) `path` and writes the headers. `devices` must not be empty.
+  /// Creates (truncates) `path` and writes the headers. `devices` must not be empty. The spec
+  /// fixes `frame_duration_ms` at 50 for version 2.0.0.0; other values make files that other
+  /// readers may refuse (#174).
   [[nodiscard]] std::expected<void, Lvx2Error> open(
     const std::filesystem::path & path, std::span<const Lvx2DeviceInfo> devices,
     std::uint32_t frame_duration_ms = 50);
@@ -185,7 +187,9 @@ struct Lvx2PlayStats
 /// (timestamps are the recorded ones, TimestampPolicy::kLidar) to on_frame / on_device_frame.
 /// Frames are closed by `frame_policy`, not by the file's 50 ms frames, and never mix devices.
 /// Each device is paced by its own clock, because unsynchronised LiDARs count from their own
-/// boot. Callbacks run on the calling thread.
+/// boot. Points stay in the LiDAR's coordinates: the file's extrinsic is not applied, and the
+/// points of one package share its time (no time_interval in the format; docs/lvx2.md, #174).
+/// Callbacks run on the calling thread.
 class Lvx2Player
 {
 public:

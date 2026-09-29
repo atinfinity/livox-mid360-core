@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <expected>
 #include <format>
 #include <iostream>
 #include <map>
@@ -78,16 +79,29 @@ std::optional<Args> parse_args(int argc, char ** argv)
   return a;
 }
 
-/// The file's extrinsic of `dev`, if it is enabled.
-std::optional<Extrinsic> file_extrinsic(const Lvx2DeviceInfo & dev)
+/// The file's extrinsic of `dev`, or why it cannot be used: not enabled, or values that are not
+/// finite or out of range. The reader does not check them (#174).
+std::expected<Extrinsic, std::string> file_extrinsic(const Lvx2DeviceInfo & dev)
 {
   if (!dev.extrinsic_enable) {
-    return std::nullopt;
+    return std::unexpected(
+      std::format("the file has no enabled extrinsic for lidar_id {}", dev.lidar_id));
   }
+  constexpr float kMaxOffsetM = 2'147'483.0F;  // the int32 mm of InstallAttitude
+  const auto offset_ok = [](float m) { return std::isfinite(m) && std::abs(m) <= kMaxOffsetM; };
   InstallAttitude att;
   att.roll_deg = dev.roll_deg;
   att.pitch_deg = dev.pitch_deg;
   att.yaw_deg = dev.yaw_deg;
+  if (
+    !install_attitude_valid(att) || !offset_ok(dev.x_m) || !offset_ok(dev.y_m) ||
+    !offset_ok(dev.z_m)) {
+    return std::unexpected(std::format(
+      "the file's extrinsic for lidar_id {} is not usable: roll, pitch, yaw = {}, {}, {} deg, "
+      "x, y, z = {}, {}, {} m (angles must be finite and within +-180, offsets finite and "
+      "within int32 mm)",
+      dev.lidar_id, dev.roll_deg, dev.pitch_deg, dev.yaw_deg, dev.x_m, dev.y_m, dev.z_m));
+  }
   att.x_mm = static_cast<std::int32_t>(std::lround(dev.x_m * 1000.0F));
   att.y_mm = static_cast<std::int32_t>(std::lround(dev.y_m * 1000.0F));
   att.z_mm = static_cast<std::int32_t>(std::lround(dev.z_m * 1000.0F));
@@ -137,12 +151,12 @@ int run_play(int argc, char ** argv)
       t.entity = std::format("lidar/{}/points", d.lidar_id);
     }
     if (args->view.extrinsic) {
-      t.extrinsic = file_extrinsic(d);
-      if (!t.extrinsic) {
-        std::cerr << std::format(
-          "--extrinsic: the file has no enabled extrinsic for lidar_id {}\n", d.lidar_id);
+      auto e = file_extrinsic(d);
+      if (!e) {
+        std::cerr << "--extrinsic: " << e.error() << "\n";
         return 2;
       }
+      t.extrinsic = *e;
     }
     targets.emplace(d.lidar_id, std::move(t));
   }
