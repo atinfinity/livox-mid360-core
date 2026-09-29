@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// `replay`: Lvx2Player -> one line per frame (issue #35).
+// `replay`: Lvx2Player -> one line per frame (issue #35), every device of the file (#169).
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -93,7 +93,7 @@ int run_replay(int argc, char ** argv)
   if (auto r = player.open(args->file); !r) {
     std::cerr << "open " << args->file << ": " << to_string(r.error()) << "\n";
     if (r.error().kind == Lvx2Error::Kind::kInvalidArgument) {
-      std::cerr << "pick the device to play with --lidar-id N\n";  // several devices (#163)
+      std::cerr << "drop --lidar-id to play every device\n";  // not in the file (#169)
     }
     return 2;
   }
@@ -102,10 +102,13 @@ int run_replay(int argc, char ** argv)
       "device sn={} lidar_id={} type={} extrinsic={}\n", d.lidar_sn, d.lidar_id, d.device_type,
       d.extrinsic_enable ? "on" : "off");
   }
+  // Several devices each count their own frames, so their lines carry the lidar_id (#169).
+  const bool several = !args->play.lidar_id && player.devices().size() > 1;
   if (!args->quiet) {
-    player.on_frame([](Frame && f) {
+    player.on_device_frame([several](const Lvx2DeviceInfo & d, const Frame & f) {
+      const auto id = several ? std::format(" lidar_id={}", d.lidar_id) : std::string{};
       std::cout << std::format(
-        "frame {} points={} t={} dropped={}\n", f.index, f.points.size(), f.base_time_ns,
+        "frame {}{} points={} t={} dropped={}\n", f.index, id, f.points.size(), f.base_time_ns,
         f.dropped_packets);
     });
   }
@@ -124,9 +127,19 @@ int run_replay(int argc, char ** argv)
     std::cerr << "replay: " << to_string(stats.error()) << "\n";
     return 2;
   }
+  if (several) {
+    for (const auto & d : stats->devices) {
+      std::cout << std::format(
+        "lidar_id={} packets={} frames={} points={} dropped={}\n", d.lidar_id, d.packets, d.frames,
+        d.points, d.dropped_packets);
+    }
+  }
+  const auto unlisted = stats->unlisted_packets != 0
+                          ? std::format(" unlisted={}", stats->unlisted_packets)
+                          : std::string{};
   std::cout << std::format(
-    "packets={} frames={} points={} dropped={} loops={}\n", stats->packets, stats->frames,
-    stats->points, stats->dropped_packets, stats->loops);
+    "packets={} frames={} points={} dropped={} loops={}{}\n", stats->packets, stats->frames,
+    stats->points, stats->dropped_packets, stats->loops, unlisted);
   return 0;
 }
 }  // namespace cli

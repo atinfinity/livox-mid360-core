@@ -800,8 +800,9 @@ opaque to this SDK, which delivers the datagrams as they arrive. The codec lives
 
 `lvx2.hpp` ([#35](https://github.com/atinfinity/livox-mid360-core/issues/35)) has `Lvx2Writer` (raw packets → file, 50 ms frames, spherical converted to
 Cartesian32, IMU ignored), `Lvx2Reader` (file → `Lvx2Packet` with `to_data_packet_view()`,
-truncated tails tolerated) and `Lvx2Player` (file → `on_packet` / `on_frame` through the same
-`FrameAssembler` as a Device, `rate` / `loop` / `lidar_id` options). Format, unverified
+truncated tails tolerated) and `Lvx2Player` (file → `on_packet` / `on_frame` /
+`on_device_frame` through the same `FrameAssembler` as a Device, one per device of the file,
+`rate` / `loop` / `lidar_id` options). Format, unverified
 items and the `livox-mid360-cli record` / `replay` commands: [lvx2.md](lvx2.md).
 
 ## Multiple devices

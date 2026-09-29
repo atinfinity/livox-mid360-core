@@ -80,14 +80,15 @@ The [Mid-360 downloads page](https://www.livoxtech.com/mid-360/downloads) has tw
 | File | Size | Devices | Length | Replay with `--frame-mode window` |
 |---|---|---|---|---|
 | `Indoor_sampledata.lvx2` | 223 MB | 1 | 78 s | 777 frames of 20 064 points (the last one partial), 0 dropped |
-| `Outdoor_sampledata.lvx2` | 597 MB | 3 | 70 s | per `--lidar-id`: 695 frames of 20 064 points (the last one partial), 0 dropped |
+| `Outdoor_sampledata.lvx2` | 597 MB | 3 | 70 s | per device: 695 frames of 20 064 points (the last one partial), 0 dropped |
 
 ```sh
 livox-mid360-cli replay Indoor_sampledata.lvx2 --frame-mode window
-livox-mid360-cli replay Outdoor_sampledata.lvx2 --frame-mode window --lidar-id 738306240
+livox-mid360-cli replay Outdoor_sampledata.lvx2 --frame-mode window
 ```
 
-In [`livox-mid360-rerun`](rerun.md), one frame of each file looks like this:
+In [`livox-mid360-rerun`](rerun.md), one frame of each file looks like this. For Outdoor, one
+of its three LiDARs is shown, picked with `--lidar-id`:
 
 ```sh
 livox-mid360-rerun play Indoor_sampledata.lvx2
@@ -122,7 +123,10 @@ Two consequences for a replay:
   frame covers 100 ms. The spec marks `frame_counter` reserved, so other Viewer 2 recordings
   are likely the same, and the 0 says nothing about the `frame_cnt` the firmware sends
   ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
-- The Outdoor file holds three LiDARs, so it plays one at a time with `--lidar-id`.
+- The Outdoor file holds three LiDARs. A replay plays all three in one run, each through its
+  own frame assembler and paced by its own clock, so the 2.66 s skew does not stall the other
+  two ([#169](https://github.com/atinfinity/livox-mid360-core/issues/169)). `--lidar-id` plays
+  one of them.
 
 ## Library API
 
@@ -144,24 +148,36 @@ while (auto p = reader.next_packet(); p && *p) {      // nullopt = end of file
 
 Lvx2Player player({.frame_policy = {}, .rate = 1.0, .loop = false});
 player.open("capture.lvx2");
-player.on_frame([](Frame && f) { /* same Frame as Device::on_frame */ });
-// Lvx2PlayStats{packets, frames, points, dropped_packets, loops}
+player.on_device_frame([](const Lvx2DeviceInfo & d, Frame && f) {
+  /* same Frame as Device::on_frame, of the device d */
+});
+// Lvx2PlayStats{packets, frames, points, dropped_packets, loops, unlisted_packets, devices}
 auto stats = player.run(stop_token);
 ```
 
 - `Lvx2Player` feeds the recorded timestamps as they are (`TimestampPolicy::kLidar`); frames
   are closed by `Lvx2PlayOptions::frame_policy`, not by the file's 50 ms frames.
-- `rate` is relative to the recorded timestamps (1.0 = real time, 0 = as fast as possible). A
-  backward timestamp jump does not wait.
-- With `loop`, the file is reopened and the frame assembler reset after each pass; the
-  partial frame is flushed at the end of every pass. `Frame::index` is not reset: it starts at
-  0 for each `run()` and keeps counting across passes
+- Every device of the file is played, each through its own frame assembler, so a frame never
+  mixes devices ([#169](https://github.com/atinfinity/livox-mid360-core/issues/169)). A
+  package goes to the device-info entry with its `lidar_id`. A file with one device (or none)
+  plays every package as that device, whatever its `lidar_id`. With several devices, packages
+  whose `lidar_id` is not listed are skipped and counted in `unlisted_packets`.
+- `on_device_frame` gets each frame with its device. `on_frame` gets the frames without it,
+  so when several devices are played, `run()` refuses an `on_frame` without an
+  `on_device_frame` (`kInvalidArgument`,
+  [#163](https://github.com/atinfinity/livox-mid360-core/issues/163)). `on_packet` gets the
+  packages of every played device.
+- `lidar_id` plays one LiDAR of the file. `open()` fails with `kInvalidArgument` when it is not
+  in the list; the `detail` names the file's `lidar_id`s.
+- `Lvx2PlayStats::devices` has the packets, frames, points and drops of each played device;
+  the other fields are their sums.
+- `rate` is relative to the recorded timestamps (1.0 = real time, 0 = as fast as possible).
+  Each device is paced by its own timestamps, because LiDARs without time synchronisation count
+  from their own boot. A backward timestamp jump does not wait.
+- With `loop`, the file is reopened and the frame assemblers reset after each pass; the
+  partial frames are flushed at the end of every pass. `Frame::index` is not reset: it starts
+  at 0 for each `run()` and device, and keeps counting across passes
   ([#149](https://github.com/atinfinity/livox-mid360-core/issues/149)).
-- `lidar_id` plays one LiDAR of the file. One frame assembler cannot take several LiDARs, so
-  `open()` fails with `kInvalidArgument` when the file lists more than one device and
-  `lidar_id` is not set, or when `lidar_id` is not in the list; the `detail` names the file's
-  `lidar_id`s ([#163](https://github.com/atinfinity/livox-mid360-core/issues/163)). Use
-  `Lvx2Reader` for the packets of every device.
 - Errors are `std::expected<_, Lvx2Error>` with `kIo` (+ `errno_value`), `kInvalidArgument`,
   `kUnsupportedDataType` and `kBadFile` (+ `detail`).
 
@@ -184,9 +200,21 @@ or on SIGINT. Exit codes: 0 ok, 1 usage, 2 setup / I/O failure, 3 no packet reco
 
 `replay` prints the file's devices (`device sn=... lidar_id=...`) on stderr, one line per frame
 (`frame N points=P t=... dropped=D`) on stdout, unless `--quiet`, and a summary line
-(`packets= frames= points= dropped= loops=`) at the end. SIGINT ends a `--loop` run. A file with
-several devices needs `--lidar-id` with one of the listed `lidar_id`s; without it, `replay`
-names them and exits with 2.
+(`packets= frames= points= dropped= loops=`) at the end. SIGINT ends a `--loop` run.
+
+A file with several devices plays all of them. Each frame line then names its device
+(`frame N lidar_id=I points=...`, with `N` counted per device), and one line per device
+(`lidar_id=I packets= frames= points= dropped=`) comes before the summary. The summary adds
+`unlisted=U` when packages had a `lidar_id` that the file does not list. `--lidar-id` plays
+one device; an id that is not listed makes `replay` name the listed ones and exit with 2.
+For `Outdoor_sampledata.lvx2`:
+
+```
+lidar_id=738306240 packets=145052 frames=695 points=13924992 dropped=0
+lidar_id=3271665856 packets=145051 frames=695 points=13924896 dropped=0
+lidar_id=2080483520 packets=145052 frames=695 points=13924992 dropped=0
+packets=435155 frames=2085 points=41774880 dropped=0 loops=1
+```
 
 Against the simulator:
 
@@ -204,5 +232,6 @@ count equals the recorded one and the frame count matches the file's frames with
 - `tests/test_lvx2.cpp`: writer → reader round trip (types 1 and 2, spherical conversion,
   50 ms splitting, IMU ignored), the committed fixture `tests/data/mini.lvx2` (written by an
   independent Python `struct.pack` script, not by `Lvx2Writer`), truncated and corrupt files,
-  and the player (frames, `lidar_id` filter, loop + stop token, pacing).
+  and the player (frames, every device through its own assembler, `lidar_id` filter, loop +
+  stop token, pacing per device).
 - `cli_record_replay`: the golden run against the simulator described above.

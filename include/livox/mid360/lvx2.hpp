@@ -152,9 +152,19 @@ struct Lvx2PlayOptions
   double rate =
     1.0;  ///< playback speed relative to the recorded timestamps; 0 = as fast as possible
   bool loop = false;  ///< restart at the end of the file until the stop token is set
-  /// Only packages of this lidar_id. Required when the file lists more than one device, and
-  /// must be one of them (`open()` fails with kInvalidArgument otherwise, #163).
+  /// Only packages of this lidar_id, which must be one of the file's devices (`open()` fails
+  /// with kInvalidArgument otherwise). Unset: every device of the file (#169).
   std::optional<std::uint32_t> lidar_id;
+};
+
+/// The share of one played device in Lvx2PlayStats.
+struct Lvx2DevicePlayStats
+{
+  std::uint32_t lidar_id = 0;
+  std::uint64_t packets = 0;
+  std::uint64_t frames = 0;
+  std::uint64_t points = 0;
+  std::uint64_t dropped_packets = 0;
 };
 
 struct Lvx2PlayStats
@@ -162,17 +172,25 @@ struct Lvx2PlayStats
   std::uint64_t packets = 0;
   std::uint64_t frames = 0;
   std::uint64_t points = 0;
-  std::uint64_t dropped_packets = 0;  ///< udp_counter gaps seen by the frame assembler
+  std::uint64_t dropped_packets = 0;  ///< udp_counter gaps seen by the frame assemblers
   std::uint64_t loops = 0;            ///< completed passes over the file
+  /// Packages skipped because the device info lists no device with their lidar_id (only
+  /// counted when several devices are played).
+  std::uint64_t unlisted_packets = 0;
+  std::vector<Lvx2DevicePlayStats> devices;  ///< one per played device, in devices() order
 };
 
-/// Replays a file: packets go to on_packet as-is, and through a FrameAssembler (timestamps
-/// are the recorded ones, TimestampPolicy::kLidar) to on_frame. Frames are closed by
-/// `frame_policy`, not by the file's 50 ms frames. Callbacks run on the calling thread.
+/// Replays a file: packets go to on_packet as-is, and through a FrameAssembler per device
+/// (timestamps are the recorded ones, TimestampPolicy::kLidar) to on_frame / on_device_frame.
+/// Frames are closed by `frame_policy`, not by the file's 50 ms frames, and never mix devices.
+/// Each device is paced by its own clock, because unsynchronised LiDARs count from their own
+/// boot. Callbacks run on the calling thread.
 class Lvx2Player
 {
 public:
   using PacketCallback = std::function<void(const Lvx2Packet &)>;
+  /// `device` is the entry of devices() that the frame belongs to.
+  using DeviceFrameCallback = std::function<void(const Lvx2DeviceInfo & device, Frame &&)>;
 
   explicit Lvx2Player(Lvx2PlayOptions options = {});
   ~Lvx2Player();
@@ -181,18 +199,23 @@ public:
   Lvx2Player(Lvx2Player &&) noexcept;
   Lvx2Player & operator=(Lvx2Player &&) noexcept;
 
-  /// Opens the file for run(). Fails with kInvalidArgument when `lidar_id` is not set and the
-  /// file lists several devices (the detail names their lidar_ids), or when `lidar_id` is not
-  /// among them. Use Lvx2Reader to read the packets of every device.
+  /// Opens the file for run(). Fails with kInvalidArgument when `lidar_id` is set but not
+  /// among the file's devices (the detail names their lidar_ids).
   [[nodiscard]] std::expected<void, Lvx2Error> open(const std::filesystem::path & path);
   [[nodiscard]] const Lvx2FileHeader & header() const noexcept;
   [[nodiscard]] const std::vector<Lvx2DeviceInfo> & devices() const noexcept;
   void on_packet(PacketCallback cb);
+  /// Frames without their device. When several devices are played, set on_device_frame
+  /// instead (or as well): run() refuses an on_frame alone, whose frames could not be told
+  /// apart (#163).
   void on_frame(std::function<void(Frame &&)> cb);
+  /// Frames with the device they belong to; also called for a single device.
+  void on_device_frame(DeviceFrameCallback cb);
   /// Plays until the end of the file (once, or forever with `loop`) or until `stop` is
-  /// requested; the partial frame is flushed at the end of each pass. Frame::index starts at
-  /// 0 for each call and keeps counting across `loop` passes. A read error ends the run early
-  /// and is returned.
+  /// requested; the partial frames are flushed at the end of each pass. Frame::index starts at
+  /// 0 for each call and device, and keeps counting across `loop` passes. Fails with
+  /// kInvalidArgument when not open, or when several devices are played with on_frame set and
+  /// on_device_frame not set. A read error ends the run early and is returned.
   [[nodiscard]] std::expected<Lvx2PlayStats, Lvx2Error> run(const std::stop_token & stop = {});
 
 private:
