@@ -69,6 +69,8 @@ Options common to both sub-commands:
 
 - Paces the file by its recorded time. `--rate 0` plays as fast as possible.
 - `--loop` repeats the file until SIGINT.
+- A file with several LiDARs needs `--lidar-id` with one of the `lidar_id`s it prints; without
+  it, `play` exits with 2 ([#163](https://github.com/atinfinity/livox-mid360-core/issues/163)).
 
 Both print `logged frames=N points=P` at the end. Exit codes:
 

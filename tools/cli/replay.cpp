@@ -92,6 +92,9 @@ int run_replay(int argc, char ** argv)
   Lvx2Player player(args->play);
   if (auto r = player.open(args->file); !r) {
     std::cerr << "open " << args->file << ": " << to_string(r.error()) << "\n";
+    if (r.error().kind == Lvx2Error::Kind::kInvalidArgument) {
+      std::cerr << "pick the device to play with --lidar-id N\n";  // several devices (#163)
+    }
     return 2;
   }
   for (const auto & d : player.devices()) {

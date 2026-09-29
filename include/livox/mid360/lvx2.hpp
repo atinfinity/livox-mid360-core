@@ -152,7 +152,9 @@ struct Lvx2PlayOptions
   double rate =
     1.0;  ///< playback speed relative to the recorded timestamps; 0 = as fast as possible
   bool loop = false;  ///< restart at the end of the file until the stop token is set
-  std::optional<std::uint32_t> lidar_id;  ///< only packages of this lidar_id (default: all)
+  /// Only packages of this lidar_id. Required when the file lists more than one device, and
+  /// must be one of them (`open()` fails with kInvalidArgument otherwise, #163).
+  std::optional<std::uint32_t> lidar_id;
 };
 
 struct Lvx2PlayStats
@@ -179,6 +181,9 @@ public:
   Lvx2Player(Lvx2Player &&) noexcept;
   Lvx2Player & operator=(Lvx2Player &&) noexcept;
 
+  /// Opens the file for run(). Fails with kInvalidArgument when `lidar_id` is not set and the
+  /// file lists several devices (the detail names their lidar_ids), or when `lidar_id` is not
+  /// among them. Use Lvx2Reader to read the packets of every device.
   [[nodiscard]] std::expected<void, Lvx2Error> open(const std::filesystem::path & path);
   [[nodiscard]] const Lvx2FileHeader & header() const noexcept;
   [[nodiscard]] const std::vector<Lvx2DeviceInfo> & devices() const noexcept;
