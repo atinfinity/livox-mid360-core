@@ -1,0 +1,22 @@
+name: Docs
+
+# Runs on every change, without the paths-ignore of the other workflows: the API reference is
+# generated from the header comments, and documentation changes are what this checks (#104).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  doxygen:
+    name: Doxygen API reference
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/doxygen-*
+          key: doxygen-${{ runner.os }}-${{ hashFiles('scripts/install-doxygen.sh') }}
+      - run: scripts/install-doxygen.sh
+      - run: scripts/build-docs.sh

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Little-endian byte helpers used by the protocol layer. Header-only, no I/O.
+/// @file
+/// Little-endian byte helpers used by the protocol layer. Header-only, no I/O.
 #pragma once
 
 #include <bit>
@@ -46,6 +47,7 @@ template <typename T>
   return std::as_bytes(s);
 }
 
+/// Views `n` characters starting at `s` as bytes.
 [[nodiscard]] inline std::span<const std::byte> as_bytes(const char * s, std::size_t n) noexcept
 {
   return {reinterpret_cast<const std::byte *>(s), n};

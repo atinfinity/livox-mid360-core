@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Aggregated read-back types over the keys.hpp codecs (issues #38 / #41): the identity of a
-// LiDAR (serial, product string, firmware versions, MAC), its stored settings and its live
-// status. Each type has a key list, a decoder that takes any parsed key-value list (an
-// InquireResult or a 0x0102 push) and a one-line to_string with the wire key names, so logs
-// stay greppable. The struct to_string()s of the typed key values live here as well.
+/// @file
+/// Aggregated read-back types over the keys.hpp codecs (issues #38 / #41): the identity of a
+/// LiDAR (serial, product string, firmware versions, MAC), its stored settings and its live
+/// status. Each type has a key list, a decoder that takes any parsed key-value list (an
+/// InquireResult or a 0x0102 push) and a one-line to_string with the wire key names, so logs
+/// stay greppable. The struct to_string()s of the typed key values live here as well.
 #pragma once
 
 #include <array>
@@ -36,6 +37,7 @@ struct DeviceIdentity
   std::array<std::uint8_t, 6> mac{};  ///< 0x8005
 };
 
+/// The keys decode_identity() reads, for one inquire.
 inline constexpr std::array<Key, 6> kIdentityKeys{
   Key::kSn, Key::kProductInfo, Key::kVersionApp, Key::kVersionLoader, Key::kVersionHardware,
   Key::kMac};
@@ -45,13 +47,23 @@ inline constexpr std::array<Key, 6> kIdentityKeys{
 /// `sn=... product_info=... version_app=a.b.c.d version_loader=... version_hardware=... mac=..`
 [[nodiscard]] std::string to_string(const DeviceIdentity & id);
 
-// --- typed key values -------------------------------------------------------------------
+/// @name Typed key values
+/// One-line forms of the typed key values.
+///@{
+
+/// "non_repetitive", "repetitive" or "low_rate_repetitive".
 [[nodiscard]] std::string_view to_string(ScanPattern p) noexcept;
+/// "normal" or "sensitive".
 [[nodiscard]] std::string_view to_string(DetectMode m) noexcept;
+/// "none", "ptp" or "gps".
 [[nodiscard]] std::string_view to_string(TimeSyncType t) noexcept;
+/// "loader" or "app".
 [[nodiscard]] std::string_view to_string(FwType t) noexcept;
+/// Rate with unit, e.g. "200Hz".
 [[nodiscard]] std::string_view to_string(ImuOutputRate r) noexcept;
+/// Range with unit, e.g. "4g".
 [[nodiscard]] std::string_view to_string(ImuAccelRange r) noexcept;
+/// Range with unit, e.g. "2000dps" or "62.5dps".
 [[nodiscard]] std::string_view to_string(ImuGyroRange r) noexcept;
 /// `ip:dst_port<-src_port`
 [[nodiscard]] std::string to_string(const HostIpConfig & c);
@@ -65,20 +77,26 @@ inline constexpr std::array<Key, 6> kIdentityKeys{
 [[nodiscard]] std::string to_string(const FovEnable & e);
 /// `fov0=<...> fov1=<...> enable=<...>`; absent fields are omitted, all absent → "".
 [[nodiscard]] std::string to_string(const FovSettings & s);
-/// `in0/in1/out0/out1`
+/// "pps".
 [[nodiscard]] std::string_view to_string(FuncIn0 f) noexcept;
+/// "gps".
 [[nodiscard]] std::string_view to_string(FuncIn1 f) noexcept;
+/// "none", "follow_input" or "safety_zone".
 [[nodiscard]] std::string_view to_string(FuncOut f) noexcept;
-/// "pps/gps/none/safety_zone"
+/// `in0/in1/out0/out1`, e.g. "pps/gps/none/safety_zone".
 [[nodiscard]] std::string to_string(const FuncIoConfig & c);
 /// `<rate>/<accel>/<gyro>`, e.g. `200Hz/4g/2000dps`
 [[nodiscard]] std::string to_string(const ImuSensorConfig & c);
-/// `sys<n>/scan<n>/rng<n>/comm<n>`
+/// "normal", "warning", "error" or "safety_error".
 [[nodiscard]] std::string_view to_string(DiagLevel level) noexcept;
 /// `sys<n>/scan<n>/rng<n>/comm<n>` with the numeric level of each subsystem.
 [[nodiscard]] std::string to_string(const DiagStatus & d);
+///@}
 
-// --- settings (issue #41) ---------------------------------------------------------------
+/// @name Settings
+/// Settings (issue #41).
+///@{
+
 /// The 16 modelled writable keys. Read with Device::settings() or
 /// `decode_settings(inquire(kSettingsKeys)->values)`; a key the LiDAR did not answer, or
 /// answered with an undecodable value, leaves its optional empty.
@@ -102,6 +120,7 @@ struct LidarSettings
   std::optional<ImuSensorConfig> imu_sensor_cfg;      ///< 0x002B
 };
 
+/// The keys decode_settings() reads, for one inquire.
 inline constexpr std::array<Key, 16> kSettingsKeys{
   Key::kPclDataType,
   Key::kPatternMode,
@@ -120,11 +139,16 @@ inline constexpr std::array<Key, 16> kSettingsKeys{
   Key::kTimeFilter,
   Key::kImuSensorCfg};
 
+/// Decodes the kSettingsKeys present in `kvs`; other keys are ignored.
 [[nodiscard]] LidarSettings decode_settings(std::span<const KeyValue> kvs) noexcept;
 /// One line, `name=value` per present key in kSettingsKeys order, empty optionals omitted.
 [[nodiscard]] std::string to_string(const LidarSettings & s);
+///@}
 
-// --- status (issue #41) -----------------------------------------------------------------
+/// @name Status
+/// Status (issue #41).
+///@{
+
 /// Keys 0x8006-0x8011: the live state, also carried by the 0x0102 push. Read with
 /// Device::status() (inquire) or Device::pushed_status() (last push).
 struct LidarStatus
@@ -153,17 +177,22 @@ struct TimeSyncStatus
   std::int64_t offset_ns = 0;               ///< 0x800B local - source
   TimeSyncType type = TimeSyncType::kNone;  ///< 0x800C
 };
+/// `local_time=... last_sync=... offset=... type=...`, times in ns.
 [[nodiscard]] std::string to_string(const TimeSyncStatus & s);
 
+/// The keys decode_status() reads, for one inquire.
 inline constexpr std::array<Key, 10> kStatusKeys{
   Key::kCurWorkState, Key::kCoreTemp,   Key::kPowerupCnt,   Key::kLocalTimeNow,
   Key::kLastSyncTime, Key::kTimeOffset, Key::kTimeSyncType, Key::kLidarDiagStatus,
   Key::kFwType,       Key::kHmsCode};
 
+/// Decodes the kStatusKeys present in `kvs`, each HMS slot through decode_hms(); other keys
+/// are ignored and `time_ns` stays 0.
 [[nodiscard]] LidarStatus decode_status(std::span<const KeyValue> kvs) noexcept;
 /// One line, `name=value` per present key; `core_temp` in degC with two decimals, `hms=[..]`
 /// lists only the active codes as `0x<raw>:<level>`.
 [[nodiscard]] std::string to_string(const LidarStatus & s);
+///@}
 
 }  // namespace livox::mid360
 LIVOX_MID360_API_END

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// HMS (health management system) diagnostic code decoding for the Mid-360.
-// Reference: wiki "HMS Diagnostic Code Introduction" (key 0x8011 hms_code, uint32[8]).
-//
-//   byte[3:2] abnormal ID | byte[1] reserved | byte[0] abnormal level
+/// @file
+/// HMS (health management system) diagnostic code decoding for the Mid-360.
+/// Reference: wiki "HMS Diagnostic Code Introduction" (key 0x8011 hms_code, uint32[8]).
+///
+/// ```
+///   byte[3:2] abnormal ID | byte[1] reserved | byte[0] abnormal level
+/// ```
 #pragma once
 
 #include <cstdint>
@@ -14,6 +17,7 @@ LIVOX_MID360_API_BEGIN
 namespace livox::mid360
 {
 
+/// Abnormal level, byte 0 of an HMS code.
 enum class HmsLevel : std::uint8_t
 {
   kNone = 0,  ///< slot unused
@@ -23,16 +27,19 @@ enum class HmsLevel : std::uint8_t
   kFatal = 4,
 };
 
+/// One decoded HMS code (one of the eight uint32 slots of key 0x8011).
 struct HmsCode
 {
-  std::uint16_t abnormal_id;
-  HmsLevel level;
-  std::uint8_t reserved;
-  std::uint32_t raw;
+  std::uint16_t abnormal_id;  ///< byte 3-2; look up with hms_description() / hms_suggestion()
+  HmsLevel level;             ///< byte 0
+  std::uint8_t reserved;      ///< byte 1
+  std::uint32_t raw;          ///< the undecoded code
 
+  /// False for an unused slot (raw code 0).
   [[nodiscard]] constexpr bool active() const noexcept { return raw != 0; }
 };
 
+/// Splits a raw HMS code into its fields.
 [[nodiscard]] constexpr HmsCode decode_hms(std::uint32_t raw) noexcept
 {
   return {
@@ -40,6 +47,7 @@ struct HmsCode
     static_cast<std::uint8_t>((raw >> 8) & 0xFFu), raw};
 }
 
+/// Name of the level, e.g. "warning".
 [[nodiscard]] std::string_view to_string(HmsLevel l) noexcept;
 
 /// Human-readable description for an abnormal ID from the official table, or "" if unknown.

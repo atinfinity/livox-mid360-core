@@ -1,0 +1,30 @@
+/// @mainpage livox_mid360_core API reference
+///
+/// Reference for the public headers under `include/livox/mid360/`, generated from their `///`
+/// comments. The design behind the API, the threading rules and the reasons for each choice are
+/// in the [API design](../api/) page of the [project site](../).
+///
+/// Include `livox/mid360/mid360.hpp` to get everything. The layers, from the top:
+///
+/// - **Device layer**: context.hpp (the shared receive thread), device.hpp (one LiDAR:
+///   callbacks, commands, typed settings), frame.hpp, event.hpp, keys.hpp, lidar_info.hpp and
+///   log.hpp.
+/// - **Recording**: lvx2.hpp (write, read and replay `.lvx2` files), firmware_log.hpp and
+///   debug_data.hpp.
+/// - **Session layer**: session.hpp (discovery and synchronous commands) and config.hpp (host
+///   setup).
+/// - **Transport layer**: transport.hpp (UDP sockets and polling).
+/// - **Protocol layer**: protocol.hpp (pure framing and parsing), crc.hpp, bytes.hpp, hms.hpp
+///   and tag.hpp.
+
+/// @namespace livox
+/// Livox LiDAR drivers.
+
+/// @namespace livox::mid360
+/// The livox_mid360_core library: everything declared by the public headers.
+
+/// @namespace livox::mid360::bytes
+/// Little-endian byte helpers used by the protocol layer (bytes.hpp).
+
+/// @namespace livox::mid360::crc
+/// CRC-16 and CRC-32 as defined by the Mid-360 communication protocol (crc.hpp).

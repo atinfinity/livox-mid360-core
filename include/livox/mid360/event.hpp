@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API (issue #9): notifications and errors of the device layer. Plain structs
-// (enum + fields, strings only through to_string) so the phase-3 C ABI can mirror them.
-// State/HMS events come from 0x0102 pushes (#7), disconnect/reconnect from #8.
+/// @file
+/// Public API (issue #9): notifications and errors of the device layer. Plain structs
+/// (enum + fields, strings only through to_string) so the phase-3 C ABI can mirror them.
+/// State/HMS events come from 0x0102 pushes (#7), disconnect/reconnect from #8.
 #pragma once
 
 #include <array>
@@ -42,18 +43,24 @@ struct DeviceStats
   std::uint64_t reconnects = 0;         ///< kReconnected events raised
   std::int64_t time_offset_ns =
     0;  ///< kHostOffsetOnce: host - LiDAR, measured once (again after a sync loss)
-  bool time_offset_valid = false;
-  // --- firmware log (#44), see Device::on_firmware_log ---
+  bool time_offset_valid = false;  ///< `time_offset_ns` holds a measured offset
+  /// @name Firmware log
+  /// Firmware log (#44), see Device::on_firmware_log.
+  ///@{
   std::uint64_t log_chunks = 0;        ///< 0x0300 pushes delivered (begin / end included)
   std::uint64_t log_bytes = 0;         ///< log payload bytes delivered
   std::uint64_t log_gaps = 0;          ///< kFirmwareLogGap events raised
   std::uint64_t log_acks_sent = 0;     ///< pushes that asked for an ACK and got one
   std::uint64_t bad_log_packets = 0;   ///< log-port datagrams that failed to parse
   std::uint64_t last_log_time_ns = 0;  ///< host receive time of the last push, 0 = none
-  // --- debug raw data (#93), see Device::on_debug_data ---
+  ///@}
+  /// @name Debug raw data
+  /// Debug raw data (#93), see Device::on_debug_data.
+  ///@{
   std::uint64_t debug_data_packets = 0;       ///< datagrams received on the debug data socket
   std::uint64_t debug_data_bytes = 0;         ///< their payload bytes
   std::uint64_t last_debug_data_time_ns = 0;  ///< host receive time of the last one, 0 = none
+  ///@}
 };
 
 /// Counters of the shared receive side, snapshot via Context::stats().
@@ -68,7 +75,7 @@ struct ContextStats
 /// Why a Device left the connected state (Event::reason, issue #8).
 enum class DisconnectReason : std::uint8_t
 {
-  kNone = 0,
+  kNone = 0,         ///< not disconnected (or the event is not a disconnect / reconnect)
   kPushTimeout,      ///< no 0x0102 push for ReconnectOptions::push_timeout
   kCommandTimeout,   ///< a command timed out while the push was already stale
   kRebootRequested,  ///< Device::reboot() was acknowledged
@@ -78,6 +85,7 @@ enum class DisconnectReason : std::uint8_t
 /// One notification. `kind` selects which fields are meaningful; the rest are default.
 struct Event
 {
+  /// What happened; selects the meaningful fields.
   enum class Kind : std::uint8_t
   {
     kStateChanged,    ///< `old_state` -> `new_state` seen in a 0x0102 push
@@ -88,7 +96,7 @@ struct Event
     kStats,           ///< periodic `stats` snapshot (#6)
     kFirmwareLogGap,  ///< log `trans_index` jumped inside one file (#44); see `log_*`
   };
-  Kind kind = Kind::kStats;
+  Kind kind = Kind::kStats;                           ///< which notification this is
   std::uint64_t time_ns = 0;                          ///< host time of the observation
   DisconnectReason reason = DisconnectReason::kNone;  ///< kDisconnected / kReconnected
   std::uint32_t attempts = 0;              ///< kReconnected: attempts including the successful one
@@ -104,13 +112,17 @@ struct Event
   std::uint32_t log_actual = 0;            ///< kFirmwareLogGap: trans_index received
 };
 
+/// Name of an event kind, e.g. "state_changed".
 [[nodiscard]] std::string_view to_string(Event::Kind kind) noexcept;
+/// Name of a disconnect reason, e.g. "push_timeout".
 [[nodiscard]] std::string_view to_string(DisconnectReason reason) noexcept;
+/// One-line description of an event with the fields its kind uses.
 [[nodiscard]] std::string to_string(const Event & event);
 
 /// Errors of Context / Device. Session-level failures are wrapped, not re-encoded.
 struct DeviceError
 {
+  /// Error category; selects the meaningful fields.
   enum class Kind : std::uint8_t
   {
     kSession,            ///< see `session`
@@ -122,13 +134,15 @@ struct DeviceError
     kDecodeFailed,       ///< get<K>(): the ACK lacked `key` or its value did not decode (#57)
     kIo,                 ///< file_log_handler(): the file could not be opened, see `errno_value`
   };
-  Kind kind = Kind::kSession;
+  Kind kind = Kind::kSession;           ///< error category
   std::optional<SessionError> session;  ///< kSession only
   std::optional<Key> key;  ///< kInvalidArgument (out-of-range FOV window) / kDecodeFailed
   int errno_value = 0;     ///< kIo only
 };
 
+/// Name of an error kind, e.g. "invalid_state".
 [[nodiscard]] std::string_view to_string(DeviceError::Kind kind) noexcept;
+/// One-line description of an error, including the wrapped SessionError or key.
 [[nodiscard]] std::string to_string(const DeviceError & err);
 
 }  // namespace livox::mid360
