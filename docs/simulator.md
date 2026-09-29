@@ -160,7 +160,9 @@ The process is driven over its standard streams so that any test harness can use
   host in `0x0007` when `imu_data_en = 1`, and a `0x0102` push once per second to the host in
   `0x0005`. Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps and
   `time_type` come from the LiDAR clock (below). The scheduler bounds catch-up bursts to
-  256 packets and resynchronises if it falls more than 0.5 s behind.
+  256 packets and resynchronises if it falls more than 0.5 s behind. `frame_cnt` follows the
+  packets' scheduled times, so a burst still changes it once per `--frame-ms`, and a resync
+  changes it once ([#155](https://github.com/atinfinity/livox-mid360-core/issues/155)).
 - **Time** ([#133](https://github.com/atinfinity/livox-mid360-core/issues/133)): the LiDAR clock stamps every data packet and answers keys
   `0x8009`–`0x800C`. Unsynchronised (`time_type` 0) it counts from power-on and restarts at
   0 with every reboot, at the host's monotonic rate times `1 + drift_ppm / 1e6`. `0x0202`
