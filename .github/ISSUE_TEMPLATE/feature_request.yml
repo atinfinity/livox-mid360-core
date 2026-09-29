@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a new API, tool or behaviour.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and why the current library does not cover it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The API, option or tool you have in mind. A code sketch helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Workarounds you use today, or other designs you considered.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      description: |
+        See the project decisions in
+        [docs/roadmap.md](https://github.com/atinfinity/livox-mid360-core/blob/main/docs/roadmap.md#project-decisions).
+        Proposals outside them are fine to open, but say so in the proposal.
+      options:
+        - label: It is for the base Mid-360 (not Mid-360S / Mid-360L specific features).
+        - label: It needs no third-party runtime dependency in the library.
+        - label: It can be built from the public Livox protocol wiki, without code from Livox-SDK2 or other drivers.

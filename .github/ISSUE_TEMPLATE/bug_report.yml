@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in the library, the tools or the simulator does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If the problem shows up only on a real Mid-360 and the simulator
+        behaves as the docs say, use the **Hardware report** template instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: |
+        Commands, a minimal program or a failing test, e.g. the simulator command line and the
+        `minimal_receive` / `livox-mid360-cli` invocation. For a flaky test, give the test name
+        and how often it fails.
+      placeholder: |
+        python3 tools/livox_mid360_sim.py --bind 127.0.0.1
+        build/examples/minimal_receive --lidar-ip 127.0.0.1 --host-ip 127.0.0.1 --seconds 3
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Error messages, `Event` / stats lines, test output or a backtrace.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: '`git rev-parse --short HEAD`, or `livox-mid360-cli --version` for an installed build.'
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS, compiler and architecture
+      placeholder: Ubuntu 24.04, GCC 13.3, x86-64
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - Simulator (tools/livox_mid360_sim.py)
+        - Real Mid-360
+        - .lvx2 file / pcap replay
+        - Not device related (build, API, docs)
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version (real Mid-360 only)
+      description: '`version_app` from Livox Viewer 2 or `to_string(*dev->identity())`.'
+      placeholder: 13.18.0.244
