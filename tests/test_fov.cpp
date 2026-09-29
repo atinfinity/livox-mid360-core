@@ -73,9 +73,11 @@ struct Fixture
   std::string err;
   std::unique_ptr<Context> context;
 
-  explicit Fixture(std::vector<std::string> extra = {})
+  /// `rate` is the simulator's --rate-multiplier: 0.25 for the point-cloud checks, lower for
+  /// tests that only need the push stream (see the reconnect test).
+  explicit Fixture(std::vector<std::string> extra = {}, std::string rate = "0.25")
   {
-    extra.insert(extra.end(), {"--rate-multiplier", "0.25", "--push-rate", "10"});
+    extra.insert(extra.end(), {"--rate-multiplier", std::move(rate), "--push-rate", "10"});
     sim = SimProcess::start(err, std::move(extra));
     if (sim) {
       ContextOptions o;
@@ -450,7 +452,10 @@ TEST_CASE("Simulator crops the point cloud to the enabled windows", "[fov][sim]"
 
 TEST_CASE("HostSetup::fov is applied at open and replayed after a reconnect", "[fov][sim]")
 {
-  Fixture f;
+  // No points are needed here. At 0.25 a Debug+ASan receive thread on 2 vCPUs falls behind
+  // the point stream, reads the pushes late and trips the 500 ms push timeout again right
+  // after the reconnect, so fov() fails with kDisconnected. test_reconnect.cpp uses 0.05 too.
+  Fixture f({}, "0.05");
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
