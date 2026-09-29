@@ -1507,9 +1507,13 @@ class Simulator:
             interval = 1.0 / (PCL_PACKET_RATE * self.rate)
             budget = 256  # bound catch-up bursts
             while now >= self.next_pcl and budget > 0:
-                if self.frame_s > 0 and now - self.frame_started >= self.frame_s:
+                # The packet's scheduled time, not `now`: in a catch-up burst `now` is a frame or
+                # more ahead of the early packets, and frame_cnt would change on each one (#155).
+                if self.frame_s > 0 and self.next_pcl - self.frame_started >= self.frame_s:
                     self.frame_cnt = (self.frame_cnt + 1) & 0xFF
                     self.frame_started += self.frame_s
+                    if self.next_pcl - self.frame_started >= self.frame_s:
+                        self.frame_started = self.next_pcl  # after a resync: one change, not many
                     self.ring_next = 0
                 self._send_pcl(pcl_host, interval)
                 self.next_pcl += interval
