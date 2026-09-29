@@ -1,7 +1,8 @@
 #!/bin/sh
 # Issue #147: `live` for 2 s from the simulator and `play` of tests/data/mini.lvx2, both into an
 # .rrd file (no viewer needed). Checks the exit codes, that frames were logged and that the file
-# is not empty. Usage: test_rerun.sh <rerun binary> <sim script> <mini.lvx2> <out dir>.
+# is not empty. Issue #171: a no-return point is skipped with `--extrinsic` too.
+# Usage: test_rerun.sh <rerun binary> <sim script> <mini.lvx2> <out dir>.
 # Exit 77 = no python3.
 set -u
 bin=$1
@@ -9,7 +10,7 @@ sim=$2
 lvx2=$3
 out=$4
 mkdir -p "$out"
-rm -f "$out/live.rrd" "$out/play.rrd"
+rm -f "$out/live.rrd" "$out/play.rrd" "$out/noret.rrd"
 
 # frames=N from the tool's last line; fails unless N > 0 and the .rrd is not empty.
 check() {
@@ -37,6 +38,27 @@ if [ $status -ne 0 ]; then
   exit 1
 fi
 check play "$out/play.log" "$out/play.rrd"
+
+# mini.lvx2 with its second point, (4, 5, 6) mm at byte 157 (headers 92 + frame 24 + package 27
+# + point 14), zeroed into a no-return. Its extrinsic has z = 0.3 m, which would move the point
+# off the origin: the logged point count must not change with --extrinsic (#171).
+cp "$lvx2" "$out/noret.lvx2"
+dd if=/dev/zero of="$out/noret.lvx2" bs=1 seek=157 count=12 conv=notrunc 2> /dev/null
+logged_points() {
+  sed -n 's/^logged frames=[0-9]* points=\([0-9]*\) .*/\1/p' "$1"
+}
+"$bin" play "$out/noret.lvx2" --rate 0 --save "$out/noret.rrd" 2> "$out/noret.log" &&
+  "$bin" play "$out/noret.lvx2" --rate 0 --save "$out/noret.rrd" --extrinsic \
+    2> "$out/noret_ext.log"
+status=$?
+cat "$out/noret.log" "$out/noret_ext.log"
+plain=$(logged_points "$out/noret.log")
+ext=$(logged_points "$out/noret_ext.log")
+if [ $status -ne 0 ] || [ -z "$plain" ] || [ "$plain" != "$ext" ]; then
+  echo "no-return: exit $status, logged points $plain without --extrinsic, $ext with it"
+  exit 1
+fi
+echo "ok: no-return skipped with --extrinsic, points=$ext"
 
 py=$(command -v python3 || true)
 if [ -z "$py" ]; then

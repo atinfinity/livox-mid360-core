@@ -55,7 +55,7 @@ Options common to both sub-commands:
 | `--no-blueprint` | Send no layout; the viewer uses its heuristics | off |
 | `--radius M` | Point radius in metres | `0.02` |
 | `--frame-mode counter\|window`, `--window-ms N` | `FramePolicy`, as in `livox-mid360-cli replay` | `counter`, 100 ms |
-| `--extrinsic` | Transform the points on the host. `live` uses the LiDAR's install attitude (`0x0012`); `play` uses the file's extrinsic | off |
+| `--extrinsic` | Transform the points on the host. `live` uses the LiDAR's install attitude (`0x0012`); `play` uses the file's extrinsic. No-return points are still skipped | off |
 
 `live`:
 
@@ -108,7 +108,7 @@ panel collapsed.*
 | Entity / timeline | Content |
 | --- | --- |
 | `lidar` (static) | `ViewCoordinates::RIGHT_HAND_Z_UP`, the LiDAR frame |
-| `lidar/points` | One `Points3D` per frame, coloured by reflectivity with the turbo colour map (0 blue, 255 red). Points at the origin (no return) are skipped |
+| `lidar/points` | One `Points3D` per frame, coloured by reflectivity with the turbo colour map (0 blue, 255 red). Points at the origin (no return) are skipped, before `--extrinsic` moves the others ([#171](https://github.com/atinfinity/livox-mid360-core/issues/171)) |
 | `lidar/<lidar_id>/points` | `play` of a file with several LiDARs: as `lidar/points`, one entity per LiDAR |
 | timeline `frame` | A counter kept by the tool for each entity: +1 per logged frame, so frame N of every LiDAR is on step N |
 | timeline `sensor_time` | `Frame::base_time_ns`. `live`: a timestamp (host time, `TimestampPolicy::kHostOffsetOnce`). `play`: a duration, because the recorded LiDAR time has no known epoch |
@@ -164,6 +164,9 @@ The ctest `rerun_live_play` runs only with `LIVOX_MID360_BUILD_RERUN=ON`. It che
 codes, that frames were logged and that each `.rrd` file is not empty:
 
 - It plays `tests/data/mini.lvx2` into an `.rrd` file.
+- It plays a copy of that file with one point zeroed into a no-return, with and without
+  `--extrinsic`, and checks that both log the same number of points
+  ([#171](https://github.com/atinfinity/livox-mid360-core/issues/171)).
 - It runs `live` against the simulator for 2 s into a second `.rrd` file.
 
 The CI job `rerun` builds the tool and runs that test.
