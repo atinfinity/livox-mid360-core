@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <csignal>
 #include <iostream>
+#include <optional>
+#include <span>
 #include <string>
 #include <utility>
 
@@ -151,7 +153,9 @@ bool Viewer::open()
   return true;
 }
 
-void Viewer::log(const livox::mid360::Frame & frame, const std::string & entity)
+void Viewer::log(
+  const livox::mid360::Frame & frame, const std::optional<livox::mid360::Extrinsic> & extrinsic,
+  const std::string & entity)
 {
   positions_.clear();
   colors_.clear();
@@ -161,7 +165,11 @@ void Viewer::log(const livox::mid360::Frame & frame, const std::string & entity)
     if (p.x == 0.0F && p.y == 0.0F && p.z == 0.0F) {
       continue;
     }
-    positions_.emplace_back(p.x, p.y, p.z);
+    livox::mid360::Point q = p;
+    if (extrinsic) {
+      livox::mid360::apply(*extrinsic, std::span<livox::mid360::Point>(&q, 1));
+    }
+    positions_.emplace_back(q.x, q.y, q.z);
     colors_.push_back(palette_[p.reflectivity]);
   }
   auto & step = steps_[entity];
