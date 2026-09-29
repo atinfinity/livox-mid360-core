@@ -68,10 +68,13 @@ public:
 
   /// Sets up the sinks and sends the static data and the blueprint. False after printing why.
   bool open();
-  /// Logs the points of `frame` (zero points, i.e. no return, are skipped) to `entity`, on that
-  /// entity's next `frame` timeline step. The frame is taken by reference so that its points are
-  /// not copied.
-  void log(const livox::mid360::Frame & frame, const std::string & entity = "lidar/points");
+  /// Logs the points of `frame` to `entity`, on that entity's next `frame` timeline step. Zero
+  /// points (no return) are skipped before `extrinsic` moves the others, which would move them
+  /// to its translation (#171). The frame is taken by reference so that its points are not
+  /// copied.
+  void log(
+    const livox::mid360::Frame & frame, const std::optional<livox::mid360::Extrinsic> & extrinsic,
+    const std::string & entity = "lidar/points");
   /// Blocks until the sinks have taken everything logged so far.
   void flush();
   [[nodiscard]] std::uint64_t frames() const noexcept { return frames_; }

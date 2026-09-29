@@ -164,10 +164,7 @@ int run_live(int argc, char ** argv)
   auto next_report = start + 1s;
   while (!g_stop && (args->duration == 0 || std::chrono::steady_clock::now() < deadline)) {
     if (auto f = queue.pop(100ms)) {
-      if (extrinsic) {
-        apply(*extrinsic, *f);
-      }
-      viewer.log(*f);
+      viewer.log(*f, extrinsic);
     }
     if (const auto now = std::chrono::steady_clock::now(); now >= next_report) {
       next_report = now + 1s;

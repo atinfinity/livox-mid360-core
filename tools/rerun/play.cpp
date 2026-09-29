@@ -157,14 +157,10 @@ int run_play(int argc, char ** argv)
     return 2;
   }
   const Target no_info;  // a file without device info plays as one unnamed device
-  player.on_device_frame([&](const Lvx2DeviceInfo & d, Frame && f) {
+  player.on_device_frame([&](const Lvx2DeviceInfo & d, const Frame & f) {
     const auto it = targets.find(d.lidar_id);
     const Target & t = it != targets.end() ? it->second : no_info;
-    Frame frame = std::move(f);
-    if (t.extrinsic) {
-      apply(*t.extrinsic, frame);
-    }
-    viewer.log(frame, t.entity);
+    viewer.log(f, t.extrinsic, t.entity);
   });
 
   // The player runs on this thread; a helper thread turns SIGINT into a stop request.
