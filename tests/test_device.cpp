@@ -288,6 +288,10 @@ TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]")
   }
   DeviceOptions o = Fixture::options();
   o.stats_interval = 200ms;
+  // The idle close fires one window after the last packet. With the default 100 ms, a stalled
+  // runner (host and simulator both frozen) split a frame below the packet bounds checked
+  // below (#155); frame_cnt still closes every frame.
+  o.frame_policy.window = 1s;
   Recorder rec;  // outlives the Device: callbacks may run until the destructor returns
   auto dev = f.open(o);
   CHECK(dev->info().ip == Ipv4{127, 0, 0, 1});
