@@ -48,6 +48,11 @@ does not validate `device_type`, `lidar_type`, `frame_duration` or the extrinsic
 mid-frame (e.g. a recording that was killed) yields every complete package and then sets
 `truncated()`.
 
+`Lvx2Writer::open` takes `frame_duration_ms`, 50 by default. The specification fixes the field
+at 50 for version 2.0.0.0. The writer accepts other values for other frame lengths and still
+writes version 2.0.0.0, so other readers, Livox Viewer 2 among them, may not accept such a
+file ([#174](https://github.com/atinfinity/livox-mid360-core/issues/174)).
+
 ## Unverified against Livox Viewer 2
 
 The simulator is the only device this has been recorded from. Livox's sample files (next
@@ -149,7 +154,12 @@ while (auto p = reader.next_packet(); p && *p) {      // nullopt = end of file
 Lvx2Player player({.frame_policy = {}, .rate = 1.0, .loop = false});
 player.open("capture.lvx2");
 player.on_device_frame([](const Lvx2DeviceInfo & d, Frame && f) {
-  /* same Frame as Device::on_frame, of the device d */
+  /* same Frame as Device::on_frame, of the device d, in the LiDAR's own coordinates */
+  if (d.extrinsic_enable) {  // not applied by the player; check the values first
+    const auto mm = [](float m) { return static_cast<std::int32_t>(std::lround(m * 1000)); };
+    const InstallAttitude a{d.roll_deg, d.pitch_deg, d.yaw_deg, mm(d.x_m), mm(d.y_m), mm(d.z_m)};
+    livox::mid360::apply(extrinsic_from(a), f);
+  }
 });
 // Lvx2PlayStats{packets, frames, points, dropped_packets, loops, unlisted_packets, devices}
 auto stats = player.run(stop_token);
@@ -157,6 +167,18 @@ auto stats = player.run(stop_token);
 
 - `Lvx2Player` feeds the recorded timestamps as they are (`TimestampPolicy::kLidar`); frames
   are closed by `Lvx2PlayOptions::frame_policy`, not by the file's 50 ms frames.
+- The points of one package share one time. A package header has no `time_interval`, so
+  `Lvx2Packet::to_data_packet_view()` sets it to 0, and every point of the package gets the
+  package's `offset_ns`. In a live frame, the points are spread over the time that the packet
+  covers ([protocol_notes.md](protocol_notes.md)). This is a limit of the format
+  ([#174](https://github.com/atinfinity/livox-mid360-core/issues/174)).
+- The file's extrinsic is not applied. Frames are in the LiDAR's own coordinates, also with
+  `extrinsic_enable` = 1, where the specification says that points "should be computed with
+  extrinsic parameters" ([#174](https://github.com/atinfinity/livox-mid360-core/issues/174)).
+  To apply it, build an `InstallAttitude` from the device info (metres to millimetres) and call
+  `apply(extrinsic_from(...), frame)`, as in the example above. The reader does not check the
+  values, and the Outdoor sample's translations look like centimetres (see "Livox sample
+  files"). `apply()` also moves the no-return points at (0, 0, 0) to the translation.
 - Every device of the file is played, each through its own frame assembler, so a frame never
   mixes devices ([#169](https://github.com/atinfinity/livox-mid360-core/issues/169)). A
   package goes to the device-info entry with its `lidar_id`. A file with one device (or none)
@@ -200,7 +222,9 @@ or on SIGINT. Exit codes: 0 ok, 1 usage, 2 setup / I/O failure, 3 no packet reco
 
 `replay` prints the file's devices (`device sn=... lidar_id=...`) on stderr, one line per frame
 (`frame N points=P t=... dropped=D`) on stdout, unless `--quiet`, and a summary line
-(`packets= frames= points= dropped= loops=`) at the end. SIGINT ends a `--loop` run.
+(`packets= frames= points= dropped= loops=`) at the end. SIGINT ends a `--loop` run. The
+`extrinsic=on|off` of a device line is the file's `extrinsic_enable`. `replay` does not apply
+the extrinsic; [`livox-mid360-rerun play --extrinsic`](rerun.md) does.
 
 A file with several devices plays all of them. Each frame line then names its device
 (`frame N lidar_id=I points=...`, with `N` counted per device), and one line per device
