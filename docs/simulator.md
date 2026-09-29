@@ -298,4 +298,4 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Install attitude `0x0012` | stored only; with `--apply-attitude`, Cartesian points moved by `Rz * Ry * Rx` + translation after the FOV crop, spherical untouched | whether the firmware applies the key to its output at all, in which convention and to which data types ([#110](https://github.com/atinfinity/livox-mid360-core/issues/110)) |
 | FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window | the wiki defines neither the edge inclusivity nor the wrap-around |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
-| `frame_cnt` period | 100 ms | |
+| `frame_cnt` period | 100 ms (`--frame-ms`) | the wiki marks `frame_cnt` invalid for a non-repetitive scanner. Livox's sample `.lvx2` files have `frame_counter` 0 in every package, but the LVX2 spec marks that field reserved, so they say nothing about the firmware ([#164](https://github.com/atinfinity/livox-mid360-core/issues/164), [lvx2.md](lvx2.md#livox-sample-files)) |
