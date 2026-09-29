@@ -1,8 +1,0 @@
-blank_issues_enabled: true
-contact_links:
-  - name: Getting started
-    url: https://github.com/atinfinity/livox-mid360-core/blob/main/docs/getting_started.md
-    about: Build, the simulator, connecting a real Mid-360 and troubleshooting by exit code.
-  - name: Roadmap
-    url: https://github.com/atinfinity/livox-mid360-core/blob/main/docs/roadmap.md
-    about: Planned work and project decisions. Check here before proposing a feature.
