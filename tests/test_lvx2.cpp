@@ -345,6 +345,7 @@ TEST_CASE("lvx2 player: frames, loop, stop token and lidar_id filter", "[lvx2]")
   {
     Lvx2PlayOptions o;
     o.rate = 0;
+    o.lidar_id = infos[0].lidar_id;
     Lvx2Player pl(o);
     REQUIRE(pl.open(path));
     CHECK(pl.devices().size() == 2);
@@ -354,27 +355,48 @@ TEST_CASE("lvx2 player: frames, loop, stop token and lidar_id filter", "[lvx2]")
     pl.on_frame([&](Frame && f) { frames.push_back(std::move(f)); });
     auto s = pl.run();
     REQUIRE(s);
-    CHECK(packets == 21);
-    CHECK(s->packets == 21);
+    CHECK(packets == 20);  // device 2's packet is filtered out
+    CHECK(s->packets == 20);
     CHECK(s->loops == 1);
+    CHECK(s->frames == 4);  // frame_cnt 0, 1, 2, 3
     CHECK(s->frames == frames.size());
-    CHECK(s->points == 84);
-    // frame_cnt 0,1,2,3 plus the flushed tail (device 2's packet lands in frame_cnt 0 → drop)
-    CHECK(frames.size() >= 4);
+    CHECK(s->points == 80);
+    CHECK(s->dropped_packets == 0);
     CHECK(frames[0].points.size() == 20);
   }
-  SECTION("lidar_id filter")
+  SECTION("lidar_id: required for a multi-device file, and must be listed (#163)")
   {
     Lvx2PlayOptions o;
     o.rate = 0;
-    o.lidar_id = infos[0].lidar_id;
-    Lvx2Player pl(o);
-    REQUIRE(pl.open(path));
-    auto s = pl.run();
+    Lvx2Player all(o);
+    auto r = all.open(path);
+    REQUIRE(!r);
+    CHECK(r.error().kind == Lvx2Error::Kind::kInvalidArgument);
+    CHECK(r.error().detail == "the file holds 2 devices (lidar_id 167880896, 2); choose one");
+    auto not_open = all.run();
+    REQUIRE(!not_open);
+    CHECK(not_open.error().kind == Lvx2Error::Kind::kInvalidArgument);
+
+    o.lidar_id = 99;
+    Lvx2Player unknown(o);
+    auto u = unknown.open(path);
+    REQUIRE(!u);
+    CHECK(u.error().detail == "lidar_id 99 is not in the file (lidar_id 167880896, 2)");
+
+    o.lidar_id = infos[1].lidar_id;
+    Lvx2Player second(o);
+    REQUIRE(second.open(path));
+    auto s = second.run();
     REQUIRE(s);
-    CHECK(s->packets == 20);
-    CHECK(s->frames == 4);
-    CHECK(s->dropped_packets == 0);
+    CHECK(s->packets == 1);
+    CHECK(s->frames == 1);
+
+    // A failed open leaves the player closed, not playing the file of an earlier open.
+    const auto mini = std::filesystem::path(LIVOX_MID360_TEST_DATA_DIR) / "mini.lvx2";
+    REQUIRE(!second.open(mini));  // lists only 0x0A01A8C0
+    auto closed = second.run();
+    REQUIRE(!closed);
+    CHECK(closed.error().kind == Lvx2Error::Kind::kInvalidArgument);
   }
   SECTION("loop until stop")
   {

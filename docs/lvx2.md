@@ -92,7 +92,11 @@ auto stats = player.run(stop_token);
   partial frame is flushed at the end of every pass. `Frame::index` is not reset: it starts at
   0 for each `run()` and keeps counting across passes
   ([#149](https://github.com/atinfinity/livox-mid360-core/issues/149)).
-- `lidar_id` filters a multi-device file to one LiDAR.
+- `lidar_id` plays one LiDAR of the file. One frame assembler cannot take several LiDARs, so
+  `open()` fails with `kInvalidArgument` when the file lists more than one device and
+  `lidar_id` is not set, or when `lidar_id` is not in the list; the `detail` names the file's
+  `lidar_id`s ([#163](https://github.com/atinfinity/livox-mid360-core/issues/163)). Use
+  `Lvx2Reader` for the packets of every device.
 - Errors are `std::expected<_, Lvx2Error>` with `kIo` (+ `errno_value`), `kInvalidArgument`,
   `kUnsupportedDataType` and `kBadFile` (+ `detail`).
 
@@ -113,9 +117,11 @@ refuses to overwrite an existing file unless `--force` is given, prints
 `packets=N frames=M bytes=B` once per second on stderr and stops after `--duration` seconds
 or on SIGINT. Exit codes: 0 ok, 1 usage, 2 setup / I/O failure, 3 no packet recorded.
 
-`replay` prints one line per frame (`frame N points=P t=... dropped=D`) on stdout, unless
-`--quiet`, and a summary line (`packets= frames= points= dropped= loops=`) at the end.
-SIGINT ends a `--loop` run.
+`replay` prints the file's devices (`device sn=... lidar_id=...`) on stderr, one line per frame
+(`frame N points=P t=... dropped=D`) on stdout, unless `--quiet`, and a summary line
+(`packets= frames= points= dropped= loops=`) at the end. SIGINT ends a `--loop` run. A file with
+several devices needs `--lidar-id` with one of the listed `lidar_id`s; without it, `replay`
+names them and exits with 2.
 
 Against the simulator:
 
