@@ -49,15 +49,63 @@ mid-frame (e.g. a recording that was killed) yields every complete package and t
 
 ## Unverified against Livox Viewer 2
 
-The simulator is the only "device" this has been run against. Tracked on [#108](https://github.com/atinfinity/livox-mid360-core/issues/108):
+The simulator is the only device this has been recorded from. Livox's sample files (next
+section) answer some of the questions about files written by Viewer 2, but none about what
+Viewer 2 accepts. Tracked on [#108](https://github.com/atinfinity/livox-mid360-core/issues/108):
 
-- whether Viewer 2 requires `lidar_id` to be the SDK2 handle (IP as `u32`) or accepts any value;
-- meaning of `lidar_type` (the spec calls it reserved);
-- whether Viewer 2 expects frames binned on absolute 50 ms boundaries or from the first packet;
-- whether files without IMU packages open and replay;
-- extrinsic units (deg / m) and the sign of `extrinsic_enable`;
-- opening and replaying a file recorded by `livox-mid360-cli record` in Viewer 2, and reading
-  a file recorded by Viewer 2 with `livox-mid360-cli replay`.
+- whether Viewer 2 requires `lidar_id` to be the SDK2 handle (IP as `u32`) or accepts any
+  value. The sample files do use the IP;
+- meaning of `lidar_type` (the spec calls it reserved). The sample files have 247 in the
+  device info and 8 in every package header, where the writer puts 0;
+- whether Viewer 2 expects frames binned on absolute 50 ms boundaries. Its own files are not:
+  a frame starts about every 50 ms from the recording's start, and almost every frame spans two
+  absolute bins;
+- whether files without IMU packages open. The sample files have none either;
+- extrinsic units (deg / m) and the sign of `extrinsic_enable`. The sample values do not settle
+  the units (see below);
+- opening and replaying a file recorded by `livox-mid360-cli record` in Viewer 2. The other
+  direction works: `livox-mid360-cli replay` reads the sample files.
+
+## Livox sample files
+
+The [Mid-360 downloads page](https://www.livoxtech.com/mid-360/downloads) has two recordings,
+"Point Cloud Data - Indoor" and "- Outdoor". Both replay with `livox-mid360-cli replay`
+([#164](https://github.com/atinfinity/livox-mid360-core/issues/164)):
+
+| File | Size | Devices | Length | Replay with `--frame-mode window` |
+|---|---|---|---|---|
+| `Indoor_sampledata.lvx2` | 223 MB | 1 | 78 s | 777 frames of 20 064 points (the last one partial), 0 dropped |
+| `Outdoor_sampledata.lvx2` | 597 MB | 3 | 70 s | per `--lidar-id`: 695 frames of 20 064 points (the last one partial), 0 dropped |
+
+```sh
+livox-mid360-cli replay Indoor_sampledata.lvx2 --frame-mode window
+livox-mid360-cli replay Outdoor_sampledata.lvx2 --frame-mode window --lidar-id 738306240
+```
+
+What they contain:
+
+| Field | Value |
+|---|---|
+| `frame_duration` | 50 |
+| `lidar_sn` | `47MDK9DF710030` (both files), `47MDK9DF710195`, `47MDK9DF710124` |
+| `hub_sn` | not zeros: 16 bytes that look uninitialised, different per file |
+| `lidar_id` | the IP as `u32`: 738306240 = 192.168.1.44, 3271665856 = 192.168.1.195, 2080483520 = 192.168.1.124 |
+| `lidar_type` | 247 in the device info, 8 in every package header |
+| `device_type` | 9 |
+| extrinsic | `extrinsic_enable` 1. Indoor: all zeros. Outdoor: roll, pitch, yaw, x, y, z = `(-0.91, 0.41, 0.24, 0, 0, 0.8)`, `(0.84, -181.23, -92.12, -36.4, 27.9, 80.1)` and `(-0.42, -178.55, 88.33, -37.7, -30.4, 82.1)`; the translations differ by a factor of about 100 between the first device and the other two |
+| frames | 50 ms from the recording's start, not absolute bins; in Outdoor one frame holds the packages of all three devices |
+| package `timestamp_type` | 0 (no synchronisation); in Outdoor one LiDAR's clock is 2.66 s ahead of the other two |
+| package `data_type` | 1, 96 points (1344 bytes) per package, no `udp_counter` gaps |
+| package `frame_counter` | 0 in every package |
+
+Two consequences for a replay:
+
+- `frame_counter` never changes, so the default `--frame-mode counter` falls back to the time
+  window after `2 × window` (see "Frame counter mode" in [api.md](api.md)). The first frame
+  then covers 200 ms (40 032 points, 776 frames in Indoor). With `--frame-mode window` every
+  frame covers 100 ms. Whether the firmware sends `frame_cnt` 0 or Viewer 2 writes 0 is
+  open ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
+- The Outdoor file holds three LiDARs, so it plays one at a time with `--lidar-id`.
 
 ## Library API
 
