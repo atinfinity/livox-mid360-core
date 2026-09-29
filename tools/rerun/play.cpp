@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// `play`: Lvx2Player -> Rerun, paced by the recorded time (issue #147).
+// `play`: Lvx2Player -> Rerun, paced by the recorded time (issue #147); every device of the
+// file, each to its own entity (#169).
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <format>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <thread>
 #include <utility>
-#include <vector>
 
 #include "livox/mid360/mid360.hpp"
 #include "viewer.hpp"
@@ -77,28 +78,28 @@ std::optional<Args> parse_args(int argc, char ** argv)
   return a;
 }
 
-/// The file's extrinsic of the device that is played: `lidar_id`, else the only one.
-std::optional<Extrinsic> file_extrinsic(
-  const std::vector<Lvx2DeviceInfo> & devices, std::optional<std::uint32_t> lidar_id)
+/// The file's extrinsic of `dev`, if it is enabled.
+std::optional<Extrinsic> file_extrinsic(const Lvx2DeviceInfo & dev)
 {
-  const Lvx2DeviceInfo * dev = nullptr;
-  for (const auto & d : devices) {
-    if (lidar_id ? d.lidar_id == *lidar_id : devices.size() == 1) {
-      dev = &d;
-    }
-  }
-  if (dev == nullptr || !dev->extrinsic_enable) {
+  if (!dev.extrinsic_enable) {
     return std::nullopt;
   }
   InstallAttitude att;
-  att.roll_deg = dev->roll_deg;
-  att.pitch_deg = dev->pitch_deg;
-  att.yaw_deg = dev->yaw_deg;
-  att.x_mm = static_cast<std::int32_t>(std::lround(dev->x_m * 1000.0F));
-  att.y_mm = static_cast<std::int32_t>(std::lround(dev->y_m * 1000.0F));
-  att.z_mm = static_cast<std::int32_t>(std::lround(dev->z_m * 1000.0F));
+  att.roll_deg = dev.roll_deg;
+  att.pitch_deg = dev.pitch_deg;
+  att.yaw_deg = dev.yaw_deg;
+  att.x_mm = static_cast<std::int32_t>(std::lround(dev.x_m * 1000.0F));
+  att.y_mm = static_cast<std::int32_t>(std::lround(dev.y_m * 1000.0F));
+  att.z_mm = static_cast<std::int32_t>(std::lround(dev.z_m * 1000.0F));
   return extrinsic_from(att);
 }
+
+/// Where the frames of one played device go.
+struct Target
+{
+  std::string entity = "lidar/points";
+  std::optional<Extrinsic> extrinsic;
+};
 }  // namespace
 
 int run_play(int argc, char ** argv)
@@ -115,7 +116,7 @@ int run_play(int argc, char ** argv)
   if (auto r = player.open(args->file); !r) {
     std::cerr << "open " << args->file << ": " << to_string(r.error()) << "\n";
     if (r.error().kind == Lvx2Error::Kind::kInvalidArgument) {
-      std::cerr << "pick the device to play with --lidar-id N\n";  // several devices (#163)
+      std::cerr << "drop --lidar-id to play every device\n";  // not in the file (#169)
     }
     return 2;
   }
@@ -124,13 +125,30 @@ int run_play(int argc, char ** argv)
       "device sn={} lidar_id={} type={} extrinsic={}\n", d.lidar_sn, d.lidar_id, d.device_type,
       d.extrinsic_enable ? "on" : "off");
   }
-  std::optional<Extrinsic> extrinsic;
-  if (args->view.extrinsic) {
-    extrinsic = file_extrinsic(player.devices(), args->play.lidar_id);
-    if (!extrinsic) {
-      std::cerr << "--extrinsic: the file has no enabled extrinsic for the played device\n";
-      return 2;
+  // Several devices each go to lidar/<lidar_id>/points, with their own extrinsic (#169).
+  const bool several = !args->play.lidar_id && player.devices().size() > 1;
+  std::map<std::uint32_t, Target> targets;
+  for (const auto & d : player.devices()) {
+    if (args->play.lidar_id && d.lidar_id != *args->play.lidar_id) {
+      continue;
     }
+    Target t;
+    if (several) {
+      t.entity = std::format("lidar/{}/points", d.lidar_id);
+    }
+    if (args->view.extrinsic) {
+      t.extrinsic = file_extrinsic(d);
+      if (!t.extrinsic) {
+        std::cerr << std::format(
+          "--extrinsic: the file has no enabled extrinsic for lidar_id {}\n", d.lidar_id);
+        return 2;
+      }
+    }
+    targets.emplace(d.lidar_id, std::move(t));
+  }
+  if (args->view.extrinsic && targets.empty()) {
+    std::cerr << "--extrinsic: the file has no device info\n";
+    return 2;
   }
 
   // Recorded LiDAR time has no known epoch, hence a duration timeline.
@@ -138,12 +156,15 @@ int run_play(int argc, char ** argv)
   if (!viewer.open()) {
     return 2;
   }
-  player.on_frame([&](Frame && f) {
+  const Target no_info;  // a file without device info plays as one unnamed device
+  player.on_device_frame([&](const Lvx2DeviceInfo & d, Frame && f) {
+    const auto it = targets.find(d.lidar_id);
+    const Target & t = it != targets.end() ? it->second : no_info;
     Frame frame = std::move(f);
-    if (extrinsic) {
-      apply(*extrinsic, frame);
+    if (t.extrinsic) {
+      apply(*t.extrinsic, frame);
     }
-    viewer.log(frame);
+    viewer.log(frame, t.entity);
   });
 
   // The player runs on this thread; a helper thread turns SIGINT into a stop request.

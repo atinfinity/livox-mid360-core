@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <optional>
 #include <rerun.hpp>
 #include <span>
@@ -66,9 +68,10 @@ public:
 
   /// Sets up the sinks and sends the static data and the blueprint. False after printing why.
   bool open();
-  /// Logs the points of `frame` (zero points, i.e. no return, are skipped) on the next
-  /// `frame` timeline step. The frame is taken by reference so that its points are not copied.
-  void log(const livox::mid360::Frame & frame);
+  /// Logs the points of `frame` (zero points, i.e. no return, are skipped) to `entity`, on that
+  /// entity's next `frame` timeline step. The frame is taken by reference so that its points are
+  /// not copied.
+  void log(const livox::mid360::Frame & frame, const std::string & entity = "lidar/points");
   /// Blocks until the sinks have taken everything logged so far.
   void flush();
   [[nodiscard]] std::uint64_t frames() const noexcept { return frames_; }
@@ -81,7 +84,9 @@ private:
   std::array<rerun::Color, 256> palette_{};  ///< reflectivity -> colour
   std::vector<rerun::Position3D> positions_;
   std::vector<rerun::Color> colors_;
-  std::uint64_t frames_ = 0;  ///< also the `frame` timeline: Frame::index restarts per loop
+  std::uint64_t frames_ = 0;  ///< logged frames of every entity
+  /// The `frame` timeline of each entity: its logged frames (Frame::index restarts per loop).
+  std::map<std::string, std::uint64_t, std::less<>> steps_;
   std::uint64_t points_ = 0;
 };
 

@@ -151,7 +151,7 @@ bool Viewer::open()
   return true;
 }
 
-void Viewer::log(const livox::mid360::Frame & frame)
+void Viewer::log(const livox::mid360::Frame & frame, const std::string & entity)
 {
   positions_.clear();
   colors_.clear();
@@ -164,7 +164,8 @@ void Viewer::log(const livox::mid360::Frame & frame)
     positions_.emplace_back(p.x, p.y, p.z);
     colors_.push_back(palette_[p.reflectivity]);
   }
-  rec_.set_time_sequence("frame", static_cast<std::int64_t>(frames_));
+  auto & step = steps_[entity];
+  rec_.set_time_sequence("frame", static_cast<std::int64_t>(step));
   const auto t = static_cast<std::int64_t>(frame.base_time_ns);
   if (sensor_time_ == SensorTime::kTimestamp) {
     rec_.set_time_timestamp_nanos_since_epoch("sensor_time", t);
@@ -172,9 +173,10 @@ void Viewer::log(const livox::mid360::Frame & frame)
     rec_.set_time_duration_nanos("sensor_time", t);
   }
   rec_.log(
-    "lidar/points", rerun::Points3D(rerun::Collection<rerun::Position3D>::borrow(positions_))
-                      .with_colors(rerun::Collection<rerun::Color>::borrow(colors_))
-                      .with_radii({options_.radius}));
+    entity, rerun::Points3D(rerun::Collection<rerun::Position3D>::borrow(positions_))
+              .with_colors(rerun::Collection<rerun::Color>::borrow(colors_))
+              .with_radii({options_.radius}));
+  ++step;
   ++frames_;
   points_ += positions_.size();
 }
