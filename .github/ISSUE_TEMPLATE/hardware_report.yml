@@ -1,0 +1,66 @@
+name: Hardware report
+description: A real Mid-360 behaves differently from the simulator or the docs.
+labels: [bug, needs-hardware]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The library is developed against the bundled simulator, and verification on real
+        hardware is tracked in [#11](https://github.com/atinfinity/livox-mid360-core/issues/11).
+        The simulator's guesses where the protocol wiki is silent are listed under
+        [Assumptions to verify on hardware](https://github.com/atinfinity/livox-mid360-core/blob/main/docs/simulator.md#assumptions-to-verify-on-hardware-11).
+        Reports that confirm or refute one of them are just as welcome as bug reports.
+  - type: textarea
+    id: observed
+    attributes:
+      label: What the LiDAR did
+      description: The command or key, what the Mid-360 answered or sent, and what the library did with it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the simulator or the docs say
+      description: The simulator's behaviour, the row of the assumptions table, or the doc page this differs from.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Commands or a minimal program, and whether it happens every time.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output and captures
+      description: |
+        Log output, `Event` lines, and if possible a pcap of the exchange
+        (`sudo tcpdump -i <iface> -w capture.pcap udp and host <LiDAR address>`). Attach files by
+        dragging them here; `tools/` has a pcap decoder.
+      render: text
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      description: '`version_app` from Livox Viewer 2 or `to_string(*dev->identity())`.'
+      placeholder: 13.18.0.244
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Library version or commit
+      description: '`git rev-parse --short HEAD`, or `livox-mid360-cli --version`.'
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: OS and architecture, how the LiDAR is connected (direct or switch), host and LiDAR addresses, time sync source if any.
+      placeholder: |
+        Ubuntu 24.04 arm64, direct link, host 192.168.1.5, LiDAR 192.168.1.1xx, no PTP
+    validations:
+      required: true
