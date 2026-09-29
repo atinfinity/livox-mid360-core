@@ -35,6 +35,9 @@ constexpr std::array<char, 16> kSignature = {'l', 'i', 'v', 'o', 'x', '_', 't', 
                                              'c', 'h', 0,   0,   0,   0,   0,   0};
 constexpr std::uint8_t kTypeCartesian32 = 1;
 constexpr std::uint8_t kTypeCartesian16 = 2;
+/// A device clock that moves more than this between two of its packages has jumped (a restart,
+/// a time synchronisation locking); reordered packages are milliseconds apart.
+constexpr std::uint64_t kClockJumpNs = 1'000'000'000;
 
 Lvx2Error io_error(std::string what)
 {
@@ -142,12 +145,22 @@ DataPacketView Lvx2Packet::to_data_packet_view() const noexcept
 
 struct Lvx2Writer::Impl
 {
+  /// One device's clock on the recording's time line (#173): without time synchronisation,
+  /// each LiDAR counts from its own boot.
+  struct DeviceClock
+  {
+    std::optional<std::uint64_t> base;  ///< timestamp at recording time 0
+    std::uint64_t prev = 0;             ///< last timestamp seen
+  };
+
   FilePtr file;
   std::vector<std::uint32_t> lidar_ids;
   std::uint32_t frame_duration_ms = 50;
   Stats stats;
   std::vector<std::byte> frame;  ///< packages of the open frame (after its 24-byte header)
-  std::optional<std::uint64_t> frame_bin;
+  std::optional<std::uint64_t> frame_slot;  ///< recording time / frame_duration of the open frame
+  std::vector<DeviceClock> clocks;          ///< one per device
+  std::int64_t latest_ns = 0;               ///< newest recording time written
   std::uint64_t frame_index = 0;
   std::uint64_t offset = 0;  ///< file position of the open frame's header
   std::vector<std::byte> scratch;
@@ -184,7 +197,7 @@ struct Lvx2Writer::Impl
     ++stats.frames;
     ++frame_index;
     frame.clear();
-    frame_bin.reset();
+    frame_slot.reset();
     return {};
   }
 };
@@ -245,7 +258,9 @@ std::expected<void, Lvx2Error> Lvx2Writer::open(
   impl_->frame_duration_ms = frame_duration_ms;
   impl_->stats = {};
   impl_->frame.clear();
-  impl_->frame_bin.reset();
+  impl_->frame_slot.reset();
+  impl_->clocks.assign(devices.size(), {});
+  impl_->latest_ns = 0;
   impl_->frame_index = 0;
   if (auto r = impl_->write_bytes(hdr); !r) {
     impl_->file.reset();
@@ -295,14 +310,31 @@ std::expected<bool, Lvx2Error> Lvx2Writer::write(
     return std::unexpected(
       Lvx2Error{Lvx2Error::Kind::kUnsupportedDataType, 0, "unknown data_type"});
   }
-  const std::uint64_t bin =
-    h.timestamp_ns / (static_cast<std::uint64_t>(im.frame_duration_ms) * 1'000'000ULL);
-  if (im.frame_bin && *im.frame_bin != bin) {
+  // Frames are cut on the recording's time line, which starts at the first package (#173). A
+  // device's clock joins it when the device sends its first package, and again after a jump,
+  // at the newest time written so far. A late package (reordered, or of a device a little
+  // behind) goes into the open frame: frames only move forward.
+  auto & clock = im.clocks[device_index];
+  const std::uint64_t ts = h.timestamp_ns;
+  const std::uint64_t moved = ts > clock.prev ? ts - clock.prev : clock.prev - ts;
+  if (!clock.base || moved > kClockJumpNs) {
+    clock.base = ts - static_cast<std::uint64_t>(im.latest_ns);
+  }
+  clock.prev = ts;
+  const auto time_ns = static_cast<std::int64_t>(ts - *clock.base);  // < 0: before time 0
+  im.latest_ns = std::max(im.latest_ns, time_ns);
+  const std::uint64_t slot =
+    time_ns <= 0 ? 0
+                 : static_cast<std::uint64_t>(time_ns) /
+                     (static_cast<std::uint64_t>(im.frame_duration_ms) * 1'000'000ULL);
+  if (im.frame_slot && slot > *im.frame_slot) {
     if (auto r = im.flush_frame(); !r) {
       return std::unexpected(r.error());
     }
   }
-  im.frame_bin = bin;
+  if (!im.frame_slot || slot > *im.frame_slot) {
+    im.frame_slot = slot;
+  }
   const std::size_t pos = im.frame.size();
   im.frame.resize(pos + kPackageHeaderSize + points.size());
   const std::span<std::byte> ph = std::span(im.frame).subspan(pos, kPackageHeaderSize);

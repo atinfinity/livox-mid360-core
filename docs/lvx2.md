@@ -35,7 +35,7 @@ package.
 | `lidar_type` | 0 |
 | `device_type` | 9 |
 | extrinsic | key `0x0012` (install attitude) when readable, mm converted to m, `extrinsic_enable` = 1; otherwise zeros and 0 |
-| frames | cut on the packet `timestamp` in absolute 50 ms bins (`timestamp / 50 ms`); a bin change flushes the frame |
+| frames | 50 ms of recording time each, counted from the first package; a package past the open frame flushes it ([#173](https://github.com/atinfinity/livox-mid360-core/issues/173)). Each device's `timestamp` joins the recording's time line at its first package, so LiDARs without time synchronisation share the frames. A clock jump of more than 1 s rejoins it the same way, and a late (reordered) package goes into the open frame |
 | package `version` | 0 |
 | `timestamp_type` | the packet's `time_type` |
 | `frame_counter` | the packet's `frame_cnt` (the spec marks the field reserved; the sample files have 0) |
@@ -59,9 +59,9 @@ Viewer 2 accepts. Tracked on [#108](https://github.com/atinfinity/livox-mid360-c
 - meaning of `lidar_type` (the spec calls it reserved in the device info and the package
   header). The sample files have 247 in the device info and 8 in every package header, where
   the writer puts 0;
-- whether Viewer 2 expects frames binned on absolute 50 ms boundaries. Its own files are not:
-  a frame starts about every 50 ms from the recording's start, and almost every frame spans two
-  absolute bins;
+- whether Viewer 2 requires a particular frame cutting. Its own files start a frame about every
+  50 ms from the recording's start, with the packages of every device in it, and the writer
+  does the same ([#173](https://github.com/atinfinity/livox-mid360-core/issues/173));
 - whether files without IMU packages open. The sample files have none either;
 - whether Viewer 2 follows the spec's extrinsic units (degrees, metres), and the sign of
   `extrinsic_enable`. Two of the Outdoor sample's translations only make sense in centimetres
@@ -230,7 +230,8 @@ count equals the recorded one and the frame count matches the file's frames with
 ## Tests
 
 - `tests/test_lvx2.cpp`: writer → reader round trip (types 1 and 2, spherical conversion,
-  50 ms splitting, IMU ignored), the committed fixture `tests/data/mini.lvx2` (written by an
+  50 ms splitting, IMU ignored), the writer's frames with unsynchronised devices, a late
+  device, a reordered package and a clock jump (#173), the committed fixture `tests/data/mini.lvx2` (written by an
   independent Python `struct.pack` script, not by `Lvx2Writer`), truncated and corrupt files,
   and the player (frames, every device through its own assembler, `lidar_id` filter, loop +
   stop token, pacing per device).

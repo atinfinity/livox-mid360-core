@@ -43,8 +43,8 @@ if [ "$rec_packets" != "$rep_packets" ]; then
   echo "packet count mismatch: recorded $rec_packets, replayed $rep_packets"
   exit 1
 fi
-# The writer cuts file frames on absolute 50 ms bins; the 50 ms replay window starts at the
-# first packet, so the partial frames at both ends may differ: allow two.
+# The writer's file frames and the replay's 50 ms windows both start at the first packet, but
+# they are cut by different code, so the partial frames at both ends may differ: allow two.
 diff=$((rec_frames - rep_frames))
 if [ "$diff" -gt 2 ] || [ "$diff" -lt -2 ]; then
   echo "frame count mismatch: recorded $rec_frames file frames, replayed $rep_frames"
