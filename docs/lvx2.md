@@ -8,9 +8,10 @@ Livox Viewer 2 are listed on [#108](https://github.com/atinfinity/livox-mid360-c
 
 ## File layout
 
-Reference: "LVX2 Specifications" (Livox, 2023.06 v1.0). All integers are little-endian,
-structures are packed. Livox-SDK2 and livox_ros_driver2 contain no lvx2 code; the layout
-below is taken from the specification only.
+Reference: ["LVX2 Specifications"](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/LVX2%20Specifications.pdf)
+(Livox, 2023.06 v1.0, on the [downloads center](https://www.livoxtech.com/downloads)). All
+integers are little-endian, structures are packed. Livox-SDK2 and livox_ros_driver2 contain no
+lvx2 code; the layout below is taken from the specification only.
 
 | Block | Size | Fields |
 |---|---|---|
@@ -18,7 +19,7 @@ below is taken from the specification only.
 | Private header | 5 | `u32` frame_duration (ms, 50), `u8` device_count |
 | Device info × N | 63 each | `char[16]` lidar_sn, `char[16]` hub_sn, `u32` lidar_id, `u8` lidar_type (reserved), `u8` device_type (9 = Mid-360, 10 = HAP), `u8` extrinsic_enable, `f32` roll, pitch, yaw (deg), `f32` x, y, z (m) |
 | Frame header | 24 | `u64` current_offset, `u64` next_offset, `u64` frame_index; packages follow back-to-back until `next_offset` |
-| Package header | 27 | `u8` version (0), `u32` lidar_id, `u8` lidar_type, `u8` timestamp_type, `u64` timestamp (ns), `u16` udp_counter, `u8` data_type, `u32` length (point bytes), `u8` frame_counter, `u8[4]` reserved |
+| Package header | 27 | `u8` version (0), `u32` lidar_id, `u8` lidar_type (reserved), `u8` timestamp_type, `u64` timestamp (ns), `u16` udp_counter, `u8` data_type, `u32` length (point bytes), `u8` frame_counter (reserved), `u8[4]` reserved |
 | Points | `length` | identical to the UDP payload: type 1 = 14 B/pt (`i32` x, y, z mm, `u8` reflectivity, `u8` tag), type 2 = 8 B/pt (`i16` x, y, z cm, `u8`, `u8`) |
 
 Only data types 1 and 2 are valid in a file: there is no IMU package and no spherical
@@ -37,7 +38,7 @@ package.
 | frames | cut on the packet `timestamp` in absolute 50 ms bins (`timestamp / 50 ms`); a bin change flushes the frame |
 | package `version` | 0 |
 | `timestamp_type` | the packet's `time_type` |
-| `frame_counter` | the packet's `frame_cnt` |
+| `frame_counter` | the packet's `frame_cnt` (the spec marks the field reserved; the sample files have 0) |
 | spherical packets (type 3) | converted to type 1 (mm, rounded) |
 | IMU packets | not written; `Lvx2Writer::write` returns `false` and `stats().ignored` counts them |
 
@@ -55,14 +56,18 @@ Viewer 2 accepts. Tracked on [#108](https://github.com/atinfinity/livox-mid360-c
 
 - whether Viewer 2 requires `lidar_id` to be the SDK2 handle (IP as `u32`) or accepts any
   value. The sample files do use the IP;
-- meaning of `lidar_type` (the spec calls it reserved). The sample files have 247 in the
-  device info and 8 in every package header, where the writer puts 0;
+- meaning of `lidar_type` (the spec calls it reserved in the device info and the package
+  header). The sample files have 247 in the device info and 8 in every package header, where
+  the writer puts 0;
 - whether Viewer 2 expects frames binned on absolute 50 ms boundaries. Its own files are not:
   a frame starts about every 50 ms from the recording's start, and almost every frame spans two
   absolute bins;
 - whether files without IMU packages open. The sample files have none either;
-- extrinsic units (deg / m) and the sign of `extrinsic_enable`. The sample values do not settle
-  the units (see below);
+- whether Viewer 2 follows the spec's extrinsic units (degrees, metres), and the sign of
+  `extrinsic_enable`. Two of the Outdoor sample's translations only make sense in centimetres
+  (see below);
+- whether Viewer 2 accepts a non-zero `frame_counter`, which the spec marks reserved and the
+  writer fills with `frame_cnt`;
 - opening and replaying a file recorded by `livox-mid360-cli record` in Viewer 2. The other
   direction works: `livox-mid360-cli replay` reads the sample files.
 
@@ -101,21 +106,22 @@ What they contain:
 | `lidar_sn` | `47MDK9DF710030` (both files), `47MDK9DF710195`, `47MDK9DF710124` |
 | `hub_sn` | not zeros: 16 bytes that look uninitialised, different per file |
 | `lidar_id` | the IP as `u32`: 738306240 = 192.168.1.44, 3271665856 = 192.168.1.195, 2080483520 = 192.168.1.124 |
-| `lidar_type` | 247 in the device info, 8 in every package header |
+| `lidar_type` | 247 in the device info, 8 in every package header (reserved in both) |
 | `device_type` | 9 |
-| extrinsic | `extrinsic_enable` 1. Indoor: all zeros. Outdoor: roll, pitch, yaw, x, y, z = `(-0.91, 0.41, 0.24, 0, 0, 0.8)`, `(0.84, -181.23, -92.12, -36.4, 27.9, 80.1)` and `(-0.42, -178.55, 88.33, -37.7, -30.4, 82.1)`; the translations differ by a factor of about 100 between the first device and the other two |
+| extrinsic | `extrinsic_enable` 1. Indoor: all zeros. Outdoor: roll, pitch, yaw, x, y, z = `(-0.91, 0.41, 0.24, 0, 0, 0.8)`, `(0.84, -181.23, -92.12, -36.4, 27.9, 80.1)` and `(-0.42, -178.55, 88.33, -37.7, -30.4, 82.1)`. The spec gives metres, which puts the last two LiDARs 80 m up; read as centimetres they are at (-0.364, 0.279, 0.801) m and (-0.377, -0.304, 0.821) m, level with the first one's 0.8 m |
 | frames | 50 ms from the recording's start, not absolute bins; in Outdoor one frame holds the packages of all three devices |
 | package `timestamp_type` | 0 (no synchronisation); in Outdoor one LiDAR's clock is 2.66 s ahead of the other two |
 | package `data_type` | 1, 96 points (1344 bytes) per package, no `udp_counter` gaps |
-| package `frame_counter` | 0 in every package |
+| package `frame_counter` | 0 in every package (a reserved field in the spec) |
 
 Two consequences for a replay:
 
 - `frame_counter` never changes, so the default `--frame-mode counter` falls back to the time
   window after `2 × window` (see "Frame counter mode" in [api.md](api.md)). The first frame
   then covers 200 ms (40 032 points, 776 frames in Indoor). With `--frame-mode window` every
-  frame covers 100 ms. Whether the firmware sends `frame_cnt` 0 or Viewer 2 writes 0 is
-  open ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
+  frame covers 100 ms. The spec marks `frame_counter` reserved, so other Viewer 2 recordings
+  are likely the same, and the 0 says nothing about the `frame_cnt` the firmware sends
+  ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 - The Outdoor file holds three LiDARs, so it plays one at a time with `--lidar-id`.
 
 ## Library API
