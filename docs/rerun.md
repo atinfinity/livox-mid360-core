@@ -7,6 +7,13 @@ recording, in the [Rerun](https://rerun.io) viewer. The viewer runs natively or 
 The tool is the only part of this repository with a third-party dependency, the Rerun C++ SDK,
 which in turn builds Apache Arrow. That is why it is **opt-in** and the library does not link it.
 
+![livox-mid360-rerun play of a looping .lvx2 recording in the Rerun web viewer](images/rerun-play.webp)
+
+*`play --loop` of a synthetic 10 s recording of a room with shelves, pillars and a walking
+person, in the web viewer. The recording has about 20 000 points per 100 ms frame, coloured by
+reflectivity. The layout is the embedded default, described in
+[Viewer layout](#viewer-layout-blueprint).*
+
 ## Build
 
 ```sh
@@ -81,6 +88,12 @@ build/tools/rerun/livox-mid360-rerun live --lidar-ip 127.0.0.1 --host-ip 127.0.0
 build/tools/rerun/livox-mid360-rerun play capture.lvx2 --loop
 ```
 
+![livox-mid360-rerun live against the simulator in the Rerun web viewer](images/rerun-live.webp)
+
+*`live` against the simulator: its default scene is seeded random points. The time panel
+follows the newest frame on the `frame` timeline. The screenshots were taken with the Selection
+panel collapsed.*
+
 ## What is logged
 
 | Entity / timeline | Content |
@@ -90,8 +103,9 @@ build/tools/rerun/livox-mid360-rerun play capture.lvx2 --loop
 | timeline `frame` | A counter kept by the tool: +1 per logged frame |
 | timeline `sensor_time` | `Frame::base_time_ns`. `live`: a timestamp (host time, `TimestampPolicy::kHostOffsetOnce`). `play`: a duration, because the recorded LiDAR time has no known epoch |
 
-The `frame` timeline does not use `Frame::index`, because `Lvx2Player` restarts that index at 0
-on every `--loop` pass.
+The `frame` timeline counts logged frames rather than using `Frame::index`. `Frame::index` is
+assigned when a frame is assembled, so it would leave gaps where `live` drops a frame from the
+queue.
 
 ## Viewer layout (blueprint)
 
