@@ -22,6 +22,12 @@ APIs, diagnostics, samples, hardware verification) is in progress and phase 3 (C
 has not started. Firmware upgrade commands (`0x04xx`) are out of scope. The full item list
 with tracking issues is in [docs/roadmap.md](docs/roadmap.md).
 
+## Getting started
+
+[docs/getting_started.md](docs/getting_started.md) goes step by step from a fresh Ubuntu 24.04
+machine to point clouds: build and test, receive from the bundled simulator, record and replay
+an `.lvx2` file, connect a real Mid-360 and use the library from your own CMake project.
+
 ## Requirements
 
 - Ubuntu 24.04+ with GCC 13/14 or Clang 19 (macOS with Apple Clang works for development and is built and tested in CI).
@@ -59,11 +65,6 @@ CMake options:
 
 "Top-level" is decided by `PROJECT_IS_TOP_LEVEL`, so consumers using `add_subdirectory` or
 `FetchContent` get no tests and no `-Werror` unless they opt in.
-
-## Contributing
-
-Lint, fuzzing, coverage and how to reproduce CI locally are described in
-[CONTRIBUTING.md](CONTRIBUTING.md). Open work is tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Usage
 
@@ -134,9 +135,14 @@ tests/                  Catch2 tests, generated golden vectors, libFuzzer target
 tools/                  Python reference implementation, pcap decoder, golden-vector generator, LiDAR simulator,
                         tools/cli: livox-mid360-cli (lvx2 record / replay, docs/lvx2.md),
                         tools/rerun: livox-mid360-rerun (Rerun viewer, docs/rerun.md)
-docs/                   roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md, lvx2.md (record / replay), rerun.md (viewer)
+docs/                   getting_started.md (first steps), roadmap.md (status and plans), architecture.md (overview: layers, threads, data flow), protocol_notes.md (wiki ambiguities), transport.md (UDP layer guide), session.md (discovery/commands), api.md (device layer design), simulator.md, lvx2.md (record / replay), rerun.md (viewer)
 docker/                 Ubuntu 24.04 reproduction of CI
 ```
+
+## Contributing
+
+Lint, fuzzing, coverage and how to reproduce CI locally are described in
+[CONTRIBUTING.md](CONTRIBUTING.md). Open work is tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## References
 
