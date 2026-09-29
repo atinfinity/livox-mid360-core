@@ -114,6 +114,9 @@ int run_play(int argc, char ** argv)
   Lvx2Player player(args->play);
   if (auto r = player.open(args->file); !r) {
     std::cerr << "open " << args->file << ": " << to_string(r.error()) << "\n";
+    if (r.error().kind == Lvx2Error::Kind::kInvalidArgument) {
+      std::cerr << "pick the device to play with --lidar-id N\n";  // several devices (#163)
+    }
     return 2;
   }
   for (const auto & d : player.devices()) {
@@ -125,8 +128,7 @@ int run_play(int argc, char ** argv)
   if (args->view.extrinsic) {
     extrinsic = file_extrinsic(player.devices(), args->play.lidar_id);
     if (!extrinsic) {
-      std::cerr << "--extrinsic: the file has no enabled extrinsic for the played device (give "
-                   "--lidar-id when it holds several)\n";
+      std::cerr << "--extrinsic: the file has no enabled extrinsic for the played device\n";
       return 2;
     }
   }

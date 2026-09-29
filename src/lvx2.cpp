@@ -559,8 +559,25 @@ std::expected<void, Lvx2Error> Lvx2Player::open(const std::filesystem::path & pa
   if (impl_->options.rate < 0) {
     return std::unexpected(invalid_argument("rate must be >= 0"));
   }
+  impl_->path.clear();  // run() refuses until an open succeeds
   if (auto r = impl_->reader.open(path); !r) {
     return r;
+  }
+  // One FrameAssembler cannot take several LiDARs: their packets would interleave into
+  // meaningless frames (#163). A lidar_id that the file does not list would play nothing.
+  const auto & devices = impl_->reader.devices();
+  const auto & id = impl_->options.lidar_id;
+  std::string ids;
+  for (const auto & d : devices) {
+    ids += std::format("{}{}", ids.empty() ? "" : ", ", d.lidar_id);
+  }
+  if (id && std::ranges::none_of(devices, [&](const auto & d) { return d.lidar_id == *id; })) {
+    return std::unexpected(
+      invalid_argument(std::format("lidar_id {} is not in the file (lidar_id {})", *id, ids)));
+  }
+  if (!id && devices.size() > 1) {
+    return std::unexpected(invalid_argument(
+      std::format("the file holds {} devices (lidar_id {}); choose one", devices.size(), ids)));
   }
   impl_->path = path;
   return {};
