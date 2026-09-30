@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Symbol visibility helpers. The library is built with -fvisibility=hidden; public headers wrap
-// their declarations in LIVOX_MID360_API_BEGIN / LIVOX_MID360_API_END to export them.
+/// @file
+/// Symbol visibility helpers. The library is built with -fvisibility=hidden; public headers wrap
+/// their declarations in LIVOX_MID360_API_BEGIN / LIVOX_MID360_API_END to export them.
 #pragma once
 
 #if defined(__GNUC__) || defined(__clang__)

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Key definitions and typed encoders/decoders for the Mid-360 key-value list
-// (section "0x0102 LiDAR Information Push", table of keys).
-//
-// Scope (v1): the base Mid-360 only. Keys that exist solely for Mid-360S/360L
-// (0x0021 speed_mode, 0x0029 pc_freq_mod) are listed for completeness but not modelled.
+/// @file
+/// Key definitions and typed encoders/decoders for the Mid-360 key-value list
+/// (section "0x0102 LiDAR Information Push", table of keys).
+///
+/// Scope (v1): the base Mid-360 only. Keys that exist solely for Mid-360S/360L
+/// (0x0021 speed_mode, 0x0029 pc_freq_mod) are listed for completeness but not modelled.
 #pragma once
 
 #include <algorithm>
@@ -25,6 +26,8 @@ LIVOX_MID360_API_BEGIN
 namespace livox::mid360
 {
 
+/// Keys of the key-value list (0x0100 configure, 0x0101 inquire, 0x0102 push). Keys with bit
+/// 15 set are read-only.
 enum class Key : std::uint16_t
 {
   // ---- writable (0x0100) -------------------------------------------------
@@ -66,7 +69,9 @@ enum class Key : std::uint16_t
   kHmsCode = 0x8011,          ///< u32[8]
 };
 
+/// Wire name of the key, e.g. "pcl_data_type".
 [[nodiscard]] std::string_view to_string(Key k) noexcept;
+/// True for the 0x8000 range (inquire / push only).
 [[nodiscard]] constexpr bool is_read_only(Key k) noexcept
 {
   return (static_cast<std::uint16_t>(k) & 0x8000u) != 0;
@@ -74,44 +79,54 @@ enum class Key : std::uint16_t
 /// Fixed value length documented for the key, or nullopt if variable/unknown.
 [[nodiscard]] std::optional<std::size_t> key_value_length(Key k) noexcept;
 
+/// Why a key value did not decode.
 enum class KeyError : std::uint8_t
 {
-  kWrongLength,
-  kOutOfRange
+  kWrongLength,  ///< the value's length differs from the key's fixed length
+  kOutOfRange    ///< a field is outside its enum or documented range
 };
 
-// ---------------------------------------------------------------------------
-// Typed values
-// ---------------------------------------------------------------------------
+/// @name Typed values
+///@{
+
+/// IPv4 address in network order, e.g. {192, 168, 1, 12}.
 using Ipv4 = std::array<std::uint8_t, 4>;
 
+/// Keys 0x0005 / 0x0006 / 0x0007 / 0x0009: where the LiDAR sends one kind of data.
 struct HostIpConfig
-{  ///< keys 0x0005 / 0x0006 / 0x0007 / 0x0009
-  Ipv4 ip{};
+{
+  Ipv4 ip{};                   ///< host address
   std::uint16_t dst_port = 0;  ///< host-side listening port
   std::uint16_t src_port = 0;  ///< LiDAR-side source port
 };
 
+/// Key 0x0004: the LiDAR's own network configuration.
 struct LidarIpConfig
-{  ///< key 0x0004
-  Ipv4 ip{};
-  Ipv4 netmask{};
-  Ipv4 gateway{};
+{
+  Ipv4 ip{};       ///< LiDAR address
+  Ipv4 netmask{};  ///< subnet mask
+  Ipv4 gateway{};  ///< gateway; 0.0.0.0 = none
 };
 
+/// Key 0x0012: mounting rotation (degrees) and offset (millimetres) of the LiDAR.
 struct InstallAttitude
-{  ///< key 0x0012
-  float roll_deg = 0, pitch_deg = 0, yaw_deg = 0;
-  std::int32_t x_mm = 0, y_mm = 0, z_mm = 0;
+{
+  float roll_deg = 0;     ///< rotation about x
+  float pitch_deg = 0;    ///< rotation about y
+  float yaw_deg = 0;      ///< rotation about z
+  std::int32_t x_mm = 0;  ///< offset along x
+  std::int32_t y_mm = 0;  ///< offset along y
+  std::int32_t z_mm = 0;  ///< offset along z
 };
 
+/// Keys 0x0015 / 0x0016: one FOV window in degrees.
 struct FovConfig
-{                                    ///< keys 0x0015 / 0x0016
+{
   std::int32_t yaw_start_deg = 0;    ///< [0, 360)
   std::int32_t yaw_stop_deg = 0;     ///< [0, 360)
   std::int32_t pitch_start_deg = 0;  ///< (-10, 60)
   std::int32_t pitch_stop_deg = 0;   ///< (-10, 60)
-  std::uint32_t rsvd = 0;
+  std::uint32_t rsvd = 0;            ///< reserved; encoded as given
 };
 
 /// key 0x0001. The wiki documents all three but says only kNonRepetitive is effective on
@@ -123,6 +138,7 @@ enum class ScanPattern : std::uint8_t
   kLowRateRepetitive = 2
 };
 
+/// Key 0x0018: detection sensitivity.
 enum class DetectMode : std::uint8_t
 {
   kNormal = 0,
@@ -133,27 +149,31 @@ enum class DetectMode : std::uint8_t
 /// pin; the enums exist so a value outside the table is caught before any I/O.
 enum class FuncIn0 : std::uint8_t
 {
-  kPps = 0  ///< PPS input (M12 pin 8)
+  kPps = 0,  ///< PPS input (M12 pin 8)
 };
+/// Function of pin IN1 (key 0x0019).
 enum class FuncIn1 : std::uint8_t
 {
-  kGps = 0  ///< GPS input (M12 pin 10)
+  kGps = 0,  ///< GPS input (M12 pin 10)
 };
+/// Function of pins OUT0 / OUT1 (key 0x0019).
 enum class FuncOut : std::uint8_t
 {
-  kNone = 0,
+  kNone = 0,         ///< output unused
   kFollowInput = 1,  ///< OUT0 follows IN0, OUT1 follows IN1
-  kSafetyZone = 2    ///< safety zone output 0 / 1
+  kSafetyZone = 2,   ///< safety zone output 0 / 1
 };
 
+/// Key 0x0019; M12 pins 8, 10, 12, 11. Same layout as the 4 raw bytes.
 struct FuncIoConfig
-{  ///< key 0x0019; M12 pins 8, 10, 12, 11. Same layout as the 4 raw bytes.
-  FuncIn0 in0 = FuncIn0::kPps;
-  FuncIn1 in1 = FuncIn1::kGps;
-  FuncOut out0 = FuncOut::kNone;
-  FuncOut out1 = FuncOut::kNone;
+{
+  FuncIn0 in0 = FuncIn0::kPps;    ///< IN0, M12 pin 8
+  FuncIn1 in1 = FuncIn1::kGps;    ///< IN1, M12 pin 10
+  FuncOut out0 = FuncOut::kNone;  ///< OUT0, M12 pin 12
+  FuncOut out1 = FuncOut::kNone;  ///< OUT1, M12 pin 11
 };
 
+/// IMU output rate (key 0x002B byte 0).
 enum class ImuOutputRate : std::uint8_t
 {
   k200Hz = 0,
@@ -161,6 +181,7 @@ enum class ImuOutputRate : std::uint8_t
   k100Hz = 2,
   k50Hz = 3
 };
+/// Accelerometer full-scale range (key 0x002B byte 1).
 enum class ImuAccelRange : std::uint8_t
 {
   k4g = 0,
@@ -168,6 +189,7 @@ enum class ImuAccelRange : std::uint8_t
   k16g = 2,
   k32g = 3
 };
+/// Gyroscope full-scale range in degrees per second (key 0x002B byte 2).
 enum class ImuGyroRange : std::uint8_t
 {
   k2000dps = 0,
@@ -179,18 +201,21 @@ enum class ImuGyroRange : std::uint8_t
   k31_25dps = 6,
   k15_625dps = 7,
 };
+/// Key 0x002B: IMU output rate and ranges.
 struct ImuSensorConfig
-{  ///< key 0x002B
-  ImuOutputRate output_rate = ImuOutputRate::k200Hz;
-  ImuAccelRange accel_range = ImuAccelRange::k4g;
-  ImuGyroRange gyro_range = ImuGyroRange::k2000dps;
+{
+  ImuOutputRate output_rate = ImuOutputRate::k200Hz;  ///< byte 0
+  ImuAccelRange accel_range = ImuAccelRange::k4g;     ///< byte 1
+  ImuGyroRange gyro_range = ImuGyroRange::k2000dps;   ///< byte 2
 };
 
+/// Keys 0x8002 / 0x8003 / 0x8004, "aa.bb.cc.dd".
 struct Version
-{  ///< keys 0x8002 / 0x8003 / 0x8004, "aa.bb.cc.dd"
-  std::array<std::uint8_t, 4> v{};
+{
+  std::array<std::uint8_t, 4> v{};  ///< aa, bb, cc, dd
 };
 
+/// Key 0x800C: the time source the LiDAR is synchronised to.
 enum class TimeSyncType : std::uint8_t
 {
   kNone = 0,
@@ -217,6 +242,7 @@ struct DiagStatus
   DiagLevel ranging = DiagLevel::kNormal;        ///< bit 8-11
   DiagLevel communication = DiagLevel::kNormal;  ///< bit 12-15
 
+  /// Field-wise equality.
   [[nodiscard]] constexpr bool operator==(const DiagStatus &) const noexcept = default;
   /// Highest level among the four subsystems.
   [[nodiscard]] constexpr DiagLevel worst() const noexcept
@@ -227,16 +253,18 @@ struct DiagStatus
   [[nodiscard]] constexpr bool normal() const noexcept { return worst() == DiagLevel::kNormal; }
 };
 
+/// Key 0x8010: which firmware image is running.
 enum class FwType : std::uint8_t
-{  ///< key 0x8010
+{
   kLoader = 0,
   kApp = 1
 };
 
+/// Key 0x0017 bitmask: bit 0 enables fov_cfg0, bit 1 enables fov_cfg1.
 struct FovEnable
-{  ///< key 0x0017 bitmask: bit 0 enables fov_cfg0, bit 1 enables fov_cfg1
-  bool fov0 = false;
-  bool fov1 = false;
+{
+  bool fov0 = false;  ///< bit 0: window 0x0015 crops the point cloud
+  bool fov1 = false;  ///< bit 1: window 0x0016 crops the point cloud
 };
 
 /// The three FOV keys together (issue #39): Device::set_fov() sends the present ones in one
@@ -266,12 +294,17 @@ struct FovSettings
 /// rejects the same values with KeyError::kOutOfRange; Device::set_func_io_config() checks
 /// this before any I/O.
 [[nodiscard]] bool func_io_config_valid(const FuncIoConfig & c) noexcept;
+///@}
 
-// ---------------------------------------------------------------------------
-// Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).
-// ---------------------------------------------------------------------------
+/// @name Encoders
+/// Encoders: produce the raw value bytes for a key (to be wrapped in a KeyValue).
+///@{
+
+/// One byte.
 [[nodiscard]] std::array<std::byte, 1> encode_u8(std::uint8_t v) noexcept;
+/// u8 0 / 1.
 [[nodiscard]] std::array<std::byte, 1> encode_bool(bool v) noexcept;
+/// Key 0x0017 bitmask.
 [[nodiscard]] std::array<std::byte, 1> encode_fov_enable(FovEnable e) noexcept;
 /// u8 enums (DataType, DetectMode, WorkState, ...).
 template <typename E>
@@ -280,44 +313,67 @@ template <typename E>
 {
   return encode_u8(static_cast<std::uint8_t>(v));
 }
+/// Keys 0x0005 / 0x0006 / 0x0007 / 0x0009: ip, dst port, src port.
 [[nodiscard]] std::array<std::byte, 8> encode_host_ip_config(const HostIpConfig & c) noexcept;
+/// Key 0x0004: ip, netmask, gateway.
 [[nodiscard]] std::array<std::byte, 12> encode_lidar_ip_config(const LidarIpConfig & c) noexcept;
+/// Key 0x0012: three float angles, then three int32 offsets.
 [[nodiscard]] std::array<std::byte, 24> encode_install_attitude(const InstallAttitude & a) noexcept;
+/// Keys 0x0015 / 0x0016.
 [[nodiscard]] std::array<std::byte, 20> encode_fov_config(const FovConfig & f) noexcept;
+/// Key 0x0019: in0, in1, out0, out1.
 [[nodiscard]] std::array<std::byte, 4> encode_func_io_config(const FuncIoConfig & c) noexcept;
+/// Key 0x002B: rate, accel range, gyro range.
 [[nodiscard]] std::array<std::byte, 3> encode_imu_sensor_config(const ImuSensorConfig & c) noexcept;
+///@}
 
-// ---------------------------------------------------------------------------
-// Decoders: parse a key's raw value bytes. Length is validated.
-// ---------------------------------------------------------------------------
+/// @name Decoders
+/// Decoders: parse a key's raw value bytes. Length is validated.
+///@{
+
+/// One byte.
 [[nodiscard]] std::expected<std::uint8_t, KeyError> decode_u8(
   std::span<const std::byte> v) noexcept;
+/// Little-endian u16.
 [[nodiscard]] std::expected<std::uint16_t, KeyError> decode_u16(
   std::span<const std::byte> v) noexcept;
+/// Little-endian u32.
 [[nodiscard]] std::expected<std::uint32_t, KeyError> decode_u32(
   std::span<const std::byte> v) noexcept;
+/// Little-endian i32.
 [[nodiscard]] std::expected<std::int32_t, KeyError> decode_i32(
   std::span<const std::byte> v) noexcept;
+/// Little-endian u64.
 [[nodiscard]] std::expected<std::uint64_t, KeyError> decode_u64(
   std::span<const std::byte> v) noexcept;
+/// Little-endian i64.
 [[nodiscard]] std::expected<std::int64_t, KeyError> decode_i64(
   std::span<const std::byte> v) noexcept;
+/// Keys 0x0005 / 0x0006 / 0x0007 / 0x0009.
 [[nodiscard]] std::expected<HostIpConfig, KeyError> decode_host_ip_config(
   std::span<const std::byte> v) noexcept;
+/// Key 0x0004. Not checked with lidar_ip_config_valid().
 [[nodiscard]] std::expected<LidarIpConfig, KeyError> decode_lidar_ip_config(
   std::span<const std::byte> v) noexcept;
+/// Key 0x0012. Not checked with install_attitude_valid().
 [[nodiscard]] std::expected<InstallAttitude, KeyError> decode_install_attitude(
   std::span<const std::byte> v) noexcept;
+/// Keys 0x0015 / 0x0016. Not checked with fov_in_range().
 [[nodiscard]] std::expected<FovConfig, KeyError> decode_fov_config(
   std::span<const std::byte> v) noexcept;
+/// Key 0x0019; a field outside its enum is kOutOfRange.
 [[nodiscard]] std::expected<FuncIoConfig, KeyError> decode_func_io_config(
   std::span<const std::byte> v) noexcept;
+/// Key 0x002B; a field outside its enum is kOutOfRange.
 [[nodiscard]] std::expected<ImuSensorConfig, KeyError> decode_imu_sensor_config(
   std::span<const std::byte> v) noexcept;
+/// Keys 0x8002 / 0x8003 / 0x8004.
 [[nodiscard]] std::expected<Version, KeyError> decode_version(
   std::span<const std::byte> v) noexcept;
+/// Key 0x8005.
 [[nodiscard]] std::expected<std::array<std::uint8_t, 6>, KeyError> decode_mac(
   std::span<const std::byte> v) noexcept;
+/// Keys 0x001A / 0x8006; a value that is not a WorkState enumerator is kOutOfRange.
 [[nodiscard]] std::expected<WorkState, KeyError> decode_work_state(
   std::span<const std::byte> v) noexcept;
 /// u8 0 / 1; anything else is kOutOfRange.
@@ -325,33 +381,41 @@ template <typename E>
 /// key 0x0000: 1, 2 or 3 (0 = IMU is not a point-cloud data type).
 [[nodiscard]] std::expected<DataType, KeyError> decode_data_type(
   std::span<const std::byte> v) noexcept;
+/// Key 0x0001: 0, 1 or 2.
 [[nodiscard]] std::expected<ScanPattern, KeyError> decode_scan_pattern(
   std::span<const std::byte> v) noexcept;
+/// Key 0x0018: 0 or 1.
 [[nodiscard]] std::expected<DetectMode, KeyError> decode_detect_mode(
   std::span<const std::byte> v) noexcept;
+/// Key 0x800C: 0, 1 or 2.
 [[nodiscard]] std::expected<TimeSyncType, KeyError> decode_time_sync_type(
   std::span<const std::byte> v) noexcept;
+/// Key 0x8010: 0 or 1.
 [[nodiscard]] std::expected<FwType, KeyError> decode_fw_type(std::span<const std::byte> v) noexcept;
 /// key 0x0017; bits above bit 1 are kOutOfRange.
 [[nodiscard]] std::expected<FovEnable, KeyError> decode_fov_enable(
   std::span<const std::byte> v) noexcept;
+/// Key 0x800E; a nibble above 3 is kOutOfRange.
 [[nodiscard]] std::expected<DiagStatus, KeyError> decode_diag_status(
   std::span<const std::byte> v) noexcept;
+/// Key 0x8011: the eight raw slots; see decode_hms().
 [[nodiscard]] std::expected<std::array<std::uint32_t, 8>, KeyError> decode_hms_codes(
   std::span<const std::byte> v) noexcept;
 /// NUL-padded string keys (0x8000 sn, 0x8001 product_info). Returns the text before the first NUL.
 [[nodiscard]] std::string_view decode_string(std::span<const std::byte> v) noexcept;
+///@}
 
 /// Finds the first entry with `key` in a parsed list.
 [[nodiscard]] std::optional<std::span<const std::byte>> find_key(
   std::span<const KeyValue> kvs, Key key) noexcept;
 
-// ---------------------------------------------------------------------------
-// key_traits<K> (issue #57): the C++ type of each key and its codec, used by
-// Device::set<K>() / get<K>(). Writable keys have `encode` (bytes for a KeyValue) and
-// `decode`; read-only keys only `decode`. Keys of the Mid-360S / 360L (kSpeedMode,
-// kPcFreqMod) have no traits on purpose (project decision, docs/roadmap.md).
-// ---------------------------------------------------------------------------
+/// @name Key traits
+/// `key_traits<K>` (issue #57): the C++ type of each key and its codec, used by
+/// `Device::set<K>()` / `get<K>()`. Writable keys have `encode` (bytes for a KeyValue) and
+/// `decode`; read-only keys only `decode`. Keys of the Mid-360S / 360L (kSpeedMode,
+/// kPcFreqMod) have no traits on purpose (project decision, docs/roadmap.md).
+///@{
+
 template <Key K>
 struct key_traits;  // primary template: undefined for keys without a typed mapping
 
@@ -362,8 +426,10 @@ concept typed_key = requires { typename key_traits<K>::value_type; };
 template <Key K>
 concept writable_key = typed_key<K> && !is_read_only(K);
 
+/// The C++ type of key `K`, e.g. `key_value_t<Key::kPclDataType>` is DataType.
 template <Key K>
 using key_value_t = typename key_traits<K>::value_type;
+///@}
 
 namespace detail
 {

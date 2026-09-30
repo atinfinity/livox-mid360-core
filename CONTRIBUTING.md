@@ -127,13 +127,34 @@ vectors, Catch2, and the non-Linux fallback branches in `src/transport.cpp` (mar
 reported but the badge and the Codecov status checks use line coverage; both checks are
 informational for now.
 
+## API reference
+
+The public headers in `include/livox/mid360/` are the API reference: Doxygen generates it from
+their `///` comments ([#104](https://github.com/atinfinity/livox-mid360-core/issues/104)). Every
+public symbol needs a comment. Write plain prose (the first sentence is the brief, no `@param`
+/ `@return`), use `///<` after struct fields and enum values, start each header with a
+`/// @file` description, and group the members of a large class with `/// @name` and
+`///@{` / `///@}`. Symbols in a `detail` namespace are excluded. The `Doxyfile` turns every
+warning into an error, and the `Docs` workflow builds the reference on every pull request.
+
+Doxygen is pinned to one release, because other versions report different warnings.
+`scripts/install-doxygen.sh` downloads that release binary into `.cache/` and checks its SHA256.
+The upstream binaries cover Linux x86-64 and macOS; on other hosts, install the same version
+yourself and set `DOXYGEN`.
+
+```sh
+scripts/install-doxygen.sh   # once: the pinned Doxygen into .cache/
+scripts/build-docs.sh        # the reference in docs/reference/index.html (git-ignored)
+```
+
 ## Continuous integration
 
 `CI` runs gcc-13, gcc-14 and clang-19 in Release plus gcc-14 and clang-19 in Debug with
 ASan + UBSan, each on x86-64 and arm64 (`ubuntu-24.04-arm`), Apple Clang in Release on
 `macos-latest`, and separate jobs for the Python reference and simulator tests and a short run
 of every fuzzer. `Lint` runs clang-format 19,
-clang-tidy 19 and ruff; `Coverage` uploads to Codecov.
+clang-tidy 19 and ruff; `Coverage` uploads to Codecov. `Docs` builds the API reference and,
+unlike the others, also runs on documentation-only changes.
 
 To reproduce CI locally on any Docker host: `docker/check.sh [linux/arm64|linux/amd64]`. The
 platform defaults to the host's. On Apple Silicon `linux/arm64` runs natively; a non-native

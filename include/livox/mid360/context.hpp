@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API (issue #9): the shared receive side. The Mid-360 host ports for push
-// (56201), point cloud (56301), IMU (56401) and firmware log (56501, #44) are the same for
-// every LiDAR, so one Context owns those four sockets and the single receive thread, and
-// dispatches datagrams to the registered Devices by source IP. Data path implemented in #6;
-// push parsing is #7. A fifth socket for debug raw data (#93) is opened on request.
+/// @file
+/// Public API (issue #9): the shared receive side. The Mid-360 host ports for push
+/// (56201), point cloud (56301), IMU (56401) and firmware log (56501, #44) are the same for
+/// every LiDAR, so one Context owns those four sockets and the single receive thread, and
+/// dispatches datagrams to the registered Devices by source IP. Data path implemented in #6;
+/// push parsing is #7. A fifth socket for debug raw data (#93) is opened on request.
 #pragma once
 
 #include <cstddef>
@@ -23,6 +24,7 @@ LIVOX_MID360_API_BEGIN
 namespace livox::mid360
 {
 
+/// Sockets and receive-thread settings of a Context, passed to Context::create().
 struct ContextOptions
 {
   Ipv4 bind_address{0, 0, 0, 0};                   ///< interface for the four receive sockets
@@ -46,6 +48,9 @@ class Device;
 class Context
 {
 public:
+  /// Opens the receive sockets and starts the receive thread. Fails with kInvalidArgument
+  /// when `batch_size` is 0, and with kSession (a transport SessionError) when a socket cannot
+  /// be opened or bound.
   [[nodiscard]] static std::expected<std::unique_ptr<Context>, DeviceError> create(
     const ContextOptions & opts = {});
 
@@ -57,14 +62,19 @@ public:
 
   /// Effective options: ports requested as 0 are replaced by the bound ones.
   [[nodiscard]] const ContextOptions & options() const noexcept;
+  /// Snapshot of the receive-side counters.
   [[nodiscard]] ContextStats stats() const;
 
-  // --- multi-device (issue #8): the Devices open on this Context, keyed by serial number.
-  // Non-owning: the caller keeps the unique_ptr and destroys it before the Context.
+  /// @name Multi-device
+  /// Multi-device (issue #8): the Devices open on this Context, keyed by serial number.
+  /// Non-owning: the caller keeps the unique_ptr and destroys it before the Context.
+  ///@{
+
   /// The open Device with this serial number, or nullptr.
   [[nodiscard]] Device * find(std::string_view serial_number) const;
   /// Every open Device, in registration order.
   [[nodiscard]] std::vector<Device *> devices() const;
+  ///@}
 
 private:
   friend class Device;

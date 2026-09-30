@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API skeleton (issue #9): output types of the device layer. Plain structs so that the
-// phase-3 C ABI can expose the same layout. Frame assembly is implemented in #6.
+/// @file
+/// Public API skeleton (issue #9): output types of the device layer. Plain structs so that the
+/// phase-3 C ABI can expose the same layout. Frame assembly is implemented in #6.
 #pragma once
 
 #include <chrono>
@@ -27,23 +28,27 @@ namespace livox::mid360
 /// converted to Cartesian before they reach a Frame.
 struct Point
 {
-  float x = 0;  ///< metres, LiDAR frame
-  float y = 0;
-  float z = 0;
+  float x = 0;                    ///< metres, LiDAR frame
+  float y = 0;                    ///< metres, LiDAR frame
+  float z = 0;                    ///< metres, LiDAR frame
   std::uint8_t reflectivity = 0;  ///< 0-255
   std::uint8_t tag = 0;           ///< raw tag byte; decoded by the accessors below (#34)
   std::uint8_t line = 0;          ///< Mid-360 has no physical lines: sample index % 4
   std::uint32_t offset_ns = 0;    ///< sample time - Frame::base_time_ns
 
+  /// All four fields of the tag byte.
   [[nodiscard]] constexpr TagInfo tag_info() const noexcept { return decode_tag(tag); }
+  /// Tag bit 0-1: glue points between adjacent objects.
   [[nodiscard]] constexpr TagConfidence adjacent_glue() const noexcept
   {
     return decode_tag(tag).adjacent_glue;
   }
+  /// Tag bit 2-3: rain, fog, dust.
   [[nodiscard]] constexpr TagConfidence particles() const noexcept
   {
     return decode_tag(tag).particles;
   }
+  /// Tag bit 4-5: other properties.
   [[nodiscard]] constexpr TagConfidence other() const noexcept { return decode_tag(tag).other; }
   /// Glue or particle confidence worse than `worst_accepted`; see is_noise(uint8_t, ...).
   [[nodiscard]] constexpr bool is_noise(
@@ -59,12 +64,12 @@ struct Frame
   std::uint32_t index = 0;         ///< +1 per delivered frame, per Device (Lvx2Player: per device)
   std::uint64_t base_time_ns = 0;  ///< time of the first point (after timestamp policy)
   std::uint64_t end_time_ns = 0;   ///< time of the last point
-  std::vector<Point> points;
-  std::uint32_t packets = 0;          ///< data packets merged into this frame
-  std::uint32_t dropped_packets = 0;  ///< udp_cnt gaps observed while assembling it
-  std::uint8_t frame_cnt = 0;         ///< header frame_cnt of the first packet
-  DataType source_type = DataType::kCartesian32;
-  TimeType time_type = TimeType::kNoSync;
+  std::vector<Point> points;       ///< in packet order
+  std::uint32_t packets = 0;       ///< data packets merged into this frame
+  std::uint32_t dropped_packets = 0;              ///< udp_cnt gaps observed while assembling it
+  std::uint8_t frame_cnt = 0;                     ///< header frame_cnt of the first packet
+  DataType source_type = DataType::kCartesian32;  ///< header data_type; one format per Frame
+  TimeType time_type = TimeType::kNoSync;         ///< header time_type; one time base per Frame
 };
 
 /// One IMU packet (the LiDAR sends one sample per packet at 200 Hz) with its time. Not part
@@ -72,7 +77,7 @@ struct Frame
 struct ImuData
 {
   std::uint64_t time_ns = 0;  ///< after timestamp policy
-  ImuSample sample{};
+  ImuSample sample{};         ///< the decoded packet sample
 };
 
 /// How a Device cuts the packet stream into Frames (#6). In both modes a change of the header
@@ -80,12 +85,13 @@ struct ImuData
 /// #145), also closes the frame.
 struct FramePolicy
 {
+  /// What closes a frame besides the conditions common to both modes.
   enum class Mode : std::uint8_t
   {
     kFrameCounter,  ///< close on a change of header frame_cnt; a jump still closes one frame
     kTimeWindow,    ///< close every `window` of point time (livox_ros_driver2 publish period)
   };
-  Mode mode = Mode::kFrameCounter;
+  Mode mode = Mode::kFrameCounter;  ///< default: follow the header frame_cnt
   /// kTimeWindow's period. Also, in both modes, the step back that closes a frame, the idle
   /// close, and half the time kFrameCounter waits for a frame_cnt change before falling back.
   std::chrono::nanoseconds window{std::chrono::milliseconds{100}};
@@ -102,12 +108,15 @@ enum class TimestampPolicy : std::uint8_t
 /// Bounded single-producer / multi-consumer queue for handing Frames or ImuData from the
 /// receive thread to any other thread. Overflow drops the OLDEST element (newest data wins)
 /// and counts it in `dropped()`. Not part of Device: connect it yourself, e.g.
+/// ```
 ///   BoundedQueue<Frame> q;
 ///   device.on_frame([&](Frame && f) { q.push(std::move(f)); });
+/// ```
 template <class T>
 class BoundedQueue
 {
 public:
+  /// An empty, open queue that holds at most `capacity` items.
   explicit BoundedQueue(std::size_t capacity = 8) : capacity_(capacity) {}
 
   /// Producer side (receive thread). Never blocks.
@@ -135,6 +144,7 @@ public:
     return take();
   }
 
+  /// Consumer side without waiting. Empty when nothing is queued.
   [[nodiscard]] std::optional<T> try_pop()
   {
     std::lock_guard lock(mutex_);
@@ -151,16 +161,19 @@ public:
     cv_.notify_all();
   }
 
+  /// Items discarded by overflow so far.
   [[nodiscard]] std::uint64_t dropped() const
   {
     std::lock_guard lock(mutex_);
     return dropped_;
   }
+  /// Items currently queued.
   [[nodiscard]] std::size_t size() const
   {
     std::lock_guard lock(mutex_);
     return items_.size();
   }
+  /// Maximum number of queued items, as passed to the constructor.
   [[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
 
 private:
@@ -197,6 +210,7 @@ struct Extrinsic
 /// Transforms every point in place; reflectivity, tag, line and offset are untouched. Call
 /// the span overload qualified (`livox::mid360::apply`): ADL on std::span also finds std::apply.
 void apply(const Extrinsic & e, std::span<Point> points) noexcept;
+/// Transforms every point of `frame` in place, as the span overload does.
 void apply(const Extrinsic & e, Frame & frame) noexcept;
 
 }  // namespace livox::mid360

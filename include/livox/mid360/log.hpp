@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Opt-in diagnostic logging (issue #42). Silent by default: the SDK never writes to the
-// console unless the application installs a handler. Unrelated to the LiDAR firmware log
-// stream (port 56500, 0x03xx commands), see firmware_log.hpp / Device::on_firmware_log (#44).
+/// @file
+/// Opt-in diagnostic logging (issue #42). Silent by default: the SDK never writes to the
+/// console unless the application installs a handler. Unrelated to the LiDAR firmware log
+/// stream (port 56500, 0x03xx commands), see firmware_log.hpp / Device::on_firmware_log (#44).
 #pragma once
 
 #include <cstdint>
@@ -33,10 +34,10 @@ enum class LogLevel : std::uint8_t
 /// One diagnostic record. The views are valid only during the handler call.
 struct LogRecord
 {
-  LogLevel level = LogLevel::kInfo;
-  std::int64_t time_ns = 0;        ///< system clock, nanoseconds since the Unix epoch
-  std::string_view serial_number;  ///< empty when the record is not device-scoped
-  std::string_view message;        ///< one line, no trailing newline, at most 255 bytes
+  LogLevel level = LogLevel::kInfo;  ///< severity
+  std::int64_t time_ns = 0;          ///< system clock, nanoseconds since the Unix epoch
+  std::string_view serial_number;    ///< empty when the record is not device-scoped
+  std::string_view message;          ///< one line, no trailing newline, at most 255 bytes
 };
 
 /// Called from the Context receive thread, the Device worker thread and caller threads,
@@ -46,6 +47,7 @@ using LogHandler = std::function<void(const LogRecord &)>;
 /// Process-wide. Level filtering happens before any formatting, so kOff / kError cost one
 /// atomic load per call site.
 void set_log_level(LogLevel level) noexcept;
+/// Current process-wide level, see set_log_level().
 [[nodiscard]] LogLevel log_level() noexcept;
 
 /// Process-wide; safe to call while a Context is running. A handler that is executing when
@@ -66,6 +68,7 @@ void set_log_handler(LogHandler handler);
 [[nodiscard]] std::expected<LogHandler, DeviceError> file_log_handler(
   const std::filesystem::path & path, bool append = true);
 
+/// Lower-case name, e.g. "warn".
 [[nodiscard]] std::string_view to_string(LogLevel level) noexcept;
 
 }  // namespace livox::mid360

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Host setup flow on top of Session (issue #5): point the LiDAR at this host, choose the point
-// cloud format, enable the IMU and optionally switch the work mode.
+/// @file
+/// Host setup flow on top of Session (issue #5): point the LiDAR at this host, choose the point
+/// cloud format, enable the IMU and optionally switch the work mode.
 #pragma once
 
 #include <chrono>
@@ -46,13 +47,14 @@ struct HostSetup
   /// sensor config (key 0x002B, issue #47). Empty: leave the stored value alone. The IMU
   /// config key is missing on older firmware, so an absent optional is the safe default.
   std::optional<DetectMode> detect_mode;
-  std::optional<bool> time_filter;
-  std::optional<ImuSensorConfig> imu_sensor_config;
+  std::optional<bool> time_filter;                   ///< key 0x0026, see `detect_mode`
+  std::optional<ImuSensorConfig> imu_sensor_config;  ///< key 0x002B, see `detect_mode`
   /// After setting `work_tgt_mode`, poll 0x8006 until it is observed. 0: return right after
   /// the ACK.
   std::chrono::milliseconds wait_timeout{10000};
 };
 
+/// Outcome of apply_host_setup().
 struct HostSetupResult
 {
   /// One of the ACKs returned 0x21: the LiDAR applies the change after a reboot.
@@ -66,17 +68,21 @@ struct HostSetupResult
 /// drive Session::configure themselves.
 struct HostSetupKeyValues
 {
-  std::vector<std::byte> storage;
-  std::vector<KeyValue> values;  ///< views into `storage`
+  std::vector<std::byte> storage;  ///< encoded values
+  std::vector<KeyValue> values;    ///< views into `storage`
 
   HostSetupKeyValues() = default;
+  /// Moves keep `values` valid: the views follow the moved `storage` buffer.
   HostSetupKeyValues(HostSetupKeyValues &&) noexcept = default;
+  /// See the move constructor.
   HostSetupKeyValues & operator=(HostSetupKeyValues &&) noexcept = default;
   HostSetupKeyValues(const HostSetupKeyValues &) = delete;
   HostSetupKeyValues & operator=(const HostSetupKeyValues &) = delete;
   ~HostSetupKeyValues() = default;
 };
 
+/// Build the first 0x0100 request of apply_host_setup() for `setup`. `host_ip` goes into the three
+/// host ip-config keys; `setup.ip` is not consulted (apply_host_setup() resolves it first).
 [[nodiscard]] HostSetupKeyValues host_setup_key_values(
   const HostSetup & setup, const Ipv4 & host_ip);
 

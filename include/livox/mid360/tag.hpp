@@ -1,4 +1,5 @@
-// Point tag byte (issue #34): four 2-bit confidence fields, section "Tag Information".
+/// @file
+/// Point tag byte (issue #34): four 2-bit confidence fields, section "Tag Information".
 #pragma once
 
 #include <cstdint>
@@ -19,6 +20,7 @@ enum class TagConfidence : std::uint8_t
   kLow = 2,
   kReserved = 3,
 };
+/// Name of the confidence, e.g. "medium".
 [[nodiscard]] std::string_view to_string(TagConfidence c) noexcept;
 
 /// Decoded tag byte: bit 0-1 adjacent glue, 2-3 rain / fog / dust, 4-5 other, 6-7 reserved.
@@ -29,8 +31,10 @@ struct TagInfo
   TagConfidence other;          ///< bit 4-5: other properties
   TagConfidence reserved;       ///< bit 6-7
 };
+/// One line such as "glue=high particles=low other=high"; `reserved` is shown only when set.
 [[nodiscard]] std::string to_string(const TagInfo & t);
 
+/// Splits a raw tag byte into its four fields.
 [[nodiscard]] constexpr TagInfo decode_tag(std::uint8_t tag) noexcept
 {
   return {

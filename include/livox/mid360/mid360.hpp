@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Umbrella header for livox::mid360_core.
-//
-// Layers: protocol (pure), transport (UDP sockets), session (synchronous commands) and
-// device (Context receive thread + Device callbacks, docs/api.md).
+/// @file
+/// Umbrella header for livox::mid360_core.
+///
+/// Layers: protocol (pure), transport (UDP sockets), session (synchronous commands) and
+/// device (Context receive thread + Device callbacks, docs/api.md).
 #pragma once
 
 #include "livox/mid360/bytes.hpp"

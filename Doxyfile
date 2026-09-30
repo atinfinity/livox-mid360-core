@@ -1,0 +1,56 @@
+# Doxygen configuration for the public API reference (issue #104).
+# Only settings that differ from the Doxygen defaults are listed. Build with
+# scripts/build-docs.sh, which pins the Doxygen version; the HTML lands in docs/reference/ and
+# is published as the "API reference" section of the project site.
+
+PROJECT_NAME           = "livox_mid360_core"
+PROJECT_BRIEF          = "C++ driver library for the Livox Mid-360 LiDAR"
+OUTPUT_DIRECTORY       = docs/reference
+HTML_OUTPUT            = .
+GENERATE_LATEX         = NO
+CREATE_SUBDIRS         = NO
+
+# Input: the public headers only; src/ internals stay out.
+INPUT                  = include/livox/mid360 \
+                         doxygen/mainpage.dox
+FILE_PATTERNS          = *.hpp
+RECURSIVE              = NO
+STRIP_FROM_PATH        = include
+STRIP_FROM_INC_PATH    = include
+FULL_PATH_NAMES        = YES
+
+# Internal helpers that are public only for technical reasons.
+EXCLUDE_SYMBOLS        = *::detail \
+                         *::detail::*
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+HIDE_FRIEND_COMPOUNDS  = YES
+
+# The headers use plain-prose /// comments; the first sentence is the brief.
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+SORT_MEMBER_DOCS       = NO
+
+# LIVOX_MID360_API_BEGIN / _END expand to _Pragma; hide them from the parser.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = LIVOX_MID360_API_BEGIN= \
+                         LIVOX_MID360_API_END=
+
+# Every public symbol must be documented, and any warning fails the build.
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
+WARN_NO_PARAMDOC       = NO
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+HAVE_DOT               = NO
+LAYOUT_FILE            = doxygen/layout.xml

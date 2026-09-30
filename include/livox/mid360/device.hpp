@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
-// Public API (issue #9): one LiDAR. Wraps a Session (commands, caller's thread) and
-// receives its data through a Context (receive thread, callbacks). Threading rules:
-//   - callbacks run on the Context's receive thread, must return quickly and never block;
-//   - commands are serialised by an internal mutex and may be called from any user thread,
-//     but NEVER from a callback (deadlock; asserted in debug builds) - react to Events from
-//     your own thread instead;
-//   - an exception escaping a callback terminates the process;
-//   - a Device must not be destroyed from inside its own callbacks.
-// Data path (#6), push / state / HMS (#7) and reconnection (#8) are implemented.
-// Reconnection: a Device is *disconnected* when no 0x0102 push arrived for
-// ReconnectOptions::push_timeout (or a command timed out while the push was already stale,
-// or reboot() was acknowledged). Event::kDisconnected is raised, commands fail with
-// DeviceError::Kind::kDisconnected, and - when ReconnectOptions::enabled - a worker thread
-// owned by the Device retries with exponential backoff: the last known command endpoint first
-// (serial verified), then discovery filtered by serial. On success the host setup is applied
-// again, sampling is resumed if it had been requested, and Event::kReconnected is raised.
-// Callbacks stay frozen for the whole period when sampling was requested.
+/// @file
+/// Public API (issue #9): one LiDAR. Wraps a Session (commands, caller's thread) and
+/// receives its data through a Context (receive thread, callbacks). Threading rules:
+///   - callbacks run on the Context's receive thread, must return quickly and never block;
+///   - commands are serialised by an internal mutex and may be called from any user thread,
+///     but NEVER from a callback (deadlock; asserted in debug builds) - react to Events from
+///     your own thread instead;
+///   - an exception escaping a callback terminates the process;
+///   - a Device must not be destroyed from inside its own callbacks.
+/// Data path (#6), push / state / HMS (#7) and reconnection (#8) are implemented.
+/// Reconnection: a Device is *disconnected* when no 0x0102 push arrived for
+/// ReconnectOptions::push_timeout (or a command timed out while the push was already stale,
+/// or reboot() was acknowledged). Event::kDisconnected is raised, commands fail with
+/// DeviceError::Kind::kDisconnected, and - when ReconnectOptions::enabled - a worker thread
+/// owned by the Device retries with exponential backoff: the last known command endpoint first
+/// (serial verified), then discovery filtered by serial. On success the host setup is applied
+/// again, sampling is resumed if it had been requested, and Event::kReconnected is raised.
+/// Callbacks stay frozen for the whole period when sampling was requested.
 #pragma once
 
 #include <array>
@@ -66,19 +67,20 @@ struct ReconnectOptions
   std::uint16_t discovery_port = kDiscoveryPort;
 };
 
+/// Per-Device settings, passed to Device::open().
 struct DeviceOptions
 {
   /// Ports, data type and IMU enable. `ip` and the ports are taken from the Context;
   /// `work_tgt_mode` is ignored (use start_sampling()).
   HostSetup host_setup;
-  TimestampPolicy timestamp_policy = TimestampPolicy::kHostOffsetOnce;
-  FramePolicy frame_policy;
-  SessionOptions session;  ///< command socket; `bind_address` defaults to the Context's
+  TimestampPolicy timestamp_policy = TimestampPolicy::kHostOffsetOnce;  ///< point / IMU time base
+  FramePolicy frame_policy;  ///< how packets are cut into Frames; see set_frame_policy()
+  SessionOptions session;    ///< command socket; `bind_address` defaults to the Context's
   /// Verify the CRC32 of every data packet; failures count in DeviceStats::bad_packets.
   bool verify_crc = true;
   /// Period of Event::Kind::kStats; 0 disables it.
   std::chrono::milliseconds stats_interval{1000};
-  ReconnectOptions reconnect;
+  ReconnectOptions reconnect;  ///< disconnect detection and automatic recovery
   /// LiDAR-side port that 0x0301 is sent to (#44). Tests point it at the simulator.
   std::uint16_t lidar_log_port = kLogPort;
   /// LiDAR-side port that 0x0303 is sent to (#93); SDK2 uses the log port [unverified].
@@ -89,12 +91,16 @@ struct DeviceOptions
 struct ReceiveInfo
 {
   std::uint64_t host_time_ns = 0;  ///< kernel receive timestamp
-  Endpoint source;
+  Endpoint source;                 ///< LiDAR address and port the datagram came from
 };
 
+/// Every parsed point-cloud / IMU data packet; the view is valid only during the call.
 using PacketCallback = std::function<void(const DataPacketView &, const ReceiveInfo &)>;
+/// Every completed Frame, moved to the callee.
 using FrameCallback = std::function<void(Frame &&)>;
+/// Every IMU sample.
 using ImuCallback = std::function<void(const ImuData &)>;
+/// Every Event (state, HMS, diagnostics, connection, periodic stats, firmware log gaps).
 using EventCallback = std::function<void(const Event &)>;
 /// Every successfully parsed 0x0102 push, as the snapshot pushed_status() now returns (#56).
 using PushCallback = std::function<void(const LidarStatus &)>;
@@ -110,6 +116,8 @@ struct SetResult
   bool reboot_required = false;
 };
 
+/// One LiDAR: commands through its own Session, data through the Context it was opened on.
+/// See the file description for the threading rules. Non-copyable, non-movable.
 class Device
 {
 public:
@@ -127,12 +135,19 @@ public:
   Device(Device &&) = delete;
   Device & operator=(Device &&) = delete;
 
-  // --- callbacks: one per kind, settable while sampling has not been requested (before
-  // start_sampling() or after stop_sampling()); otherwise kInvalidState. Pass an empty
-  // function to clear. Packets arriving while no callback is set are dropped silently.
+  /// @name Callbacks
+  /// Callbacks: one per kind, settable while sampling has not been requested (before
+  /// start_sampling() or after stop_sampling()); otherwise kInvalidState. Pass an empty
+  /// function to clear. Packets arriving while no callback is set are dropped silently.
+  ///@{
+
+  /// Receive thread, once per parsed data packet, before frame assembly.
   std::expected<void, DeviceError> on_packet(PacketCallback cb);
+  /// Receive thread, once per completed Frame.
   std::expected<void, DeviceError> on_frame(FrameCallback cb);
+  /// Receive thread, once per IMU sample.
   std::expected<void, DeviceError> on_imu(ImuCallback cb);
+  /// Receive thread, once per Event.
   std::expected<void, DeviceError> on_event(EventCallback cb);
   /// Receive thread, once per parsed push, after the push's kStateChanged / kHms /
   /// kDiagChanged events; the argument is the merged snapshot (missing keys carried over).
@@ -142,23 +157,37 @@ public:
   /// Receive thread, once per datagram on the Context's debug data socket (#93). Allowed
   /// without that socket; the callback is then never called.
   std::expected<void, DeviceError> on_debug_data(DebugDataCallback cb);
+  ///@}
 
-  // --- commands (caller's thread, serialised, blocking; see Session for the semantics)
+  /// @name Commands
+  /// Commands (caller's thread, serialised, blocking; see Session for the semantics).
+  ///@{
+
   /// work_tgt_mode = SAMPLING, then wait for cur_work_state (host_setup.wait_timeout).
   /// Idempotent. Callbacks are frozen from the first successful call on.
   std::expected<void, DeviceError> start_sampling(
     std::optional<RequestOptions> opts = std::nullopt);
   /// work_tgt_mode = IDLE, then wait. A partial frame is discarded, not delivered.
   std::expected<void, DeviceError> stop_sampling(std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0100 with raw key-value pairs (Session::configure()). Accepted values are folded into
+  /// the replayed HostSetup like the typed setters'. Prefer set() / set_many().
   std::expected<ParamConfigAck, DeviceError> configure(
     std::span<const KeyValue> values, std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0101 for raw key numbers (Session::inquire()). Prefer get() / get_many().
   std::expected<InquireResult, DeviceError> inquire(
     std::span<const std::uint16_t> keys, std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0101 for typed keys.
   std::expected<InquireResult, DeviceError> inquire(
     std::span<const Key> keys, std::optional<RequestOptions> opts = std::nullopt);
+  /// 0x0200. Once acknowledged the Device declares itself disconnected (kRebootRequested)
+  /// and, when ReconnectOptions::enabled, reconnects after the LiDAR comes back.
   std::expected<void, DeviceError> reboot(std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- aggregated read-back (issues #38 / #41): one 0x0101 each, not cached.
+  /// @name Aggregated read-back
+  /// Aggregated read-back (issues #38 / #41): one 0x0101 each, not cached.
+  ///@{
+
   /// Keys 0x8000-0x8005. Missing keys leave their field empty; see decode_identity().
   std::expected<DeviceIdentity, DeviceError> identity(
     std::optional<RequestOptions> opts = std::nullopt);
@@ -170,19 +199,29 @@ public:
   /// Keys 0x8006-0x8011 by inquire; see decode_status(). pushed_status() has the same data
   /// from the last 0x0102 push without a round trip.
   std::expected<LidarStatus, DeviceError> status(std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x800E by inquire (#55); the pushed value is pushed_status()->lidar_diag_status
+  /// and changes raise Event::kDiagChanged.
+  std::expected<DiagStatus, DeviceError> diag_status(
+    std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- point stream (issue #40): keys 0x0000 / 0x0001 and the host-side frame policy.
+  /// @name Point stream
+  /// Point stream (issue #40): keys 0x0000 / 0x0001 and the host-side frame policy.
+  ///@{
+
   /// Key 0x0000. kImu → kInvalidArgument with `key` before any I/O. The receive side needs no
   /// help: the frame being assembled is closed and delivered when the first packet in the
   /// new format arrives, so every Frame has one `source_type`.
   std::expected<SetResult, DeviceError> set_point_format(
     DataType format, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0000 as stored by the LiDAR.
   std::expected<DataType, DeviceError> point_format(
     std::optional<RequestOptions> opts = std::nullopt);
   /// Key 0x0001. Not pre-checked: the wiki says only kNonRepetitive works on the base
   /// Mid-360, and the LiDAR's ACK (kSession / kLidarRejected) is the answer for the others.
   std::expected<SetResult, DeviceError> set_scan_pattern(
     ScanPattern pattern, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0001 as stored by the LiDAR.
   std::expected<ScanPattern, DeviceError> scan_pattern(
     std::optional<RequestOptions> opts = std::nullopt);
   /// Replace DeviceOptions::frame_policy at run time (`window` must be > 0 →
@@ -192,8 +231,12 @@ public:
   std::expected<void, DeviceError> set_frame_policy(const FramePolicy & policy);
   /// The policy last requested (DeviceOptions::frame_policy until set_frame_policy()).
   [[nodiscard]] FramePolicy frame_policy() const;
+  ///@}
 
-  // --- FOV (issue #39): keys 0x0015 / 0x0016 / 0x0017.
+  /// @name FOV
+  /// FOV (issue #39): keys 0x0015 / 0x0016 / 0x0017.
+  ///@{
+
   /// One 0x0100 with the present fields of `fov` (the LiDAR applies all or none). Validated
   /// before any I/O: no field → kInvalidArgument without `key`; a window outside
   /// fov_in_range() → kInvalidArgument with `key` = 0x0015 / 0x0016. HostSetup::fov does the
@@ -202,35 +245,72 @@ public:
     const FovSettings & fov, std::optional<RequestOptions> opts = std::nullopt);
   /// One 0x0101 for the three keys. A key the ACK lacks leaves its field empty.
   std::expected<FovSettings, DeviceError> fov(std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- install attitude (issue #51): key 0x0012.
+  /// @name Install attitude
+  /// Install attitude (issue #51): key 0x0012.
+  ///@{
+
   /// install_attitude_valid() → else kInvalidArgument with `key` before any I/O. Only stores
   /// the value on the LiDAR; whether the firmware applies it to the emitted points is
   /// unverified (#11). To transform on the host use extrinsic_from() / apply() in frame.hpp.
   std::expected<SetResult, DeviceError> set_install_attitude(
     const InstallAttitude & a, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0012 as stored by the LiDAR.
   std::expected<InstallAttitude, DeviceError> install_attitude(
     std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- function IO (issue #52): key 0x0019, PPS / GPS inputs and the two outputs.
+  /// @name Function IO
+  /// Function IO (issue #52): key 0x0019, PPS / GPS inputs and the two outputs.
+  ///@{
+
   /// func_io_config_valid() → else kInvalidArgument with `key` before any I/O. Persisted on
   /// the LiDAR, not replayed on reconnect. IN1 = GPS is the input set_gps_time() (0x0202)
   /// complements; time_sync_status() reports the resulting synchronisation (#53).
   std::expected<SetResult, DeviceError> set_func_io_config(
     const FuncIoConfig & c, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0019 as stored by the LiDAR.
   std::expected<FuncIoConfig, DeviceError> func_io_config(
     std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- stored settings (issues #46 / #47 / #54): keys 0x0018, 0x001C, 0x002B, 0x0026.
+  /// @name Stored settings
+  /// Stored settings (issues #46 / #47 / #54): keys 0x0018, 0x001C, 0x002B, 0x0026.
+  ///@{
+
   /// Thin wrappers over set<K>() / get<K>(). The setters return the LiDAR's answer; a value
   /// outside its enum (DetectMode > 1, an ImuSensorConfig field past its last enumerator) is
   /// kInvalidArgument with `key` before any I/O. Every accepted write is folded into the
   /// replayed HostSetup, so a reconnect restores it (see set_point_format()).
   std::expected<SetResult, DeviceError> set_detect_mode(
     DetectMode mode, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0018 as stored by the LiDAR.
   std::expected<DetectMode, DeviceError> detect_mode(
     std::optional<RequestOptions> opts = std::nullopt);
-  // --- time synchronisation (issue #53): keys 0x8009–0x800C and command 0x0202.
+  /// Key 0x001C: whether the LiDAR sends IMU data.
+  std::expected<SetResult, DeviceError> set_imu_enabled(
+    bool on, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x001C as stored by the LiDAR.
+  std::expected<bool, DeviceError> imu_enabled(std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x002B is absent on older firmware: the LiDAR then answers kLidarRejected with
+  /// ret_code kParamNotSupport and error_key 0x002B (no distinct Kind).
+  std::expected<SetResult, DeviceError> set_imu_sensor_config(
+    const ImuSensorConfig & cfg, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x002B as stored by the LiDAR.
+  std::expected<ImuSensorConfig, DeviceError> imu_sensor_config(
+    std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0026: with 1 the LiDAR keeps streaming through a GPS time rollback (wiki).
+  std::expected<SetResult, DeviceError> set_time_filter(
+    bool on, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0026 as stored by the LiDAR.
+  std::expected<bool, DeviceError> time_filter(std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
+
+  /// @name Time synchronisation
+  /// Time synchronisation (issue #53): keys 0x8009–0x800C and command 0x0202.
+  ///@{
+
   /// One 0x0101 for the four keys; a key missing or undecodable → kDecodeFailed with `key`.
   /// The pushed copy is in pushed_status(). Diagnostics only: the data path acts on each
   /// packet's own time_type (see TimestampPolicy), never on these keys.
@@ -240,9 +320,13 @@ public:
   /// read time_sync_status() back to see whether the LiDAR took it (type becomes kGps).
   std::expected<void, DeviceError> set_gps_time(
     std::uint64_t pps_time_ns, std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- firmware log collection (issue #44): 0x0301 on the LiDAR's log port, pushes on
-  // the Context's log socket. Layouts follow SDK2 and are unverified on hardware (#11).
+  /// @name Firmware log collection
+  /// Firmware log collection (issue #44): 0x0301 on the LiDAR's log port, pushes on
+  /// the Context's log socket. Layouts follow SDK2 and are unverified on hardware (#11).
+  ///@{
+
   /// Writes key 0x0009 (this host, the Context's log port) through the session, then sends
   /// 0x0301 enable from the log socket and waits for its ACK (`opts`: timeout / attempts,
   /// the session defaults otherwise). Idempotent; replayed after a reconnect until a
@@ -254,9 +338,13 @@ public:
   std::expected<void, DeviceError> stop_firmware_log(
     FirmwareLogType type = FirmwareLogType::kRealTime,
     std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- debug raw data collection (issue #93): 0x0303 on the LiDAR's log port, the stream
-  // on the Context's debug data socket. Unverified on hardware (#106).
+  /// @name Debug raw data collection
+  /// Debug raw data collection (issue #93): 0x0303 on the LiDAR's log port, the stream
+  /// on the Context's debug data socket. Unverified on hardware (#106).
+  ///@{
+
   /// Sends 0x0303 enable with this host and the Context's debug data port from the log
   /// socket and waits for its ACK (`opts`: timeout / attempts, the session defaults
   /// otherwise). kInvalidState when ContextOptions::debug_data_port is not set. Does not
@@ -267,26 +355,12 @@ public:
   /// 0x0303 disable. The destructor does not send it: the LiDAR keeps streaming.
   std::expected<void, DeviceError> stop_debug_data(
     std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  /// Key 0x800E by inquire (#55); the pushed value is pushed_status()->lidar_diag_status
-  /// and changes raise Event::kDiagChanged.
-  std::expected<DiagStatus, DeviceError> diag_status(
-    std::optional<RequestOptions> opts = std::nullopt);
-  std::expected<SetResult, DeviceError> set_imu_enabled(
-    bool on, std::optional<RequestOptions> opts = std::nullopt);
-  std::expected<bool, DeviceError> imu_enabled(std::optional<RequestOptions> opts = std::nullopt);
-  /// Key 0x002B is absent on older firmware: the LiDAR then answers kLidarRejected with
-  /// ret_code kParamNotSupport and error_key 0x002B (no distinct Kind).
-  std::expected<SetResult, DeviceError> set_imu_sensor_config(
-    const ImuSensorConfig & cfg, std::optional<RequestOptions> opts = std::nullopt);
-  std::expected<ImuSensorConfig, DeviceError> imu_sensor_config(
-    std::optional<RequestOptions> opts = std::nullopt);
-  /// Key 0x0026: with 1 the LiDAR keeps streaming through a GPS time rollback (wiki).
-  std::expected<SetResult, DeviceError> set_time_filter(
-    bool on, std::optional<RequestOptions> opts = std::nullopt);
-  std::expected<bool, DeviceError> time_filter(std::optional<RequestOptions> opts = std::nullopt);
+  /// @name LiDAR network config
+  /// LiDAR network config (issue #50): key 0x0004.
+  ///@{
 
-  // --- LiDAR network config (issue #50): key 0x0004.
   /// lidar_ip_config_valid() → else kInvalidArgument with `key` before any I/O. The LiDAR
   /// answers a change with ret_code 0x21 (`reboot_required`, passed through as is): the new
   /// address is used after reboot(). Reconnection then finds the LiDAR by serial through
@@ -294,10 +368,15 @@ public:
   /// change that broadcast does not reach is still recovered. Not rebooted automatically.
   std::expected<SetResult, DeviceError> set_lidar_ip_config(
     const LidarIpConfig & cfg, std::optional<RequestOptions> opts = std::nullopt);
+  /// Key 0x0004 as stored by the LiDAR (the address in use until the next reboot may differ).
   std::expected<LidarIpConfig, DeviceError> lidar_ip_config(
     std::optional<RequestOptions> opts = std::nullopt);
+  ///@}
 
-  // --- typed key access (issue #57): key_traits<K> in keys.hpp gives each key its C++ type.
+  /// @name Typed key access
+  /// Typed key access (issue #57): `key_traits<K>` in keys.hpp gives each key its C++ type.
+  ///@{
+
   /// One 0x0100 with the encoded value. Only the ACK is awaited: set<Key::kWorkTgtMode>()
   /// does not wait for the state change (start_sampling() / stop_sampling() do). Read-only
   /// keys and the unmodelled Mid-360S / 360L keys do not compile.
@@ -315,6 +394,7 @@ public:
   {
     return set_many<Ks...>(std::nullopt, values...);
   }
+  /// set_many() with request options.
   template <Key... Ks>
     requires(sizeof...(Ks) > 0 && (writable_key<Ks> && ...))
   std::expected<SetResult, DeviceError> set_many(
@@ -363,12 +443,17 @@ public:
     }
     return out;
   }
+  ///@}
+
   /// Interrupts the blocking command in progress from another thread (not serialised); it
   /// returns kCancelled. Without one in progress, the next command (or reconnect()) does.
   /// One cancel() aborts one command.
   void cancel() noexcept;
 
-  // --- connection (issue #8)
+  /// @name Connection
+  /// Connection (issue #8).
+  ///@{
+
   /// False between kDisconnected and kReconnected.
   [[nodiscard]] bool connected() const noexcept;
   /// One recovery attempt on the caller's thread (serialised with the commands): direct
@@ -379,8 +464,12 @@ public:
   /// automatic worker, when enabled, reconnects. Useful for tests and for forcing a
   /// re-discovery after a known network change.
   void disconnect();
+  ///@}
 
-  // --- observation (thread-safe snapshots)
+  /// @name Observation
+  /// Observation (thread-safe snapshots).
+  ///@{
+
   /// Discovery record; `ip` / `cmd_port` / `from` follow a reconnect to a new address.
   [[nodiscard]] DiscoveredDevice info() const;
   /// The latest value of every status key seen in a 0x0102 push, `time_ns` = receive time
@@ -391,8 +480,11 @@ public:
   [[nodiscard]] std::optional<WorkState> work_state() const;
   /// hms_code slots from pushed_status() (all inactive before the first push).
   [[nodiscard]] std::array<HmsCode, 8> hms() const;
+  /// Snapshot of the data-path counters.
   [[nodiscard]] DeviceStats stats() const;
+  /// Snapshot of the command Session's counters.
   [[nodiscard]] SessionStats session_stats() const;
+  ///@}
 
 private:
   struct Impl;
