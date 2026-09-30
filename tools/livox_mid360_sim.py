@@ -142,6 +142,7 @@ READ_ONLY = {
 
 POINTS_PER_PACKET = 96
 MAX_FOV_DRAWS = 16  # batches of POINTS_PER_PACKET drawn per packet while FOV cropping
+CATCH_UP_SLICE_S = 0.02  # longest point-cloud burst between two select() calls (#183)
 PCL_PACKET_RATE = 2000.0  # packets/s  (≈192k points/s)
 IMU_RATE = 200.0  # at imu_sensor_cfg output_rate 0
 IMU_RATES = {0: 200.0, 1: 500.0, 2: 100.0, 3: 50.0}  # key 0x002B data[0]
@@ -1506,6 +1507,9 @@ class Simulator:
             pcl_host = m.host(KEY_PCL_HOST)
             interval = 1.0 / (PCL_PACKET_RATE * self.rate)
             budget = 256  # bound catch-up bursts
+            # Bound them by time too: a narrow FOV window makes each packet slower than the
+            # rate, and 256 of them would leave commands unanswered past the host's timeout.
+            slice_end = time.monotonic() + CATCH_UP_SLICE_S
             while now >= self.next_pcl and budget > 0:
                 # The packet's scheduled time, not `now`: in a catch-up burst `now` is a frame or
                 # more ahead of the early packets, and frame_cnt would change on each one (#155).
@@ -1518,6 +1522,8 @@ class Simulator:
                 self._send_pcl(pcl_host, interval)
                 self.next_pcl += interval
                 budget -= 1
+                if time.monotonic() >= slice_end:
+                    break
             if now - self.next_pcl > 0.5:  # fell hopelessly behind: resync
                 self.next_pcl = now
             if m.imu_enabled:

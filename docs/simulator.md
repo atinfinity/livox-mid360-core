@@ -160,7 +160,9 @@ The process is driven over its standard streams so that any test harness can use
   host in `0x0007` when `imu_data_en = 1`, and a `0x0102` push once per second to the host in
   `0x0005`. Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps and
   `time_type` come from the LiDAR clock (below). The scheduler bounds catch-up bursts to
-  256 packets and resynchronises if it falls more than 0.5 s behind. `frame_cnt` follows the
+  256 packets or 20 ms, whichever ends first, so commands are answered and the push is sent
+  while it catches up ([#183](https://github.com/atinfinity/livox-mid360-core/issues/183)). It
+  resynchronises if it falls more than 0.5 s behind. `frame_cnt` follows the
   packets' scheduled times, so a burst still changes it once per `--frame-ms`, and a resync
   changes it once ([#155](https://github.com/atinfinity/livox-mid360-core/issues/155)).
 - **Time** ([#133](https://github.com/atinfinity/livox-mid360-core/issues/133)): the LiDAR clock stamps every data packet and answers keys
@@ -221,10 +223,11 @@ The process is driven over its standard streams so that any test harness can use
   `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
   `yaw = atan2(y, x)`, `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and
   `90° - theta`. Each packet draws up to 16 batches of 96 points to fill its 96 slots, so a
-  narrow window only slows the generator. `dot_num` is the number of points kept, so a tiny
-  window sends shorter packets and an empty one packets with `dot_num = 0`. The ring scene
-  instead crops its next 96 points on their exact angles, whatever the data type, and sends
-  what is left, so the kept set is known: a window of yaw `[0, 90)` and pitch `[0, 15]` keeps
+  narrow window only slows the generator. A narrow enough window makes it slower than the
+  packet rate: the stream then runs behind and resynchronises every 0.5 s. `dot_num` is the
+  number of points kept, so a tiny window sends shorter packets and an empty one packets
+  with `dot_num = 0`. The ring scene instead crops its next 96 points on their exact angles,
+  whatever the data type, and sends what is left, so the kept set is known: a window of yaw `[0, 90)` and pitch `[0, 15]` keeps
   exactly the `k < 64` with `k % 4` in {0, 1}.
 
 ## Tests
