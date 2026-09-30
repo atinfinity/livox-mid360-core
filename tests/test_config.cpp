@@ -41,6 +41,19 @@ bool same(std::span<const std::byte> a, std::span<const std::byte> b)
 {
   return std::ranges::equal(a, b);
 }
+
+// The simulator streams to the host ports it is given. The defaults (56201 / 56301 / 56401)
+// belong to the script tests (RESOURCE_LOCK sim_default_ports), which would record this
+// simulator's packets under ctest -j (#181). Ports below the ephemeral ranges of Linux
+// (32768-60999) and macOS (49152-65535) reach no other test's socket.
+HostSetup unused_ports()
+{
+  HostSetup setup;
+  setup.push_port = 30001;
+  setup.point_port = 30002;
+  setup.imu_port = 30003;
+  return setup;
+}
 }  // namespace
 
 TEST_CASE("host_setup_key_values: matches the golden 0x0100 request", "[config][golden]")
@@ -98,11 +111,8 @@ TEST_CASE("apply_host_setup: success path reaches the requested state", "[sim][c
   }
   Session s = f.connect();
 
-  HostSetup setup;
+  HostSetup setup = unused_ports();
   setup.ip = Ipv4{127, 0, 0, 1};
-  setup.push_port = 40001;
-  setup.point_port = 40002;
-  setup.imu_port = 40003;
   setup.pcl_data_type = DataType::kCartesian16;
   setup.work_tgt_mode = WorkState::kIdle;
   setup.wait_timeout = 5s;
@@ -118,16 +128,16 @@ TEST_CASE("apply_host_setup: success path reaches the requested state", "[sim][c
   REQUIRE(inq.has_value());
   const auto pcl = decode_host_ip_config(*inq->get(Key::kPointCloudHostIpCfg)).value();
   CHECK(pcl.ip == Ipv4{127, 0, 0, 1});
-  CHECK(pcl.dst_port == 40002);
+  CHECK(pcl.dst_port == 30002);
   CHECK(pcl.src_port == kPointCloudPort);
-  CHECK(decode_host_ip_config(*inq->get(Key::kStateInfoHostIpCfg))->dst_port == 40001);
-  CHECK(decode_host_ip_config(*inq->get(Key::kImuHostIpCfg))->dst_port == 40003);
+  CHECK(decode_host_ip_config(*inq->get(Key::kStateInfoHostIpCfg))->dst_port == 30001);
+  CHECK(decode_host_ip_config(*inq->get(Key::kImuHostIpCfg))->dst_port == 30003);
   CHECK(decode_u8(*inq->get(Key::kPclDataType)).value() == 2);
   CHECK(decode_u8(*inq->get(Key::kImuDataEn)).value() == 1);
   CHECK(decode_u8(*inq->get(Key::kWorkTgtMode)).value() == 2);
 
   // Back to sampling, no wait: the ACK alone is enough, final_state stays empty.
-  HostSetup back;
+  HostSetup back = unused_ports();
   back.work_tgt_mode = WorkState::kSampling;
   back.wait_timeout = 0ms;
   const auto r2 = apply_host_setup(s, back);
@@ -145,14 +155,14 @@ TEST_CASE("apply_host_setup: ip defaults to the session's local address", "[sim]
     SKIP("simulator unavailable: " << f.err);
   }
   Session s = f.connect();
-  const HostSetup setup;  // no ip, no work mode
+  const HostSetup setup = unused_ports();  // no ip, no work mode
   REQUIRE(apply_host_setup(s, setup).has_value());
   const Key keys[] = {Key::kImuHostIpCfg};
   const auto inq = s.inquire(keys);
   REQUIRE(inq.has_value());
   const auto imu = decode_host_ip_config(*inq->get(Key::kImuHostIpCfg)).value();
   CHECK(imu.ip == Ipv4{127, 0, 0, 1});
-  CHECK(imu.dst_port == kDefaultHostImuPort);
+  CHECK(imu.dst_port == 30003);
   CHECK(f.sim->stop() == 0);
 }
 
