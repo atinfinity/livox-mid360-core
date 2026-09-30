@@ -628,6 +628,23 @@ class SimulatorTest(unittest.TestCase):
                 self.assertGreater(pkt.dot_num, 0)
                 self.assertTrue(all(m.keeps_point(1, p) for p in pkt.samples()))
 
+    def test_slow_catch_up_returns_to_the_main_loop(self) -> None:
+        # A narrow FOV window makes each packet draw all MAX_FOV_DRAWS batches, slower than
+        # the packet rate. One catch-up call must still end within a time slice, sending the
+        # due push, so that commands are answered (#183).
+        m = self.s.model
+        m.configure(
+            [(sim.KEY_FOV0, proto.encode_fov_cfg(30, 60, 0, 10)), (sim.KEY_FOV_EN, b'\x01')]
+        )
+        now = time.monotonic()
+        m.force_state(sim.WS_SAMPLING, now)
+        self.s.next_pcl = now - 0.4  # 800 packets overdue at the full rate
+        self.s.next_push = now
+        self.s._send_periodic(now)
+        self.assertGreater(self.s.udp_cnt_pcl, 0)  # still makes progress
+        self.assertLess(self.s.udp_cnt_pcl, 100)  # the count budget alone allows 256
+        self.assertGreater(self.s.next_push, now)
+
     def test_silence_neither_spins_nor_bursts(self) -> None:
         now = time.monotonic()
         self.s.next_push = self.s.next_stats = now - 0.2  # overdue when the silence starts
