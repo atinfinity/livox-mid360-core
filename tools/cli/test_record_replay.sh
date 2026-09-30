@@ -43,11 +43,13 @@ if [ "$rec_packets" != "$rep_packets" ]; then
   echo "packet count mismatch: recorded $rec_packets, replayed $rep_packets"
   exit 1
 fi
-# The writer's file frames and the replay's 50 ms windows both start at the first packet, but
-# they are cut by different code, so the partial frames at both ends may differ: allow two.
-diff=$((rec_frames - rep_frames))
-if [ "$diff" -gt 2 ] || [ "$diff" -lt -2 ]; then
-  echo "frame count mismatch: recorded $rec_frames file frames, replayed $rep_frames"
+# The writer cuts file frames on a fixed 50 ms grid from the first package (#173); the replay
+# opens a window at the first packet 50 ms or more after the current window's start. They only
+# agree while the simulator sends steadily, and a loaded host makes it send in bursts (#181).
+# Whatever the timing: consecutive windows start in different grid slots, so windows <= file
+# frames, and a window touches at most two slots, so file frames <= 2 * windows.
+if [ "$rep_frames" -gt "$rec_frames" ] || [ "$rec_frames" -gt $((2 * rep_frames)) ]; then
+  echo "frame count mismatch: recorded $rec_frames file frames, replayed $rep_frames windows"
   exit 1
 fi
 echo "ok: packets=$rep_packets file_frames=$rec_frames frames=$rep_frames"
