@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 project(livox_mid360_core
   VERSION 0.1.0
   DESCRIPTION "Unofficial clean-room SDK for the Livox Mid-360 LiDAR (Ubuntu 24.04+)"
-  HOMEPAGE_URL "https://github.com/dandelion/livox-mid360-core"
+  HOMEPAGE_URL "https://atinfinity.github.io/livox-mid360-core/"
   LANGUAGES CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

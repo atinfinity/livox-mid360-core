@@ -43,7 +43,7 @@ formatter, clang-tidy's `readability-braces-around-statements` requires braces o
 guards (so cpplint is not used, [#17](https://github.com/atinfinity/livox-mid360-core/issues/17)), and no cpplint-style header/footer comments. Code blocks in
 the documentation follow the same style.
 
-Python (`tools/`) follows the [ROS 2 Python style](https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#python)
+Python (`tools/`, `scripts/`) follows the [ROS 2 Python style](https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#python)
 as checked by `ament_flake8` and `ament_pep257` with their default settings, but enforced here
 with ruff: `pyproject.toml` selects the matching rule families (single quotes, google import
 order, 99 columns, the `ament` pydocstyle convention with the summary of a multi-line docstring
@@ -127,6 +127,18 @@ vectors, Catch2, and the non-Linux fallback branches in `src/transport.cpp` (mar
 reported but the badge and the Codecov status checks use line coverage; both checks are
 informational for now.
 
+## Documentation site
+
+The pages in `docs/`, this file, the README and the READMEs of `examples/` and `tools/` are
+published with the API reference as the [project site](https://atinfinity.github.io/livox-mid360-core/)
+([#104](https://github.com/atinfinity/livox-mid360-core/issues/104)), built with MkDocs
+Material and deployed to GitHub Pages from `main` by the `Docs` workflow. Write the Markdown
+for GitHub: `scripts/mkdocs_hooks.py` rewrites the relative links and the `> [!NOTE]` alerts
+for the site, and `mkdocs.yml` holds the navigation, so a new page in `docs/` needs an entry
+there. The build runs in strict mode and fails on a broken link or anchor. MkDocs and its
+plugins are locked in `requirements-docs.txt`; after editing `requirements-docs.in`, relock with
+`uv pip compile requirements-docs.in --python-version 3.12 --universal -o requirements-docs.txt`.
+
 ## API reference
 
 The public headers in `include/livox/mid360/` are the API reference: Doxygen generates it from
@@ -143,9 +155,14 @@ The upstream binaries cover Linux x86-64 and macOS; on other hosts, install the 
 yourself and set `DOXYGEN`.
 
 ```sh
-scripts/install-doxygen.sh   # once: the pinned Doxygen into .cache/
-scripts/build-docs.sh        # the reference in docs/reference/index.html (git-ignored)
+scripts/install-doxygen.sh           # once: the pinned Doxygen into .cache/
+scripts/build-docs.sh                # the reference in docs/reference/, then the site in site/
+scripts/build-docs.sh --serve        # the same, served on http://127.0.0.1:8000 with reload
+scripts/build-docs.sh --doxygen-only # the reference only, without Python
 ```
+
+The site steps run MkDocs through [uv](https://docs.astral.sh/uv/). Both output directories
+are git-ignored.
 
 ## Continuous integration
 
@@ -153,8 +170,8 @@ scripts/build-docs.sh        # the reference in docs/reference/index.html (git-i
 ASan + UBSan, each on x86-64 and arm64 (`ubuntu-24.04-arm`), Apple Clang in Release on
 `macos-latest`, and separate jobs for the Python reference and simulator tests and a short run
 of every fuzzer. `Lint` runs clang-format 19,
-clang-tidy 19 and ruff; `Coverage` uploads to Codecov. `Docs` builds the API reference and,
-unlike the others, also runs on documentation-only changes.
+clang-tidy 19 and ruff; `Coverage` uploads to Codecov. `Docs` builds the API reference and the
+site, deploys it from `main`, and unlike the others also runs on documentation-only changes.
 
 To reproduce CI locally on any Docker host: `docker/check.sh [linux/arm64|linux/amd64]`. The
 platform defaults to the host's. On Apple Silicon `linux/arm64` runs natively; a non-native

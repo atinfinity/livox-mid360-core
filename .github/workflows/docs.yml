@@ -2,15 +2,23 @@ name: Docs
 
 # Runs on every change, without the paths-ignore of the other workflows: the API reference is
 # generated from the header comments, and documentation changes are what this checks (#104).
+# Pull requests only build the site; a push to main also publishes it to GitHub Pages.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  doxygen:
-    name: Doxygen API reference
+  build:
+    name: Build site
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -18,5 +26,29 @@ jobs:
         with:
           path: .cache/doxygen-*
           key: doxygen-${{ runner.os }}-${{ hashFiles('scripts/install-doxygen.sh') }}
+      # setup-uv publishes no major-version tags since v8, so pin the release.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements-docs.txt
       - run: scripts/install-doxygen.sh
       - run: scripts/build-docs.sh
+      - if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

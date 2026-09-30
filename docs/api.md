@@ -1,5 +1,8 @@
 # Public API design (device layer)
 
+> The reference of every public symbol, generated from the header comments, is the
+> [API reference](https://atinfinity.github.io/livox-mid360-core/reference/) on the project site.
+>
 > The overview of all layers, threads and data flows is in [architecture.md](architecture.md).
 
 `include/livox/mid360/context.hpp`, `device.hpp`, `frame.hpp`, `event.hpp`. Design decisions

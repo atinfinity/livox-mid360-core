@@ -49,8 +49,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pipx install "ruff==${RUFF_VERSION}"
-      - run: ruff check tools/
-      - run: ruff format --check tools/
+      - run: ruff check tools/ scripts/
+      - run: ruff format --check tools/ scripts/
 
   # The ROS 2 (ament_lint_common) checks that are cheap and useful on a plain CMake library:
   # cppcheck and lint_cmake. See CONTRIBUTING.md (Lint) and issue #65 for what is left out.

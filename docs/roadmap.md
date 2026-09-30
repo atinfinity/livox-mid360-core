@@ -47,7 +47,9 @@ simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-6
   clang-format / clang-tidy / ruff lint ([#17](https://github.com/atinfinity/livox-mid360-core/issues/17)); coverage on Codecov ([#18](https://github.com/atinfinity/livox-mid360-core/issues/18)); arm64 CI ([#19](https://github.com/atinfinity/livox-mid360-core/issues/19)).
 - **Documentation**: [architecture.md](architecture.md) (overview), [api.md](api.md),
   [transport.md](transport.md), [session.md](session.md), [simulator.md](simulator.md),
-  [protocol_notes.md](protocol_notes.md), [lvx2.md](lvx2.md), [debug_data.md](debug_data.md).
+  [protocol_notes.md](protocol_notes.md), [lvx2.md](lvx2.md), [debug_data.md](debug_data.md),
+  published with a Doxygen API reference as the
+  [project site](https://atinfinity.github.io/livox-mid360-core/) ([#104](https://github.com/atinfinity/livox-mid360-core/issues/104)).
 
 ## Phase 2: in progress
 
