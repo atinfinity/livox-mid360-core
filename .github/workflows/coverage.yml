@@ -18,10 +18,13 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.git-blame-ignore-revs'
 
+# Every job sets timeout-minutes to about 3x its usual run time, so a hung step fails
+# instead of holding the runner for GitHub's default of 360 minutes (issue #186).
 jobs:
   coverage:
     name: gcc-14 / gcovr
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
