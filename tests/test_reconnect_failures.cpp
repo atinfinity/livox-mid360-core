@@ -3,6 +3,8 @@
 // tools/livox_mid360_sim.py: a replay step the LiDAR rejects (host setup, sampling, firmware
 // log), a LiDAR that comes back on an address another Device holds, and the backoff between
 // attempts. The rejections are injected with the simulator's `fail_cmd` control.
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -46,6 +48,15 @@ DiscoveredDevice discovered(const SimProcess & sim, Ipv4 ip = {127, 0, 0, 1})
     .cmd_port = sim.ports().cmd,
     .dev_type = 9,
     .from = Endpoint{ip, sim.ports().cmd}};
+}
+
+/// Whether the two simulators hold a port with the same number.
+bool shares_port(const SimProcess::Ports & a, const SimProcess::Ports & b)
+{
+  const std::array pa{a.discovery, a.cmd, a.push, a.pcl, a.imu, a.log};
+  const std::array pb{b.discovery, b.cmd, b.push, b.pcl, b.imu, b.log};
+  return std::ranges::any_of(
+    pa, [&](std::uint16_t p) { return std::ranges::find(pb, p) != pb.end(); });
 }
 
 /// See test_reconnect.cpp for the rates. Reconnection is manual unless a test enables it.
@@ -199,13 +210,21 @@ TEST_CASE("Reconnect: the new address belongs to another Device", "[sim][reconne
     SKIP("127.0.0.2 is not configured on the loopback interface");
   }
   Fixture f({"--reboot-silence", "0.2"});
+  // A keeps its port numbers when it rebinds to 127.0.0.2. Both simulators take ephemeral
+  // ports, so B can already hold one of them there; A's rebind would then fail and the
+  // "rebound" event never come. Draw B's ports again until they differ from A's.
   std::string err;
-  auto sim_b = SimProcess::start(
-    err, {"--bind", "127.0.0.2", "--sn", "SIM0000000000002", "--rate-multiplier", "0.05",
-          "--push-rate", "10"});
-  if (!sim_b) {
-    SKIP("second simulator unavailable: " << err);
+  std::optional<SimProcess> sim_b;
+  for (int i = 0; i < 5 && (!sim_b || shares_port(sim_b->ports(), f.sim->ports())); ++i) {
+    sim_b.reset();
+    sim_b = SimProcess::start(
+      err, {"--bind", "127.0.0.2", "--sn", "SIM0000000000002", "--rate-multiplier", "0.05",
+            "--push-rate", "10"});
+    if (!sim_b) {
+      SKIP("second simulator unavailable: " << err);
+    }
   }
+  REQUIRE_FALSE(shares_port(sim_b->ports(), f.sim->ports()));
   auto dev_a = f.open(f.options());
   auto dev_b = Device::open(*f.context, discovered(*sim_b, {127, 0, 0, 2}), f.options());
   if (!dev_b) {

@@ -1,0 +1,1501 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Clean-room, dependency-free C++ SDK for the Livox Mid-360 LiDAR">
+      
+      
+      
+        <link rel="canonical" href="https://atinfinity.github.io/livox-mid360-core/roadmap/">
+      
+      
+        <link rel="prev" href="../tools/">
+      
+      
+        <link rel="next" href="../contributing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Roadmap - livox-mid360-core</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#roadmap-and-status" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="livox-mid360-core" class="md-header__button md-logo" aria-label="livox-mid360-core" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            livox-mid360-core
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Roadmap
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Follow the system setting"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Follow the system setting" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/atinfinity/livox-mid360-core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    atinfinity/livox-mid360-core
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="livox-mid360-core" class="md-nav__button md-logo" aria-label="livox-mid360-core" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    livox-mid360-core
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/atinfinity/livox-mid360-core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    atinfinity/livox-mid360-core
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lvx2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LVX2 record / replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rerun viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../debug_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debug raw data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transport/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transport layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../protocol_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Protocol notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-1-done" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: done
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-2-in-progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: in progress
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 2: in progress">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#typed-configuration-and-status-apis-on-device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed configuration and status APIs on Device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostics-tooling-and-samples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostics, tooling and samples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardware-verification-needs-hardware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardware verification (needs-hardware)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-3-not-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: not started
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project decisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-1-done" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: done
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-2-in-progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: in progress
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 2: in progress">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#typed-configuration-and-status-apis-on-device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed configuration and status APIs on Device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostics-tooling-and-samples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostics, tooling and samples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardware-verification-needs-hardware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardware verification (needs-hardware)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-3-not-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: not started
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project decisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="roadmap-and-status">Roadmap and status<a class="headerlink" href="#roadmap-and-status" title="Permanent link">&para;</a></h1>
+<p>Where <code>livox-mid360-core</code> stands, what is planned and which issues track each item.
+Last updated 2026-09-26 (version 0.1.0, after the merge of the reconnection work in
+PR <a href="https://github.com/atinfinity/livox-mid360-core/pull/37">#37</a>). Open issues carry the labels <code>no-hardware</code> (doable against the simulator),
+<code>needs-hardware</code> (requires a real Mid-360) and <code>phase-2</code> / <code>phase-3</code>.</p>
+<h2 id="phases">Phases<a class="headerlink" href="#phases" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Protocol, transport, session and device layers, simulator, CI</td>
+<td><strong>Done</strong> (v0.1.0)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Typed configuration APIs, diagnostics, samples, hardware verification</td>
+<td>In progress</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Time-sync verification, C ABI, CLI, ROS 2 driver (<code>livox-mid360-ros2</code>, separate repository)</td>
+<td>Not started</td>
+</tr>
+</tbody>
+</table>
+<h2 id="phase-1-done">Phase 1: done<a class="headerlink" href="#phase-1-done" title="Permanent link">&para;</a></h2>
+<p>All of these are implemented, unit-tested and exercised end to end against the Python
+simulator in CI (gcc-13/14, clang-19, Release and Debug with ASan + UBSan, x86-64 and arm64).</p>
+<ul>
+<li><strong>Protocol layer</strong> (<code>protocol.hpp</code>, <code>keys.hpp</code>, <code>hms.hpp</code>, <code>crc.hpp</code>): CRC-16/CCITT-FALSE
+  and CRC-32 (<code>constexpr</code>, with check vectors); control command frames (24-byte header,
+  seq/CRC validation, 1400-byte limit); point-cloud / IMU data packets (36-byte header, data
+  types 0–3, per-point timestamp interpolation, tag decoding); key-value lists for <code>0x0100</code>
+  configure / <code>0x0101</code> inquire / <code>0x0102</code> push with typed codecs for every documented key;
+  HMS diagnostic-code decoding with the official description table. A Python reference
+  implementation in <code>tools/</code> shares byte-exact golden vectors with the C++ tests (<a href="https://github.com/atinfinity/livox-mid360-core/pull/1">#1</a>).</li>
+<li><strong>UDP transport</strong> (<code>transport.hpp</code>): non-blocking IPv4 sockets, batched receive (<code>recvmmsg</code>
+  on Linux) with kernel receive timestamps, a <code>poll</code>-based <code>Poller</code> with cross-thread wake-up
+  (<a href="https://github.com/atinfinity/livox-mid360-core/issues/2">#2</a>).</li>
+<li><strong>LiDAR simulator</strong> (<code>tools/livox_mid360_sim.py</code>, stdlib-only Python): answers commands,
+  runs the work-state machine, streams point-cloud / IMU / push packets and takes JSON control
+  commands for fault injection (<a href="https://github.com/atinfinity/livox-mid360-core/issues/3">#3</a>).</li>
+<li><strong>Session layer</strong> (<code>session.hpp</code>): broadcast / unicast discovery, synchronous command
+  round-trips with seq-matched retries and timeouts, typed configure / inquire / reboot
+  helpers, work-state polling, cross-thread cancellation (<a href="https://github.com/atinfinity/livox-mid360-core/issues/4">#4</a>). Host setup flow: host IP and
+  ports, IMU on/off, work mode (<a href="https://github.com/atinfinity/livox-mid360-core/issues/5">#5</a>).</li>
+<li><strong>Device layer</strong> (<code>context.hpp</code>, <code>device.hpp</code>, <code>frame.hpp</code>, <code>event.hpp</code>): a <code>Context</code> owns
+  the host receive sockets and one receive thread that dispatches by source IP; a <code>Device</code>
+  wraps a <code>Session</code>, applies the host setup and delivers packets, assembled <code>Frame</code>s (frame
+  counter or time window, <code>udp_cnt</code> drop counting, timestamp policies) and IMU samples through
+  callbacks; <code>BoundedQueue&lt;T&gt;</code> hands them to another thread (<a href="https://github.com/atinfinity/livox-mid360-core/issues/6">#6</a>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/9">#9</a>). Push handling: stats,
+  work-state and HMS events from the <code>0x0102</code> push (<a href="https://github.com/atinfinity/livox-mid360-core/issues/7">#7</a>). Automatic reconnection after a cable
+  pull or reboot (<code>ReconnectOptions</code>) and several LiDARs sharing one <code>Context</code>
+  (<code>Context::find()</code> by serial) (<a href="https://github.com/atinfinity/livox-mid360-core/issues/8">#8</a>).</li>
+<li><strong>Quality gates</strong>: fuzzers for the protocol, transport and session layers (<a href="https://github.com/atinfinity/livox-mid360-core/issues/24">#24</a>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/28">#28</a>);
+  clang-format / clang-tidy / ruff lint (<a href="https://github.com/atinfinity/livox-mid360-core/issues/17">#17</a>); coverage on Codecov (<a href="https://github.com/atinfinity/livox-mid360-core/issues/18">#18</a>); arm64 CI (<a href="https://github.com/atinfinity/livox-mid360-core/issues/19">#19</a>).</li>
+<li><strong>Documentation</strong>: <a href="../architecture/">architecture.md</a> (overview), <a href="../api/">api.md</a>,
+  <a href="../transport/">transport.md</a>, <a href="../session/">session.md</a>, <a href="../simulator/">simulator.md</a>,
+  <a href="../protocol_notes/">protocol_notes.md</a>, <a href="../lvx2/">lvx2.md</a>, <a href="../debug_data/">debug_data.md</a>,
+  published with a Doxygen API reference as the
+  <a href="https://atinfinity.github.io/livox-mid360-core/">project site</a> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/104">#104</a>).</li>
+</ul>
+<h2 id="phase-2-in-progress">Phase 2: in progress<a class="headerlink" href="#phase-2-in-progress" title="Permanent link">&para;</a></h2>
+<h3 id="typed-configuration-and-status-apis-on-device">Typed configuration and status APIs on <code>Device</code><a class="headerlink" href="#typed-configuration-and-status-apis-on-device" title="Permanent link">&para;</a></h3>
+<p>The generic <code>Device::set&lt;K&gt;()</code> / <code>get&lt;K&gt;()</code> / <code>set_many</code> / <code>get_many</code> over <code>key_traits&lt;K&gt;</code>
+(<a href="https://github.com/atinfinity/livox-mid360-core/issues/57">#57</a>, done) are the primary API; the dedicated methods below are implemented as thin wrappers
+over them and only add what the raw key does not express (waits, combined keys, events).</p>
+<ul>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/38">#38</a> firmware type and version query (<code>Device::identity()</code>, <code>lidar_info.hpp</code>): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/39">#39</a> FOV configuration and enable (<code>set_fov()</code> / <code>fov()</code>, <code>HostSetup::fov</code>): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/40">#40</a> coordinate format, scan pattern and point-cloud frame rate (<code>set_point_format()</code>,
+  <code>set_scan_pattern()</code>, <code>set_frame_policy()</code>; no frame-rate key on the Mid-360): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/41">#41</a> read-back of stored settings and live status (<code>settings()</code> / <code>status()</code> / <code>pushed_status()</code>): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/46">#46</a> detection mode (normal / sensitive, key <code>0x0018</code>; <code>set_detect_mode()</code>): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/47">#47</a> IMU enable and IMU sensor config (rate, accelerometer range, gyroscope range;
+  <code>set_imu_enabled()</code>, <code>set_imu_sensor_config()</code>): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/50">#50</a> LiDAR network config (key <code>0x0004</code>) with reboot-required handling — <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/51">#51</a> install attitude / extrinsics (key <code>0x0012</code>) and optional host-side transform — <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/52">#52</a> function IO config (key <code>0x0019</code>: PPS / GPS inputs, safety-zone outputs) — <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/53">#53</a> time-sync status read-back (<code>0x8009</code>–<code>0x800C</code>) and <code>set_gps_time</code> integration with
+  <code>TimestampPolicy</code> — <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/54">#54</a> time filter (key <code>0x0026</code>; <code>set_time_filter()</code>): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/55">#55</a> diag status (key <code>0x800E</code>) read-back and change event</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/56">#56</a> typed snapshot of the full <code>0x0102</code> push payload and optional <code>on_push</code> callback</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/57">#57</a> generic typed key access (<code>set&lt;Key&gt;</code> / <code>get&lt;Key&gt;</code>, batched) over the <code>keys.hpp</code> codecs: <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/58">#58</a> typed <code>DeviceType</code> from the discovery ACK (needs hardware to confirm values)</li>
+</ul>
+<h3 id="diagnostics-tooling-and-samples">Diagnostics, tooling and samples<a class="headerlink" href="#diagnostics-tooling-and-samples" title="Permanent link">&para;</a></h3>
+<ul>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/42">#42</a> SDK logging: level control, console suppression, file / stderr sinks: <strong>done</strong> (C ABI mirror with phase 3)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/44">#44</a> firmware log collection (<code>0x03xx</code>, port 56500) API and sample: <strong>done</strong> (<code>examples/collect_firmware_log.cpp</code>)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/93">#93</a> debug raw data collection (<code>0x0303</code>): <strong>done</strong> (<code>debug_data.hpp</code>, <code>Device::start_debug_data()</code>, <code>livox-mid360-cli debug-data</code>, <a href="../debug_data/">debug_data.md</a>)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/34">#34</a> decoded point tag accessors (noise confidence per field): <strong>done</strong></li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/35">#35</a> lvx2 record / replay CLI — done: <code>lvx2.hpp</code> codec + <code>livox-mid360-cli</code> (<code>tools/cli/</code>), docs/lvx2.md</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/147">#147</a> Rerun viewer for live and lvx2 point clouds: <strong>done</strong> (<code>livox-mid360-rerun</code>, <code>tools/rerun/</code>, opt-in <code>LIVOX_MID360_BUILD_RERUN</code>, <a href="../rerun/">rerun.md</a>)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/43">#43</a> minimal point-cloud and IMU receive sample: <strong>done</strong> (<code>examples/minimal_receive.cpp</code>)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/45">#45</a> simulator: verify the <code>work_tgt_mode</code> list and transitions and model them faithfully</li>
+</ul>
+<h3 id="hardware-verification-needs-hardware">Hardware verification (<code>needs-hardware</code>)<a class="headerlink" href="#hardware-verification-needs-hardware" title="Permanent link">&para;</a></h3>
+<p>Everything so far was validated against the simulator only. The assumptions to confirm are
+listed in <a href="../simulator/">simulator.md</a> and <a href="../protocol_notes/">protocol_notes.md</a>.</p>
+<ul>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/10">#10</a> capture pcaps and add them as test fixtures</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a> tracking issue: verify the unverified protocol assumptions (<code>dev_type</code>, return codes, work states, settings keys, firmware log, minimum firmware)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/12">#12</a> verify recovery from disconnect / reboot and multi-device operation</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/13">#13</a> long-run reception test and comparison with Livox Viewer 2</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/110">#110</a> first end-to-end run of the examples and the CLI</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/106">#106</a> debug raw data collection (<code>0x0303</code>); <a href="https://github.com/atinfinity/livox-mid360-core/issues/107">#107</a> SDK2-compatible file</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/108">#108</a> lvx2 interchange with Livox Viewer 2</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/109">#109</a> time synchronisation (PTP / gPTP / GPS)</li>
+<li><a href="https://github.com/atinfinity/livox-mid360-core/issues/111">#111</a> provoke and record HMS codes</li>
+</ul>
+<h2 id="phase-3-not-started">Phase 3: not started<a class="headerlink" href="#phase-3-not-started" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Time synchronisation on hardware</strong>: PTP (IEEE 1588v2.0 over UDP) with linuxptp <code>ptp4l</code> as
+  the master, gPTP (L2) and GPS (PPS + GPRMC); confirm <code>time_type</code>, the <code>kLidar</code> timestamp
+  policy and timestamp monotonicity. PTP v2.1 is unsupported by the LiDAR and 1588 + gPTP
+  together is discouraged by the wiki.</li>
+<li><strong>C ABI</strong>: the mapping table is in <a href="../api/#c-abi-mapping-phase-3">api.md</a>; all output
+  structs are already plain data with <code>static_assert</code>s in <code>tests/test_api_skeleton.cpp</code>.</li>
+<li><strong>CLI</strong> (<code>livox-mid360-cli</code>, separate repository): discovery, configuration, lvx2 record /
+  replay (<a href="https://github.com/atinfinity/livox-mid360-core/issues/35">#35</a> started this inside <code>tools/cli/</code>: <code>livox-mid360-cli record</code> / <code>replay</code>).</li>
+<li><strong>ROS 2 driver</strong> (<code>livox-mid360-ros2</code>, separate repository): rclcpp composable node
+  <code>livox_mid360_driver</code> in package <code>livox_mid360_ros2</code>, publishing output compatible with
+  <code>livox_ros_driver2</code> (<code>PointXYZRTLT</code> point cloud and <code>CustomMsg</code>: x, y, z, intensity, tag,
+  line, timestamp / offset_time). It uses the C++ API directly, one <code>Context</code> per node.</li>
+<li><strong>Ideas not yet scheduled</strong>: a loader for the official <code>MID360_config.json</code> so users can
+  migrate from Livox-SDK2 without rewriting their configuration.</li>
+</ul>
+<h2 id="project-decisions">Project decisions<a class="headerlink" href="#project-decisions" title="Permanent link">&para;</a></h2>
+<p>Fixed in phase 0 (2026-09-25) and not expected to change within v1.</p>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relation to Livox-SDK2</td>
+<td>Clean-room implementation from the public protocol wiki only. No code is copied from SDK2; it serves solely as a behavioural reference during hardware tests.</td>
+</tr>
+<tr>
+<td>Device scope</td>
+<td>Base Mid-360 only. Mid-360S / Mid-360L keys (<code>speed_mode</code> <code>0x0021</code>, <code>pc_freq_mod</code> <code>0x0029</code>) are listed in the key enum but get no typed helpers.</td>
+</tr>
+<tr>
+<td>Language standard</td>
+<td>C++20 code built with <code>-std=c++23</code>, because <code>std::expected</code> is only enabled under C++23 in libstdc++ and libc++. Clang 18 with libstdc++ cannot use <code>&lt;expected&gt;</code>, so Clang 19+ is required.</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Ubuntu 24.04 and later only. No Windows, no Ubuntu 18.04 / 20.04 / 22.04.</td>
+</tr>
+<tr>
+<td>Minimum firmware</td>
+<td>Undecided. Firmware v13.18.0244 is the baseline for hardware verification (<a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>).</td>
+</tr>
+<tr>
+<td>Tests</td>
+<td>Catch2 v3 from apt when available, otherwise FetchContent.</td>
+</tr>
+<tr>
+<td>Repository split</td>
+<td>Core library here; ROS 2 driver and CLI in sister repositories <code>livox-mid360-ros2</code> and <code>livox-mid360-cli</code>.</td>
+</tr>
+<tr>
+<td>Third-party code</td>
+<td>None in the library or the default build. The one exception is the opt-in viewer <code>livox-mid360-rerun</code> (<code>LIVOX_MID360_BUILD_RERUN</code>, Rerun C++ SDK + Apache Arrow, <a href="https://github.com/atinfinity/livox-mid360-core/issues/147">#147</a>), which lives in <code>tools/rerun/</code> and is not linked by the library.</td>
+</tr>
+<tr>
+<td>Lint</td>
+<td><code>.clang-format</code> (ROS 2 style: a verbatim copy of the <code>ament_clang_format</code> configuration, <a href="https://github.com/atinfinity/livox-mid360-core/issues/63">#63</a>), <code>.clang-tidy</code> and <code>pyproject.toml</code> (ruff configured to match <code>ament_flake8</code> / <code>ament_pep257</code>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/64">#64</a>) are shared with <code>livox-mid360-ros2</code> through <code>ament_clang_format --config</code> (ruff has no ament equivalent; the ROS 2 side uses the <code>ament_flake8</code> / <code>ament_pep257</code> defaults, which the ruff configuration matches). Of <code>ament_lint_common</code>, only <code>ament_cppcheck</code> and <code>ament_lint_cmake</code> run here (<a href="https://github.com/atinfinity/livox-mid360-core/issues/65">#65</a>); the driver's <code>colcon test</code> never lints this library. Not adopted: <code>ament_cpplint</code> (tool limitations, its real findings fixed once), <code>ament_copyright</code> (files keep the one-line SPDX header; the driver repository uses the ROS 2 header format), <code>ament_uncrustify</code> (the driver package uses <code>ament_cmake_clang_format</code> with this repository's <code>.clang-format</code>).</td>
+</tr>
+<tr>
+<td>Trademark</td>
+<td>The README states up front that the project is unofficial and unaffiliated with Livox / DJI.</td>
+</tr>
+</tbody>
+</table>
+<p>Naming:</p>
+<ul>
+<li>C++ namespace <code>livox::mid360</code>, CMake target <code>livox::mid360_core</code>, shared library
+  <code>liblivox_mid360_core.so</code>, include path <code>&lt;livox/mid360/...&gt;</code>.</li>
+<li>ROS 2 package <code>livox_mid360_ros2</code>, node <code>livox_mid360_driver</code>.</li>
+<li>GitHub topics: <code>livox</code>, <code>mid-360</code>, <code>lidar</code>, <code>ros2</code>, <code>cpp20</code>.</li>
+</ul>
+<h2 id="out-of-scope">Out of scope<a class="headerlink" href="#out-of-scope" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Firmware upgrade commands (<code>0x04xx</code>).</li>
+<li>Mid-360S / Mid-360L specific features (v1 targets the base Mid-360).</li>
+<li>Multicast reception: the host IP keys can hold a multicast group, but the transport does
+  not join it (<code>SocketOptions::multicast_group</code> is reserved; <a href="https://github.com/atinfinity/livox-mid360-core/issues/112">#112</a>).</li>
+<li>Platforms other than Ubuntu 24.04+ (macOS builds for development only; Jetson / JetPack 6
+  is unsupported until a C++23-capable toolchain is confirmed).</li>
+</ul>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<p>Official:</p>
+<ul>
+<li>Protocol (packet layouts, key-value list, CRC; primary source):
+  <a href="https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/livox_eth_protocol_mid360.html">https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/livox_eth_protocol_mid360.html</a>
+  (rev v1.4.12, 2026-09-21, adds Mid-360L notes)</li>
+<li>Mid-360 index (time sync, HMS):
+  <a href="https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/mid360.html">https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/mid360.html</a></li>
+<li>Time synchronisation (PTP / gPTP / GPS):
+  <a href="https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/common/time_sync.html">https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/common/time_sync.html</a></li>
+<li>HMS diagnostic codes (key <code>0x8011</code>):
+  <a href="https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/hms_code_mid360.html">https://livox-wiki-en.readthedocs.io/en/latest/tutorials/new_product/mid360/hms_code_mid360.html</a></li>
+<li>Coordinate system and scan pattern:
+  <a href="https://livox-wiki-en.readthedocs.io/en/latest/introduction/Point_Cloud_Characteristics_and_Coordinate_System%20.html">https://livox-wiki-en.readthedocs.io/en/latest/introduction/Point_Cloud_Characteristics_and_Coordinate_System%20.html</a></li>
+<li>Downloads (user manual 2024-04-25, firmware v13.18.0244 with release notes 2025-04-11,
+  Livox Viewer 2 for Ubuntu): <a href="https://www.livoxtech.com/mid-360/downloads">https://www.livoxtech.com/mid-360/downloads</a></li>
+<li>Livox-SDK2 (behavioural reference only, no code copied): <a href="https://github.com/Livox-SDK/Livox-SDK2">https://github.com/Livox-SDK/Livox-SDK2</a></li>
+<li>livox_ros_driver2 (the point-cloud format downstream expects):
+  <a href="https://github.com/Livox-SDK/livox_ros_driver2">https://github.com/Livox-SDK/livox_ros_driver2</a></li>
+</ul>
+<p>Unofficial:</p>
+<ul>
+<li><a href="https://github.com/Yancey2023/mid360_driver">https://github.com/Yancey2023/mid360_driver</a>: a lightweight SDK2-free driver, useful as a
+  minimal-configuration example. Licence unchecked; no code is copied.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.sections", "navigation.top", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
