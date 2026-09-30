@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/ci.yml)
 [![Lint](https://github.com/atinfinity/livox-mid360-core/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/atinfinity/livox-mid360-core/actions/workflows/lint.yml)
+[![Docs](https://github.com/atinfinity/livox-mid360-core/actions/workflows/docs.yml/badge.svg?branch=main)](https://atinfinity.github.io/livox-mid360-core/)
 [![codecov](https://codecov.io/gh/atinfinity/livox-mid360-core/branch/main/graph/badge.svg)](https://codecov.io/gh/atinfinity/livox-mid360-core)
 
 > [!IMPORTANT]
@@ -26,7 +27,9 @@ with tracking issues is in [docs/roadmap.md](docs/roadmap.md).
 
 [docs/getting_started.md](docs/getting_started.md) goes step by step from a fresh Ubuntu 24.04
 machine to point clouds: build and test, receive from the bundled simulator, record and replay
-an `.lvx2` file, connect a real Mid-360 and use the library from your own CMake project.
+an `.lvx2` file, connect a real Mid-360 and use the library from your own CMake project. The
+same pages, with the API reference generated from the headers, are published as the
+[project site](https://atinfinity.github.io/livox-mid360-core/).
 
 ## Requirements
 

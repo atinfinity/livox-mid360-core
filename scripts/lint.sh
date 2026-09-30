@@ -54,11 +54,11 @@ fi
 
 echo "== ruff ($("$RUFF" --version))"
 if [[ $fix = 1 ]]; then
-  "$RUFF" check --fix tools/ || ruff_status=$?
-  "$RUFF" format tools/
+  "$RUFF" check --fix tools/ scripts/ || ruff_status=$?
+  "$RUFF" format tools/ scripts/
 else
-  "$RUFF" check tools/ || ruff_status=$?
-  "$RUFF" format --check tools/ || ruff_status=$?
+  "$RUFF" check tools/ scripts/ || ruff_status=$?
+  "$RUFF" format --check tools/ scripts/ || ruff_status=$?
 fi
 if [[ ${ruff_status:-0} != 0 ]]; then echo "ruff: findings remain" >&2; exit 1; fi
 
