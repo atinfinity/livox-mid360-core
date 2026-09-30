@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Test helper: spawns tools/livox_mid360_sim.py on free ports and waits for its
 // "ready" event. The control channel is the child's stdin (JSON lines); events are
-// read from its stdout. See docs/simulator.md.
+// read from its stdout. Every read is bounded, so a missing event fails the test instead of
+// hanging the whole ctest run. See docs/simulator.md.
 #pragma once
 
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
@@ -61,6 +64,10 @@ inline std::optional<std::string> json_str(std::string_view line, std::string_vi
 class SimProcess
 {
 public:
+  /// How long read_event() and wait_event() wait by default. Generous: it only has to catch
+  /// an event that never comes, not time anything.
+  static constexpr std::chrono::milliseconds kEventTimeout{30'000};
+
   struct Ports
   {
     std::uint16_t discovery = 0, cmd = 0, push = 0, pcl = 0, imu = 0, log = 0;
@@ -135,16 +142,12 @@ public:
     SimProcess sim;
     sim.pid_ = pid;
     sim.control_fd_ = in_pipe[1];
-    sim.events_ = ::fdopen(out_pipe[0], "r");
-    if (sim.events_ == nullptr) {
-      error = "fdopen failed";
-      return std::nullopt;
-    }
+    sim.events_fd_ = out_pipe[0];
     // Wait for the ready line (bounded by the interpreter start-up time).
     while (true) {
       const auto line = sim.read_event();
       if (!line) {
-        error = "simulator exited before ready";
+        error = "simulator exited or timed out before ready";
         return std::nullopt;
       }
       if (line->find(R"("event":"ready")") == std::string::npos) {
@@ -191,23 +194,39 @@ public:
     return ::write(control_fd_, line.data(), line.size()) == static_cast<ssize_t>(line.size());
   }
 
-  /// Next stdout line (blocking); nullopt on EOF.
-  std::optional<std::string> read_event()
+  /// Next stdout line; nullopt on EOF, or when no complete line arrives within `timeout`.
+  std::optional<std::string> read_event(std::chrono::milliseconds timeout = kEventTimeout)
   {
-    if (events_ == nullptr) {
-      return std::nullopt;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true) {
+      if (const auto nl = events_buf_.find('\n'); nl != std::string::npos) {
+        std::string s = events_buf_.substr(0, nl);
+        events_buf_.erase(0, nl + 1);
+        if (!s.empty() && s.back() == '\r') {
+          s.pop_back();
+        }
+        return s;
+      }
+      const auto left = remaining(deadline);
+      if (events_fd_ < 0 || left.count() == 0) {
+        return std::nullopt;
+      }
+      pollfd p{.fd = events_fd_, .events = POLLIN, .revents = 0};
+      const int rc = ::poll(&p, 1, static_cast<int>(left.count()));
+      if (rc <= 0) {
+        if (rc < 0 && errno != EINTR) {
+          close_events();
+        }
+        continue;
+      }
+      char chunk[4096];
+      const ssize_t n = ::read(events_fd_, chunk, sizeof chunk);
+      if (n > 0) {
+        events_buf_.append(chunk, static_cast<std::size_t>(n));
+      } else if (n == 0 || errno != EINTR) {  // EOF or error: stop reading
+        close_events();
+      }
     }
-    char buf[4096];
-    if (std::fgets(buf, sizeof buf, events_) == nullptr) {  // EOF or error: stop reading
-      std::fclose(events_);
-      events_ = nullptr;
-      return std::nullopt;
-    }
-    std::string s(buf);
-    while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) {
-      s.pop_back();
-    }
-    return s;
   }
 
   /// Barrier: control lines are handled in order, so a "status" round trip guarantees that
@@ -217,10 +236,13 @@ public:
     return control(R"({"cmd":"status"})") && wait_event(R"("event":"status")").has_value();
   }
 
-  /// Read events until one contains `needle` or EOF. Returns the matching line.
-  std::optional<std::string> wait_event(std::string_view needle)
+  /// Read events until one contains `needle`. Returns the matching line, or nullopt on EOF or
+  /// when none arrives within `timeout`.
+  std::optional<std::string> wait_event(
+    std::string_view needle, std::chrono::milliseconds timeout = kEventTimeout)
   {
-    while (auto line = read_event()) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (auto line = read_event(remaining(deadline))) {
       if (line->find(needle) != std::string::npos) {
         return line;
       }
@@ -239,16 +261,11 @@ public:
       ::close(control_fd_);
     }
     control_fd_ = -1;
-    if (events_ != nullptr) {
-      while (read_event()) {  // drain; read_event() closes the stream at EOF
-      }
-      if (events_ != nullptr) {
-        std::fclose(events_);
-        events_ = nullptr;
-      }
-    }
-    int status = 0;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (read_event(remaining(deadline))) {  // drain; read_event() closes the pipe at EOF
+    }
+    close_events();
+    int status = 0;
     while (::waitpid(pid_, &status, WNOHANG) == 0) {
       if (std::chrono::steady_clock::now() > deadline) {
         ::kill(pid_, SIGKILL);
@@ -264,11 +281,28 @@ public:
 
 private:
   SimProcess() = default;
+
+  static std::chrono::milliseconds remaining(std::chrono::steady_clock::time_point deadline)
+  {
+    const auto left =
+      std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+    return std::max(left, std::chrono::milliseconds{0});
+  }
+
+  void close_events() noexcept
+  {
+    if (events_fd_ >= 0) {
+      ::close(events_fd_);
+    }
+    events_fd_ = -1;
+  }
+
   void swap(SimProcess & o) noexcept
   {
     std::swap(pid_, o.pid_);
     std::swap(control_fd_, o.control_fd_);
-    std::swap(events_, o.events_);
+    std::swap(events_fd_, o.events_fd_);
+    std::swap(events_buf_, o.events_buf_);
     std::swap(ports_, o.ports_);
     std::swap(ip_, o.ip_);
     std::swap(sn_, o.sn_);
@@ -276,7 +310,8 @@ private:
 
   pid_t pid_ = -1;
   int control_fd_ = -1;
-  std::FILE * events_ = nullptr;
+  int events_fd_ = -1;
+  std::string events_buf_;  ///< read but not yet returned by read_event()
   Ports ports_;
   std::string ip_;
   std::string sn_;

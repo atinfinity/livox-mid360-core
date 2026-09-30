@@ -1,0 +1,1858 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Clean-room, dependency-free C++ SDK for the Livox Mid-360 LiDAR">
+      
+      
+      
+        <link rel="canonical" href="https://atinfinity.github.io/livox-mid360-core/simulator/">
+      
+      
+        <link rel="prev" href="../getting_started/">
+      
+      
+        <link rel="next" href="../lvx2/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Simulator - livox-mid360-core</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#lidar-simulator" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="livox-mid360-core" class="md-header__button md-logo" aria-label="livox-mid360-core" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            livox-mid360-core
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Simulator
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Follow the system setting"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Follow the system setting" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/atinfinity/livox-mid360-core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    atinfinity/livox-mid360-core
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="livox-mid360-core" class="md-nav__button md-logo" aria-label="livox-mid360-core" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    livox-mid360-core
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/atinfinity/livox-mid360-core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    atinfinity/livox-mid360-core
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulator
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#control-and-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Control and events
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behaviour
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assumptions-to-verify-on-hardware-11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assumptions to verify on hardware (#11)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lvx2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LVX2 record / replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rerun viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../debug_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debug raw data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transport/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transport layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../protocol_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Protocol notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#control-and-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Control and events
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behaviour
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assumptions-to-verify-on-hardware-11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assumptions to verify on hardware (#11)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="lidar-simulator">LiDAR simulator<a class="headerlink" href="#lidar-simulator" title="Permanent link">&para;</a></h1>
+<p><code>tools/livox_mid360_sim.py</code> is a stdlib-only Python program that behaves like a Mid-360 on the
+wire: it answers control commands, walks the work-state machine and streams point-cloud, IMU
+and push packets. Design decisions are recorded in
+<a href="https://github.com/atinfinity/livox-mid360-core/issues/3">issue #3</a>.</p>
+<p>It exists so that the session layer (<a href="https://github.com/atinfinity/livox-mid360-core/issues/4">#4</a>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/5">#5</a>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/7">#7</a>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/8">#8</a>) and the receive pipeline (<a href="https://github.com/atinfinity/livox-mid360-core/issues/6">#6</a>) can be
+developed and tested without hardware. It is <strong>not</strong> a reference for LiDAR behaviour: wherever
+the wiki is silent the simulator makes an assumption, listed at the end of this page, and each
+one is due for verification on real hardware (<a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>).</p>
+<h2 id="running">Running<a class="headerlink" href="#running" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>tools/livox_mid360_sim.py<span class="w">                     </span><span class="c1"># 0.0.0.0, ports 56000/56100/56200/56300/56400</span>
+python3<span class="w"> </span>tools/livox_mid360_sim.py<span class="w"> </span>--bind<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--base-port<span class="w"> </span><span class="m">0</span><span class="w">   </span><span class="c1"># loopback, free ports</span>
+python3<span class="w"> </span>tools/livox_mid360_sim.py<span class="w"> </span>--verbose<span class="w"> </span>--drop-rate<span class="w"> </span><span class="m">0</span>.01
+python3<span class="w"> </span>tools/livox_mid360_sim.py<span class="w"> </span>--pcap<span class="w"> </span>capture.pcap<span class="w"> </span>--pcap-rate<span class="w"> </span><span class="m">0</span>.5<span class="w">   </span><span class="c1"># replay a capture at half speed</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--bind</code></td>
+<td><code>0.0.0.0</code></td>
+<td>address to bind; also reported as <code>lidar_ip</code> in the discovery ACK (127.0.0.1 when unspecified)</td>
+</tr>
+<tr>
+<td><code>--base-port</code></td>
+<td>56000</td>
+<td>discovery port; cmd, push, pcl, imu, log follow at +100, +200, +300, +400, +500. <code>0</code> picks free ports</td>
+</tr>
+<tr>
+<td><code>--sn</code></td>
+<td><code>SIM0000000000001</code></td>
+<td>serial number (≤ 16 chars)</td>
+</tr>
+<tr>
+<td><code>--product-info</code></td>
+<td><code>MID360-SIM</code></td>
+<td>key 0x8001 (≤ 64 chars)</td>
+</tr>
+<tr>
+<td><code>--version-app</code> / <code>--version-loader</code> / <code>--version-hardware</code></td>
+<td><code>0.0.0.1</code></td>
+<td>keys 0x8002–0x8004 as <code>a.b.c.d</code></td>
+</tr>
+<tr>
+<td><code>--seed</code></td>
+<td>1</td>
+<td>seed for deterministic point / IMU data and packet drops</td>
+</tr>
+<tr>
+<td><code>--scene</code></td>
+<td><code>random</code></td>
+<td>point cloud content: seeded random points, or <code>ring</code>, a fixed scene of known points (<a href="https://github.com/atinfinity/livox-mid360-core/issues/132">#132</a>)</td>
+</tr>
+<tr>
+<td><code>--apply-attitude</code></td>
+<td></td>
+<td>move Cartesian points by the install attitude in key <code>0x0012</code> before sending them (<a href="https://github.com/atinfinity/livox-mid360-core/issues/135">#135</a>); off by default, because whether the firmware does this is [unverified]</td>
+</tr>
+<tr>
+<td><code>--pcap</code></td>
+<td></td>
+<td>replay the point cloud, IMU, push and firmware log datagrams of a classic pcap instead of generating them (<a href="https://github.com/atinfinity/livox-mid360-core/issues/134">#134</a>, see Behaviour)</td>
+</tr>
+<tr>
+<td><code>--pcap-rate</code></td>
+<td>1.0</td>
+<td><code>--pcap</code> speed: <code>2</code> replays twice as fast as recorded, <code>0</code> as fast as possible</td>
+</tr>
+<tr>
+<td><code>--startup-delay</code></td>
+<td>0.3 s</td>
+<td>time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE)</td>
+</tr>
+<tr>
+<td><code>--selfcheck-delay</code></td>
+<td>0.1 s</td>
+<td>time spent in SELFCHECK after power-on / reboot</td>
+</tr>
+<tr>
+<td><code>--reboot-silence</code></td>
+<td>0.5 s</td>
+<td>commands are ignored and nothing is sent for this long after 0x0200 / 0x0201</td>
+</tr>
+<tr>
+<td><code>--frame-ms</code></td>
+<td>100</td>
+<td><code>frame_cnt</code> increments at this period; <code>0</code> never increments it (what a non-repetitive scanner is expected to do, <a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>)</td>
+</tr>
+<tr>
+<td><code>--rate-multiplier</code></td>
+<td>1.0</td>
+<td>scales the 2000 pkt/s point-cloud and the IMU rate (200 pkt/s unless <code>0x002B</code> selects another)</td>
+</tr>
+<tr>
+<td><code>--push-rate</code></td>
+<td>1.0</td>
+<td>0x0102 push rate in Hz, not affected by <code>--rate-multiplier</code></td>
+</tr>
+<tr>
+<td><code>--drop-rate</code></td>
+<td>0</td>
+<td>fraction of point-cloud packets silently dropped (<code>udp_cnt</code> still advances)</td>
+</tr>
+<tr>
+<td><code>--imu-cfg-unsupported</code></td>
+<td></td>
+<td>emulate firmware without key <code>0x002B</code>: its write, read and any inquire naming it answer <code>0x20</code></td>
+</tr>
+<tr>
+<td><code>--log-chunk-interval</code></td>
+<td>0.05 s</td>
+<td>period of firmware log chunks (0x0300) per enabled log type (<a href="https://github.com/atinfinity/livox-mid360-core/issues/44">#44</a>)</td>
+</tr>
+<tr>
+<td><code>--log-chunk-bytes</code></td>
+<td>512</td>
+<td>data bytes per log chunk</td>
+</tr>
+<tr>
+<td><code>--log-ack-every</code></td>
+<td>1</td>
+<td>ask for a host ACK on every Nth chunk; <code>0</code> never (the file-end packet always asks)</td>
+</tr>
+<tr>
+<td><code>--log-ignore-hostcfg</code></td>
+<td></td>
+<td>send log chunks to the sender of 0x0301 instead of the host in key 0x0009</td>
+</tr>
+<tr>
+<td><code>--debug-data-port</code></td>
+<td>60301</td>
+<td>source port of the debug raw data stream (<a href="https://github.com/atinfinity/livox-mid360-core/issues/93">#93</a>); <code>0</code> or <code>--base-port 0</code> picks a free port</td>
+</tr>
+<tr>
+<td><code>--debug-data-interval</code></td>
+<td>0.01 s</td>
+<td>period of the debug raw data datagrams while <code>0x0303</code> has enabled them</td>
+</tr>
+<tr>
+<td><code>--debug-data-bytes</code></td>
+<td>1024</td>
+<td>size of a debug raw data datagram</td>
+</tr>
+<tr>
+<td><code>--no-quit-on-eof</code></td>
+<td></td>
+<td>keep running when stdin closes (default: quit)</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td></td>
+<td>log to stderr</td>
+</tr>
+</tbody>
+</table>
+<p>The five sockets are bound at start-up, the same way the real device listens on fixed ports.
+Since the real Mid-360 answers discovery on 56000 and commands on 56100, a host using the
+default ports talks to the simulator without any change; a test that wants isolation passes
+<code>--base-port 0</code> and reads the actual ports from the <code>ready</code> event.</p>
+<h2 id="control-and-events">Control and events<a class="headerlink" href="#control-and-events" title="Permanent link">&para;</a></h2>
+<p>The process is driven over its standard streams so that any test harness can use it:</p>
+<ul>
+<li><strong>stdin</strong>: one JSON object per line, <code>{"cmd": ...}</code>. EOF quits unless <code>--no-quit-on-eof</code>.</li>
+<li><strong>stdout</strong>: one JSON object per line, <code>{"event": ...}</code>. The first line is always <code>ready</code>.</li>
+<li><strong>stderr</strong>: human-readable log with <code>--verbose</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Fields</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>quit</code></td>
+<td></td>
+<td>exit with status 0 after emitting <code>exit</code></td>
+</tr>
+<tr>
+<td><code>silence</code></td>
+<td><code>seconds</code></td>
+<td>simulates a link drop: for <code>seconds</code> commands are ignored and nothing is sent, but the LiDAR keeps running, so <code>udp_cnt</code>, <code>frame_cnt</code>, the push <code>seq</code> and the log <code>trans_index</code> advance and the host sees a gap afterwards (no catch-up burst). A later <code>silence</code> or a reboot only extends it</td>
+</tr>
+<tr>
+<td><code>hms</code></td>
+<td><code>codes</code> (≤ 8 ints)</td>
+<td>set the HMS code slots reported by 0x800E/0x8011 and the push</td>
+</tr>
+<tr>
+<td><code>drop_ack</code></td>
+<td><code>count</code></td>
+<td>do not answer the next <code>count</code> requests (the request is still processed)</td>
+</tr>
+<tr>
+<td><code>fail_cmd</code></td>
+<td><code>cmd_id</code>, <code>ret</code> (default 1), <code>count</code> (default 1), <code>skip</code> (default 0), <code>key</code> (optional)</td>
+<td>after letting <code>skip</code> of them pass, answer the next <code>count</code> requests with this <code>cmd_id</code> with <code>ret</code> without applying them; with <code>key</code> only <code>0x0100</code> / <code>0x0101</code> requests that name the key match (it is reported as <code>error_key</code> of <code>0x0100</code>). One rule per <code>cmd_id</code></td>
+</tr>
+<tr>
+<td><code>inquire_override</code></td>
+<td><code>key</code>, and one of <code>value</code> (hex string, may be empty), <code>omit</code>, <code>unsupported</code>, <code>clear</code> (each <code>true</code>)</td>
+<td>what <code>0x0101</code> answers for <code>key</code> from now on: these bytes instead of the stored value, the key left out of the ACK, the whole inquire rejected with <code>0x20</code> naming the key, or the normal answer again. The push and <code>0x0100</code> are not affected</td>
+</tr>
+<tr>
+<td><code>reboot</code></td>
+<td></td>
+<td>same as receiving 0x0200: reboot silence, counters reset; if the stored key 0x0004 address differs from the bound one, every socket is rebound to it keeping the ports and a <code>rebound</code> event is emitted (a failed bind emits <code>error</code> and keeps the old sockets)</td>
+</tr>
+<tr>
+<td><code>set_status</code></td>
+<td>any of <code>diag</code> (u16 bitfield), <code>core_temp</code> (0.01 °C), <code>powerup_cnt</code>, <code>bad_time_offset</code> (1: 0x800B answered truncated to 4 bytes), <code>omit_keys</code> (list of key ids left out of the push); a value that is not an integer applies nothing</td>
+<td>overwrite the read-only status keys the push and 0x0101 report (<a href="https://github.com/atinfinity/livox-mid360-core/issues/56">#56</a> / <a href="https://github.com/atinfinity/livox-mid360-core/issues/55">#55</a>); the time keys <code>0x8009</code>–<code>0x800C</code> follow the clock, see <code>time_sync</code></td>
+</tr>
+<tr>
+<td><code>time_sync</code></td>
+<td>any of <code>type</code> (<code>none</code>, <code>ptp</code> or <code>gps</code>), <code>offset_ns</code> (default 0), <code>drift_ppm</code></td>
+<td><code>ptp</code> / <code>gps</code>: acquire synchronisation to a master at the host's wall clock plus <code>offset_ns</code>, stepping the clock to it; <code>none</code>: lose it, free running on from the current time; <code>drift_ppm</code>: the free-running rate from now on, without a step (<a href="https://github.com/atinfinity/livox-mid360-core/issues/133">#133</a>). Emits <code>time_sync</code></td>
+</tr>
+<tr>
+<td><code>set_state</code></td>
+<td><code>state</code></td>
+<td>force <code>cur_work_state</code> (e.g. 4 ERROR); <code>work_tgt_mode</code> is untouched, so forcing a work substate makes the machine chase the target again</td>
+</tr>
+<tr>
+<td><code>drop_rate</code></td>
+<td><code>rate</code></td>
+<td>change the point-cloud drop fraction at run time</td>
+</tr>
+<tr>
+<td><code>drop</code></td>
+<td><code>stream</code> (<code>pcl</code> default, or <code>imu</code>), <code>count</code> (default 1)</td>
+<td>do not send the next <code>count</code> packets of the stream; <code>udp_cnt</code> still advances, so the host sees a gap (<a href="https://github.com/atinfinity/livox-mid360-core/issues/131">#131</a>)</td>
+</tr>
+<tr>
+<td><code>reorder</code></td>
+<td><code>stream</code>, <code>count</code> (default 1), <code>depth</code> (default 1, ≥ 1)</td>
+<td>hold the next packet back and send it after <code>depth</code> more packets, <code>count</code> times one after the other (a late packet: <code>udp_cnt</code> goes backwards on the host)</td>
+</tr>
+<tr>
+<td><code>duplicate</code></td>
+<td><code>stream</code>, <code>count</code> (default 1)</td>
+<td>send each of the next <code>count</code> packets twice</td>
+</tr>
+<tr>
+<td><code>scene</code></td>
+<td><code>name</code> (<code>random</code> or <code>ring</code>)</td>
+<td>switch the point cloud content at run time; the ring restarts at point 0</td>
+</tr>
+<tr>
+<td><code>frame_ms</code></td>
+<td><code>ms</code></td>
+<td>change the <code>frame_cnt</code> period at run time (<code>0</code> freezes it); the current frame restarts now</td>
+</tr>
+<tr>
+<td><code>log_drop</code></td>
+<td><code>n</code></td>
+<td>skip the next <code>n</code> log chunks (<code>trans_index</code> still advances → gap on the host)</td>
+</tr>
+<tr>
+<td><code>log_new_file</code></td>
+<td></td>
+<td>end the current firmware log file(s) and start the next <code>file_index</code></td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td></td>
+<td>emit a <code>status</code> event</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Fields</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ready</code></td>
+<td><code>ip</code>, <code>ports{discovery,cmd,push,pcl,imu,log}</code>, <code>sn</code>, <code>pid</code></td>
+<td>sockets bound, main loop starting</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td><code>from</code>, <code>to</code></td>
+<td>work state changed (values as in <code>WorkState</code>)</td>
+</tr>
+<tr>
+<td><code>cmd</code></td>
+<td><code>cmd_id</code>, <code>seq</code>, <code>ret</code>, <code>from</code></td>
+<td>a request was handled</td>
+</tr>
+<tr>
+<td><code>ack_dropped</code></td>
+<td><code>cmd_id</code>, <code>seq</code></td>
+<td>a request was handled but the ACK withheld (<code>drop_ack</code>)</td>
+</tr>
+<tr>
+<td><code>bad_frame</code></td>
+<td><code>from</code>, <code>error</code></td>
+<td>a datagram failed to parse</td>
+</tr>
+<tr>
+<td><code>sent</code></td>
+<td><code>pcl</code>, <code>imu</code>, <code>push</code>, <code>pcl_dropped</code> (<code>--drop-rate</code> and <code>drop</code>), <code>pcl_reordered</code>, <code>pcl_duplicated</code>, <code>imu_dropped</code>, <code>imu_reordered</code>, <code>imu_duplicated</code>, <code>log</code>, <code>debug</code>, <code>silenced</code> (datagrams withheld by a silence), <code>state</code></td>
+<td>once per second, also while silent</td>
+</tr>
+<tr>
+<td><code>packet_fault</code></td>
+<td><code>stream</code>, <code>fault</code> (<code>drop</code>, <code>reorder</code>, <code>duplicate</code>), <code>udp_cnt</code></td>
+<td>one packet was affected by a <code>drop</code> / <code>reorder</code> / <code>duplicate</code> control (for <code>reorder</code>: when the held packet is sent)</td>
+</tr>
+<tr>
+<td><code>log_dropped</code></td>
+<td><code>file_index</code>, <code>trans</code></td>
+<td>a log chunk was withheld (<code>log_drop</code>)</td>
+</tr>
+<tr>
+<td><code>log_ack</code></td>
+<td><code>ret</code>, <code>log_type</code>, <code>file_index</code>, <code>trans</code></td>
+<td>the host acknowledged a log chunk</td>
+</tr>
+<tr>
+<td><code>debug_data</code></td>
+<td><code>enabled</code>, <code>dest</code>, <code>port</code> (both only when enabled)</td>
+<td><code>0x0303</code> switched the debug raw data stream; <code>port</code> is its source port</td>
+</tr>
+<tr>
+<td><code>control</code></td>
+<td><code>cmd</code></td>
+<td>a control command was applied</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>state</code>, <code>sent</code>, <code>hosts{pcl,imu,push,log}</code>, <code>log_enabled</code>, <code>log_acks_received</code>, <code>debug_data{enabled,dest,port}</code>, <code>replay{state,sent,skipped}</code> (<code>null</code> without <code>--pcap</code>), <code>time</code> (as in <code>time_sync</code>)</td>
+<td>answer to <code>status</code></td>
+</tr>
+<tr>
+<td><code>time_sync</code></td>
+<td><code>type</code>, <code>time_ns</code> (the LiDAR clock now), <code>last_sync_ns</code> (0x800A), <code>offset_ns</code> (0x800B), <code>drift_ppm</code></td>
+<td>the <code>time_sync</code> control was applied</td>
+</tr>
+<tr>
+<td><code>replay_start</code></td>
+<td><code>file</code>, <code>rate</code></td>
+<td>the <code>--pcap</code> replay began</td>
+</tr>
+<tr>
+<td><code>replay_done</code></td>
+<td><code>sent{push,pcl,imu,log}</code>, <code>skipped</code> (datagrams of a stream without a host), <code>seconds</code></td>
+<td>the <code>--pcap</code> replay sent the capture's last datagram</td>
+</tr>
+<tr>
+<td><code>rebound</code></td>
+<td><code>ip</code>, <code>ports</code></td>
+<td>a reboot moved every socket to the key 0x0004 address</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td><code>error</code></td>
+<td>malformed or unknown control line, or one with a missing or invalid field (nothing of it is applied, the simulator keeps running)</td>
+</tr>
+<tr>
+<td><code>exit</code></td>
+<td><code>sent</code></td>
+<td>leaving the main loop</td>
+</tr>
+</tbody>
+</table>
+<h2 id="behaviour">Behaviour<a class="headerlink" href="#behaviour" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Firmware log</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/44">#44</a>): a sixth socket at <code>+500</code> answers <code>0x0301</code> (payload <code>{log_type,
+  enable}</code>) and streams <code>0x0300</code> chunks of <code>--log-chunk-bytes</code> synthetic text every
+  <code>--log-chunk-interval</code> for each enabled type. The first chunk of a file carries the begin
+  flag, every <code>--log-ack-every</code>th the ACK flag; host ACKs (REQ <code>0x0300</code> with <code>{ret, type,
+  file_index, trans_index}</code>) are counted in <code>status.log_acks_received</code>.</li>
+<li><strong>Debug raw data</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/93">#93</a>): <code>0x0303</code> (payload <code>{enable, host_ip, host_port, reserved}</code>) is
+  answered on the log socket and on the command socket. While enabled, a datagram of
+  <code>--debug-data-bytes</code> goes to <code>host_ip:host_port</code> every <code>--debug-data-interval</code>: a <code>u32</code>
+  sequence number (little-endian, from 0) followed by bytes counting up from its low byte, so
+  that a receiver can detect loss and corruption. The source socket is bound by the first
+  enable, not at start-up, because 60301 lies inside the Linux ephemeral port range; it is not
+  part of <code>ready.ports</code>. The point cloud keeps flowing.</li>
+<li>
+<p><strong>Packet faults</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/131">#131</a>): <code>drop</code>, <code>reorder</code> and <code>duplicate</code> act on a point-cloud or
+  IMU packet after its <code>udp_cnt</code> and <code>frame_cnt</code> are assigned, so the host sees what a network
+  would do to real packets. <code>--drop-rate</code> is applied first, then per packet a pending <code>drop</code>,
+  then a <code>reorder</code> (one packet held at a time), then the send (twice for a <code>duplicate</code>). A
+  packet still held back at a reboot is lost.</p>
+</li>
+<li>
+<p><strong>Commands</strong> <code>0x0000</code> discovery (unicast or broadcast; the ACK carries <code>dev_type = 9</code>
+  (provisional), the bound address and the real command port), <code>0x0100</code> configure, <code>0x0101</code>
+  inquire, <code>0x0200</code> reboot, <code>0x0201</code> factory reset, <code>0x0202</code> GPS time. Anything else is
+  answered with ret <code>0x01</code>.</p>
+</li>
+<li><strong>Configure</strong> validates every key first with the wiki return codes (<code>RetCode</code> in
+  <code>protocol.hpp</code>): read-only → <code>0x22</code>, unknown → <code>0x20</code>, wrong length → <code>0x23</code>,
+  <code>pcl_data_type</code> outside 1–3 → <code>0x03</code>, <code>pattern_mode</code> 1 / 2 → <code>0x20</code> and any other non-zero
+  value → <code>0x03</code> (the base Mid-360 only scans non-repetitively, [unverified] which code, <a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>),
+  a FOV window (<code>0x0015</code> / <code>0x0016</code>) with yaw
+  outside [0, 360) or pitch outside (-10, 60) → <code>0x03</code>, <code>detect_mode</code> / <code>time_filter</code> /
+  <code>imu_data_en</code> above 1 → <code>0x03</code>, an <code>imu_sensor_cfg</code> byte past its last enumerator (rate<blockquote>
+<p>3, accel &gt; 3, gyro &gt; 7) → <code>0x03</code>. All keys are applied only if none failed; the ACK's
+  <code>error_key</code> names the offender. A rejected <code>0x0101</code> inquire (unknown key) answers the
+  return code with the offending key as a single zero-length entry. A <em>changed</em> <code>lidar_ipcfg</code> is stored and answered with <code>0x21</code>
+  (reboot required, [unverified] which keys the LiDAR does this for, <a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>); writing the current
+  value back is a plain <code>0x00</code>. Value lengths mirror <code>key_value_length()</code> in <code>keys.cpp</code>.</p>
+</blockquote>
+</li>
+<li><strong>State machine</strong> the figure in <a href="../protocol_notes/#working-state">protocol_notes.md</a>:
+  power-on → SELFCHECK (<code>--selfcheck-delay</code>, commands are answered) → IDLE, then the machine
+  chases <code>work_tgt_mode</code> (SAMPLING by default): IDLE → MOTORSTARTUP (<code>--startup-delay</code>) →
+  READY → SAMPLING. The pass-through READY has no dwell (SAMPLING → IDLE is immediate), but
+  every transition emits a <code>state</code> event. <code>work_tgt_mode</code> accepts 1 / 2 / 9 only (4 / 5 / 6 /
+  8 → <code>0x20</code>, undefined → <code>0x03</code>, in ERROR / UPGRADE → <code>0x02</code>); a write during SELFCHECK /
+  MOTORSTARTUP is stored and followed afterwards. ERROR / UPGRADE are entered only by <code>set_state</code> and left by
+  <code>set_state</code> or a reboot. Reboot and factory reset go back through SELFCHECK, reset
+  <code>udp_cnt</code>/<code>frame_cnt</code>/<code>seq</code>, stop the debug raw data stream and stay silent for
+  <code>--reboot-silence</code>; the push and log chunks resume after the silence. Reboot keeps every
+  setting except <code>work_tgt_mode</code>; factory reset restores <code>factory_settings()</code> except key
+  <code>0x0004</code>, which goes back to the address the simulator started on (it cannot move to the
+  real factory address 192.168.1.100; after a rebind it moves back). All durations
+  and the return codes are assumptions (<a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>).</li>
+<li><strong>Streaming</strong> while SAMPLING: point-cloud packets of 96 points in the configured
+  <code>pcl_data_type</code> at 2000 pkt/s to the host in key <code>0x0006</code>, IMU packets at the <code>0x002B</code> rate (200 pkt/s by default) to the
+  host in <code>0x0007</code> when <code>imu_data_en = 1</code>, and a <code>0x0102</code> push once per second to the host in
+  <code>0x0005</code>. Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps and
+  <code>time_type</code> come from the LiDAR clock (below). The scheduler bounds catch-up bursts to
+  256 packets and resynchronises if it falls more than 0.5 s behind. <code>frame_cnt</code> follows the
+  packets' scheduled times, so a burst still changes it once per <code>--frame-ms</code>, and a resync
+  changes it once (<a href="https://github.com/atinfinity/livox-mid360-core/issues/155">#155</a>).</li>
+<li><strong>Time</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/133">#133</a>): the LiDAR clock stamps every data packet and answers keys
+  <code>0x8009</code>–<code>0x800C</code>. Unsynchronised (<code>time_type</code> 0) it counts from power-on and restarts at
+  0 with every reboot, at the host's monotonic rate times <code>1 + drift_ppm / 1e6</code>. <code>0x0202</code>
+  (GPS, taking the request's arrival as the PPS edge) or a <code>time_sync</code> control with <code>ptp</code> /
+  <code>gps</code> synchronises it: from then on it reads the master time, the host's wall clock plus the
+  master's offset (for <code>0x0202</code>, the GPS time minus the host time at arrival), and data
+  packets carry <code>time_type</code> 1 or 2. Each synchronisation is a step: <code>0x800A</code> becomes the
+  master time stepped to and <code>0x800B</code> the clock's time just before minus that time
+  (local − source). The drift only applies while free running. Losing the sync (<code>time_sync</code>
+  <code>none</code>) is not a step: the clock runs on free from the time it had, and <code>0x800A</code> /
+  <code>0x800B</code> keep the last sync. A reboot loses the sync and keeps the drift. With a steady
+  <code>ptp</code> master the real LiDAR would refresh <code>0x800A</code> / <code>0x800B</code> at every sync message; the
+  simulator only at the step.</li>
+<li><strong>Data</strong> with <code>--scene random</code> is pseudo-random but deterministic for a seed; the C++
+  decoder only needs valid framing, CRCs and counters.</li>
+<li><strong>Ring scene</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/132">#132</a>): with <code>--scene ring</code> (or the <code>scene</code> control) every
+  point is one of 256 known points, so a test can check decoded values, not only framing.
+  Point <code>k</code> (0–255) has azimuth <code>k * 36000 // 256</code> in 0.01° (so <code>k = 0, 64, 128, 192</code> lie on
+  the axes), elevation <code>(0, 15, -5, 45)[k % 4]</code>°, depth <code>1000 + 30 * k</code> mm, reflectivity <code>k</code>
+  and tag <code>k % 3 | (k // 3 % 3) &lt;&lt; 2 | (k // 9 % 3) &lt;&lt; 4</code> (every glue / particle / other
+  value, reserved bits 0). Packets carry consecutive points, wrapping after 255, and the
+  cursor goes back to 0 whenever <code>frame_cnt</code> changes, at a reboot and at a <code>scene</code> control:
+  the first packet of a frame starts at point 0 and every packet at a multiple of 32.
+  Spherical packets carry the exact values (<code>theta</code> = 90° − elevation); Cartesian32 /
+  Cartesian16 ones the same point rounded to mm / cm. <code>tools/test_sim.py</code> (<code>ring_point</code>)
+  and <code>tests/test_scene.cpp</code> restate the definition.</li>
+<li><strong>Install attitude</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/135">#135</a>) [unverified]: key <code>0x0012</code> is stored and read back, and by
+  default it does not touch the points. With <code>--apply-attitude</code> every Cartesian32 /
+  Cartesian16 point is moved by <code>Rz(yaw) * Ry(pitch) * Rx(roll)</code>, then by the translation
+  (the convention of <code>extrinsic_from()</code>), before it is rounded to mm / cm; values past the
+  field range are clamped. The key's current value is used, so a write takes effect with the
+  next packet. Spherical points are sent unchanged. The FOV crops in the sensor frame, before
+  the attitude. A host that also applies <code>extrinsic_from()</code> then transforms the cloud twice
+  (see <a href="../api/#install-attitude-and-host-side-extrinsic">api.md</a>).</li>
+<li><strong>Pcap replay</strong> (<a href="https://github.com/atinfinity/livox-mid360-core/issues/134">#134</a>): with <code>--pcap FILE</code> the point cloud and IMU come from a
+  capture instead of the generator. The file is read with <code>tools/livox_mid360_pcap.py</code>:
+  classic pcap only (convert pcapng with <code>editcap -F pcap</code>), Ethernet (with VLAN), raw IPv4
+  or Linux cooked, IPv4 UDP. Every datagram sent <em>from</em> a LiDAR data port (push 56200, point
+  cloud 56300, IMU 56400, log 56500) is replayed byte for byte, from the simulator's socket
+  of that stream to the host the SDK configured for it (keys <code>0x0005</code>, <code>0x0006</code>, <code>0x0007</code>,
+  <code>0x0009</code>); one without a host is counted as <code>skipped</code>. Command traffic in the capture
+  (discovery, <code>0x0100</code>, their ACKs) is not replayed: the <code>DeviceModel</code> answers the SDK as
+  usual, so a replay connects like the live simulator. The replay starts once the work state
+  is SAMPLING and a host is configured for one of these streams (usually by the SDK's first
+  <code>0x0100</code>), keeps the recorded spacing divided by <code>--pcap-rate</code>, then runs to the end of
+  the file whatever the work state, and ends with <code>replay_done</code>. It runs once; afterwards no
+  point cloud or IMU is sent. From the first replayed push to <code>replay_done</code> the capture's
+  pushes replace the simulator's own, which then resume. Packets keep their recorded
+  <code>udp_cnt</code>, <code>frame_cnt</code> and timestamps. The capture should hold one LiDAR: datagrams from
+  several are replayed as if they were one. <code>tests/data/replay.pcap</code> is a synthetic
+  capture written by <code>tools/gen_replay_pcap.py</code> (three frames of eight ring-scene packets,
+  twelve IMU packets, two pushes with <code>core_temp</code> 43.21 °C, one log chunk, and command and
+  unrelated traffic that must be skipped); CI regenerates it and fails on a difference.</li>
+<li><strong>FOV cropping</strong> [unverified]: when <code>fov_cfg_en</code> enables at least one window, a point is
+  sent only if it lies inside an enabled window (yaw <code>[start, stop)</code> with wrap-around when
+  <code>start &gt; stop</code>, <code>start == stop</code> empty; pitch <code>[start, stop]</code>). Cartesian points use
+  <code>yaw = atan2(y, x)</code>, <code>pitch = atan2(z, hypot(x, y))</code>; spherical ones <code>phi</code> and
+  <code>90° - theta</code>. Each packet draws up to 16 batches of 96 points to fill its 96 slots, so a
+  narrow window only slows the generator. <code>dot_num</code> is the number of points kept, so a tiny
+  window sends shorter packets and an empty one packets with <code>dot_num = 0</code>. The ring scene
+  instead crops its next 96 points on their exact angles, whatever the data type, and sends
+  what is left, so the kept set is known: a window of yaw <code>[0, 90)</code> and pitch <code>[0, 15]</code> keeps
+  exactly the <code>k &lt; 64</code> with <code>k % 4</code> in {0, 1}.</li>
+</ul>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>python3 -m unittest tools/test_sim.py</code>: the pure <code>DeviceModel</code> (transitions, configure
+  rules, reboot / factory-reset persistence, GPS time, push payload), the <code>LidarClock</code>
+  (power-on time, drift, steps, loss without a step), <code>PointSource</code>
+  determinism, and an in-process end-to-end run over UDP (discovery → configure → packets →
+  push → reboot silence → <code>udp_cnt</code> reset; <code>hms</code> and <code>drop_ack</code> controls), the packet
+  fault controls on both data streams, and the ring scene in every data type and under a FOV
+  window, the <code>--apply-attitude</code> transform, and the <code>time_sync</code> control on the packets'
+  <code>time_type</code> and timestamps. <code>PcapReplayTest</code> replays
+  <code>tests/data/replay.pcap</code> into sockets and compares every datagram byte for byte with the
+  capture, and checks the start condition, the skipped streams, the rate and the push
+  hand-over.</li>
+<li>
+<p><code>tests/test_sim_smoke.cpp</code> (Catch2, tag <code>[sim]</code>): spawns the simulator with <code>posix_spawn</code>
+  through <code>tests/sim_process.hpp</code>, then discovery → 0x0100 → wait for SAMPLING via 0x0101 →
+  receive ≥ 200 point-cloud and ≥ 10 IMU packets through <code>UdpSocket</code> / <code>Poller</code> → quit. The
+  test is skipped when no Python interpreter is found; CMake passes <code>Python3_EXECUTABLE</code> as
+  <code>LIVOX_MID360_PYTHON</code> and the script path as <code>LIVOX_MID360_SIM_SCRIPT</code>.</p>
+</li>
+<li>
+<p><code>tests/test_scene.cpp</code> (tag <code>[scene][sim]</code>): a <code>Device</code> against <code>--scene ring</code> decodes
+  every data type to the expected points (position, tag, <code>line</code>, per-point <code>offset_ns</code>),
+  keeps exactly the expected points under a FOV window, applies a host-side extrinsic, and
+  records spherical packets to lvx2 that read back as the same points. With
+  <code>--apply-attitude</code> the Cartesian frames equal the scene moved by key <code>0x0012</code>, spherical
+  ones stay as they are, and an <code>extrinsic_from()</code> on top gives the double transform.</p>
+</li>
+<li><code>tests/test_replay.cpp</code> (tag <code>[replay][sim]</code>): <code>--pcap tests/data/replay.pcap</code> into a
+  <code>Device</code>, which counts exactly the capture's packets, frames, points, IMU samples and
+  pushes, no drops, and reports the recorded <code>core_temp</code>.</li>
+<li><code>tests/test_time_sync.cpp</code> (tag <code>[time][sim]</code>): frames start on the power-on clock; after
+  a <code>ptp</code> step <code>kLidar</code> frames carry the master time and <code>Frame::time_type</code> changes between
+  two frames; <code>time_sync_status()</code> and the push report the step; a loss keeps the time
+  without a step back. <code>kHostOffsetOnce</code> passes synchronised time through without touching
+  its offset, measures it again after the loss, and keeps its first offset while a 10 %
+  drift carries the frames away from the host clock.</li>
+</ul>
+<p><code>SimProcess::control()</code> sends any control line and <code>wait_event()</code> blocks for a matching
+stdout line, so later session-layer tests can inject reboots, HMS codes or dropped ACKs.</p>
+<h2 id="assumptions-to-verify-on-hardware-11">Assumptions to verify on hardware (<a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>)<a class="headerlink" href="#assumptions-to-verify-on-hardware-11" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Simulator behaviour</th>
+<th>Why unverified</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dev_type</code> in the discovery ACK</td>
+<td>9</td>
+<td>the wiki lists no value for Mid-360</td>
+</tr>
+<tr>
+<td>Unicast discovery</td>
+<td>answered like broadcast</td>
+<td>wiki says "broadcast only"</td>
+</tr>
+<tr>
+<td>Discovery ACK <code>cmd_port</code></td>
+<td>the bound command port (56100 by default)</td>
+<td></td>
+</tr>
+<tr>
+<td>Persistence across reboot</td>
+<td>all keys except <code>work_tgt_mode</code></td>
+<td>wiki only marks <code>work_tgt_mode</code> as volatile</td>
+</tr>
+<tr>
+<td>Silence after reboot</td>
+<td>~0.5 s, then SELFCHECK → IDLE → target</td>
+<td>real durations unknown</td>
+</tr>
+<tr>
+<td>SELFCHECK / MOTORSTARTUP</td>
+<td>0.1 s / 0.3 s, commands answered</td>
+<td>real durations unknown; the figure gives the edges only</td>
+</tr>
+<tr>
+<td><code>work_tgt_mode</code> rejections</td>
+<td><code>0x20</code> / <code>0x03</code> / <code>0x02</code> (see State machine)</td>
+<td>wiki lists the codes but not which the firmware uses</td>
+</tr>
+<tr>
+<td>Write of a read-only key</td>
+<td>ret <code>0x22</code>, <code>error_key</code> = that key</td>
+<td>wiki lists the codes but not which the firmware actually uses</td>
+</tr>
+<tr>
+<td>Unknown key</td>
+<td>ret <code>0x20</code></td>
+<td>same</td>
+</tr>
+<tr>
+<td><code>0x0101</code> inquire with an unknown key</td>
+<td>ret <code>0x20</code>, <code>key_num</code> 1 and the offending key with length 0</td>
+<td>wiki does not describe a failed inquire ACK</td>
+</tr>
+<tr>
+<td><code>detect_mode</code> / <code>time_filter</code> / <code>imu_data_en</code> values &gt; 1</td>
+<td>ret <code>0x03</code></td>
+<td>wiki gives the codes, not which one</td>
+</tr>
+<tr>
+<td><code>imu_sensor_cfg</code></td>
+<td>per-byte range → <code>0x03</code>; accepted rate switches the IMU stream to 200 / 500 / 100 / 50 pkt/s at once (and <code>time_interval</code>); factory default <code>0/0/0</code>; <code>--imu-cfg-unsupported</code> → <code>0x20</code> on write and read</td>
+<td>the wiki gives no default, no firmware version and does not say whether the rate change is immediate</td>
+</tr>
+<tr>
+<td>Free-running clock</td>
+<td>counts from power-on at the host's rate (plus <code>drift_ppm</code>), restarts at 0 at a reboot</td>
+<td>the protocol says only "counts from power-on" (<a href="https://github.com/atinfinity/livox-mid360-core/issues/133">#133</a>, <a href="https://github.com/atinfinity/livox-mid360-core/issues/109">#109</a>)</td>
+</tr>
+<tr>
+<td>Time sync acquired / lost</td>
+<td>a step to the master time; <code>0x800A</code> = the master time, <code>0x800B</code> = local − source at the step; a loss continues from the current time, <code>0x800A</code> / <code>0x800B</code> unchanged; a reboot loses it</td>
+<td>how the firmware steps, slews or refreshes these keys (<a href="https://github.com/atinfinity/livox-mid360-core/issues/109">#109</a>)</td>
+</tr>
+<tr>
+<td><code>0x0202</code> GPS time</td>
+<td>the request's arrival is taken as the PPS edge; answered <code>0x00</code> whatever the PPS input</td>
+<td>the LiDAR latches the PPS edge in hardware</td>
+</tr>
+<tr>
+<td><code>time_filter</code></td>
+<td>stored only; the simulator has no time source to roll back</td>
+<td>wiki describes the rollback behaviour, not testable here</td>
+</tr>
+<tr>
+<td><code>lidar_ipcfg</code> write</td>
+<td>ret <code>0x21</code> (reboot required) when the value changes</td>
+<td>wiki lists <code>0x21</code> but not when the firmware uses it</td>
+</tr>
+<tr>
+<td>Unknown <code>cmd_id</code></td>
+<td>ret <code>0x01</code></td>
+<td>no ACK at all is also plausible</td>
+</tr>
+<tr>
+<td>Multi-key config with one bad key</td>
+<td>nothing applied</td>
+<td>vs. partial application</td>
+</tr>
+<tr>
+<td>Push contents</td>
+<td>every read-only key <code>0x8000</code>–<code>0x8011</code></td>
+<td>the wiki does not enumerate the pushed keys</td>
+</tr>
+<tr>
+<td>Debug raw data (<a href="https://github.com/atinfinity/livox-mid360-core/issues/93">#93</a>)</td>
+<td><code>0x0303</code> answers <code>0x00</code> on the log and the command port, in every work state, also when repeated (the stream then moves to the new destination) or when disabling a disabled stream; short payloads and an enable with port 0 answer <code>0x01</code>; the stream leaves port 60301, does not stop the point cloud and ends with a reboot; the datagram content is synthetic</td>
+<td>the protocol document gives the request layout only; ports come from the SDK2 source; nothing about the stream is known</td>
+</tr>
+<tr>
+<td>Firmware log (<a href="https://github.com/atinfinity/livox-mid360-core/issues/44">#44</a>)</td>
+<td><code>0x0301</code> on the log socket enables / disables a type, ret <code>0x00</code> even when repeated; chunks go to key <code>0x0009</code> (else to the <code>0x0301</code> sender); <code>file_index</code> starts at 1, <code>trans_index</code> at 1 with the begin flag, <code>file_num</code> is 1, <code>timestamp</code> is Unix seconds; a disable sends one empty end-flagged chunk</td>
+<td>the SDK2 source shows the wire format only; the LiDAR's counting, destination choice and end-of-file behaviour are unknown</td>
+</tr>
+<tr>
+<td>FOV window ranges</td>
+<td>yaw outside [0, 360) or pitch outside (-10, 60) → <code>0x03</code>; equal / reversed start-stop accepted</td>
+<td>the wiki gives the ranges, not the code, nor what a reversed window means</td>
+</tr>
+<tr>
+<td>FOV write while SAMPLING</td>
+<td>applied at once, ret <code>0x00</code> (no <code>0x21</code>)</td>
+<td>the wiki does not say whether FOV keys need a reboot or a motor restart</td>
+</tr>
+<tr>
+<td><code>pattern_mode</code></td>
+<td>only 0 accepted; 1 / 2 → <code>0x20</code>, others → <code>0x03</code>; never restarts the motor</td>
+<td>the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code</td>
+</tr>
+<tr>
+<td><code>pcl_data_type</code> change while SAMPLING</td>
+<td>the next packet is already in the new format</td>
+<td>the wiki does not say whether the switch is immediate or aligned to a frame</td>
+</tr>
+<tr>
+<td>Install attitude <code>0x0012</code></td>
+<td>stored only; with <code>--apply-attitude</code>, Cartesian points moved by <code>Rz * Ry * Rx</code> + translation after the FOV crop, spherical untouched</td>
+<td>whether the firmware applies the key to its output at all, in which convention and to which data types (<a href="https://github.com/atinfinity/livox-mid360-core/issues/110">#110</a>)</td>
+</tr>
+<tr>
+<td>FOV cropping</td>
+<td>yaw <code>[start, stop)</code> wrapping when <code>start &gt; stop</code>, <code>start == stop</code> empty; pitch <code>[start, stop]</code>; keep if inside any enabled window</td>
+<td>the wiki defines neither the edge inclusivity nor the wrap-around</td>
+</tr>
+<tr>
+<td>Inquire of all settings / status keys at once</td>
+<td>one ACK with every key</td>
+<td>wiki gives no limit on keys per <code>0x0101</code></td>
+</tr>
+<tr>
+<td><code>frame_cnt</code> period</td>
+<td>100 ms (<code>--frame-ms</code>)</td>
+<td>the wiki marks <code>frame_cnt</code> invalid for a non-repetitive scanner. Livox's sample <code>.lvx2</code> files have <code>frame_counter</code> 0 in every package, but the LVX2 spec marks that field reserved, so they say nothing about the firmware (<a href="https://github.com/atinfinity/livox-mid360-core/issues/164">#164</a>, <a href="../lvx2/#livox-sample-files">lvx2.md</a>)</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.sections", "navigation.top", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

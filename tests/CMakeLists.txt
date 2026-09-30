@@ -60,7 +60,9 @@ endif()
 livox_mid360_apply_warnings(mid360_core_tests)
 livox_mid360_apply_sanitizers(mid360_core_tests)
 livox_mid360_apply_coverage(mid360_core_tests)
-catch_discover_tests(mid360_core_tests)
+# A hung test fails after five minutes instead of holding the CI job until the runner's
+# six-hour limit (issue #179). The slowest test takes about 5 s under the sanitizers.
+catch_discover_tests(mid360_core_tests PROPERTIES TIMEOUT 300)
 
 if(LIVOX_MID360_BUILD_FUZZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set(fuzz_targets "")

@@ -1,0 +1,1374 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Clean-room, dependency-free C++ SDK for the Livox Mid-360 LiDAR">
+      
+      
+      
+        <link rel="canonical" href="https://atinfinity.github.io/livox-mid360-core/contributing/">
+      
+      
+        <link rel="prev" href="../roadmap/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Contributing - livox-mid360-core</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#contributing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="livox-mid360-core" class="md-header__button md-logo" aria-label="livox-mid360-core" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            livox-mid360-core
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Contributing
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Follow the system setting"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Follow the system setting" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/atinfinity/livox-mid360-core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    atinfinity/livox-mid360-core
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="livox-mid360-core" class="md-nav__button md-logo" aria-label="livox-mid360-core" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    livox-mid360-core
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/atinfinity/livox-mid360-core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    atinfinity/livox-mid360-core
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lvx2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LVX2 record / replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rerun viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../debug_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debug raw data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transport/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transport layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../protocol_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Protocol notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ground-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ground rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lint
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fuzzing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fuzzing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation-site" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation site
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pull-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pull requests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ground-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ground rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lint
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fuzzing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fuzzing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation-site" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation site
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pull-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pull requests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="contributing">Contributing<a class="headerlink" href="#contributing" title="Permanent link">&para;</a></h1>
+<p>Thank you for helping with <code>livox-mid360-core</code>. This page covers the checks a change has to pass
+and how to run them locally. The build itself is in the <a href="../#build">README</a>; the design
+is in <a href="../architecture/">docs/architecture.md</a> and the per-layer pages next to it; open
+work and project decisions are in <a href="../roadmap/">docs/roadmap.md</a>.</p>
+<h2 id="ground-rules">Ground rules<a class="headerlink" href="#ground-rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Clean room.</strong> The library is written from the public Livox protocol wiki only. Do not copy
+  or paraphrase code from Livox-SDK2 or other drivers; use them solely to compare behaviour
+  on hardware. Record wiki ambiguities and their resolution in
+  <a href="../protocol_notes/">docs/protocol_notes.md</a>.</li>
+<li><strong>Scope.</strong> Base Mid-360, Ubuntu 24.04+, no third-party runtime dependencies (the opt-in
+  <code>livox-mid360-rerun</code> viewer, <a href="../rerun/">docs/rerun.md</a>, is the one exception). See the
+  decisions table in <a href="../roadmap/#project-decisions">docs/roadmap.md</a> before proposing
+  something outside that.</li>
+<li><strong>Issues first.</strong> Every feature and design decision has an issue; link it from the PR and
+  record the decisions taken in the issue or the matching <code>docs/</code> page. Issue templates: bug
+  report, hardware report (a real Mid-360 differs from the simulator or the docs,
+  <a href="https://github.com/atinfinity/livox-mid360-core/issues/11">#11</a>) and feature request; the
+  first two ask for the version, platform and firmware. Labels: <code>no-hardware</code> (doable against
+  the simulator), <code>needs-hardware</code>, <code>phase-2</code> / <code>phase-3</code>, <code>good first issue</code>.</li>
+<li><strong>Tests.</strong> Protocol changes need golden vectors regenerated by <code>tools/gen_golden_vectors.py</code>
+  (CI fails on a diff), transport / session / device changes need a simulator-driven test in
+  <code>tests/</code>, and anything asynchronous must stay green under ASan + UBSan on a 2-vCPU runner.
+  Keep simulator data rates low in tests (see <code>tests/test_reconnect.cpp</code>).</li>
+<li><strong>Errors, not exceptions.</strong> Fallible calls return <code>std::expected</code>; the library never writes
+  to stdout or stderr.</li>
+</ul>
+<h2 id="lint">Lint<a class="headerlink" href="#lint" title="Permanent link">&para;</a></h2>
+<p>Style and static analysis are enforced by the <code>Lint</code> workflow (clang-format 19, clang-tidy 19,
+ruff, ament_cppcheck, ament_lint_cmake). The configuration files <code>.clang-format</code>, <code>.clang-tidy</code> and <code>pyproject.toml</code> are shared
+with <code>livox-mid360-ros2</code> (<code>ament_clang_format --config</code>; ruff reads <code>pyproject.toml</code> directly,
+<code>ament_flake8</code> cannot, see below).</p>
+<p>C++ follows the <a href="https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#c">ROS 2 C++ style</a>:
+<code>.clang-format</code> is a verbatim copy of the configuration shipped with <code>ament_clang_format</code>
+(the commit is named in the file header) and is re-synced by hand, not by CI. On top of the
+formatter, clang-tidy's <code>readability-braces-around-statements</code> requires braces on every
+<code>if</code> / <code>for</code> / <code>while</code> body. Deviations from the ROS 2 rules: <code>#pragma once</code> instead of include
+guards (so cpplint is not used, <a href="https://github.com/atinfinity/livox-mid360-core/issues/17">#17</a>), and no cpplint-style header/footer comments. Code blocks in
+the documentation follow the same style.</p>
+<p>Python (<code>tools/</code>, <code>scripts/</code>) follows the <a href="https://docs.ros.org/en/rolling/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html#python">ROS 2 Python style</a>
+as checked by <code>ament_flake8</code> and <code>ament_pep257</code> with their default settings, but enforced here
+with ruff: <code>pyproject.toml</code> selects the matching rule families (single quotes, google import
+order, 99 columns, the <code>ament</code> pydocstyle convention with the summary of a multi-line docstring
+on the second line). ruff has no port of <code>flake8-deprecated</code> or <code>flake8-class-newline</code>, so a
+class without a docstring needs a blank line before its first member, and <code>ruff format</code>'s
+<code>a[x : y]</code> slice spacing trips <code>E203</code>; write <code>a[x:end]</code> with a named bound instead. Python
+snippets in docs and docstrings follow the same style. Whether the ruff configuration still
+matches the ROS 2 tools is checked by hand with the real tools (the ROS 2 side has no
+<code>pyproject.toml</code> support, so <code>livox-mid360-ros2</code> uses <code>ament_flake8</code> / <code>ament_pep257</code> defaults):</p>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv-ament<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>.venv-ament/bin/pip<span class="w"> </span>install<span class="w"> </span>flake8<span class="w"> </span>flake8-blind-except<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>flake8-builtins<span class="w"> </span>flake8-class-newline<span class="w"> </span>flake8-comprehensions<span class="w"> </span>flake8-deprecated<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>flake8-docstrings<span class="w"> </span>flake8-import-order<span class="w"> </span>flake8-quotes<span class="w"> </span>pydocstyle<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"git+https://github.com/ament/ament_lint.git@rolling#subdirectory=ament_flake8"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"git+https://github.com/ament/ament_lint.git@rolling#subdirectory=ament_pep257"</span>
+.venv-ament/bin/ament_flake8<span class="w"> </span>tools/<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>.venv-ament/bin/ament_pep257<span class="w"> </span>tools/
+</code></pre></div>
+<p>Of the ROS 2 <code>ament_lint_common</code> set, two more checks run here because they are cheap and
+useful on a plain CMake library (<a href="https://github.com/atinfinity/livox-mid360-core/issues/65">#65</a>): <code>ament_cppcheck</code> (cppcheck from apt, with
+<code>AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1</code> because ament refuses cppcheck 2.x by default) and
+<code>ament_lint_cmake</code> (all-lower-case command names, 140 columns). Both are installed with pip
+from the <code>jazzy</code> branch of <a href="https://github.com/ament/ament_lint">ament_lint</a> (<code>AMENT_LINT_BRANCH</code>
+in <code>lint.yml</code>). The rest is deliberately not run: <code>ament_cpplint</code> would need five filters for
+tool limitations (C++23 headers, Catch2 macros) and its remaining findings were fixed once by
+hand; <code>ament_copyright</code> requires the ROS 2 header format, and files here keep the one-line
+<code>SPDX-License-Identifier: Apache-2.0</code>; <code>ament_uncrustify</code> conflicts with clang-format, so the
+ROS 2 driver package uses <code>ament_cmake_clang_format</code> instead. The driver's <code>colcon test</code> never
+lints this library's files, so these are consistency checks, not requirements.</p>
+<p>Run the same checks as CI locally with:</p>
+<div class="highlight"><pre><span></span><code>scripts/lint.sh<span class="w">              </span><span class="c1"># check (clang-tidy needs clang-19 and builds build-tidy/)</span>
+scripts/lint.sh<span class="w"> </span>--fix<span class="w">        </span><span class="c1"># apply clang-format and ruff fixes</span>
+scripts/lint.sh<span class="w"> </span>--no-tidy<span class="w">    </span><span class="c1"># formatting only</span>
+scripts/lint.sh<span class="w"> </span>--no-ament<span class="w">   </span><span class="c1"># without the ROS 2 checks (needs cppcheck and the ament tools)</span>
+scripts/lint.sh<span class="w"> </span>--ament-only<span class="w"> </span><span class="c1"># only the ROS 2 checks</span>
+</code></pre></div>
+<h2 id="fuzzing">Fuzzing<a class="headerlink" href="#fuzzing" title="Permanent link">&para;</a></h2>
+<p>Eight libFuzzer targets live in <code>tests/fuzz/</code>: the protocol parsers (<code>fuzz_command_frame</code>,
+<code>fuzz_data_packet</code>, <code>fuzz_key_value_list</code>), the endpoint text parser (<code>fuzz_transport_text</code>),
+the session helpers that turn a received datagram into a result (<code>fuzz_session_ack</code>,
+<code>fuzz_discovery_ack</code>, via the internal <code>src/session_detail.hpp</code>) and the whole <code>Session</code>
+request loop driven over a loopback socket pair (<code>fuzz_session_loopback</code>: the input selects
+the call, the retry count and the reply datagrams, which are queued before the call so no
+threads are involved) and the frame assembler fed with synthesised packet headers
+(<code>fuzz_frame_assembler</code>, via the internal <code>src/frame_assembler.hpp</code>). Each target has a seed corpus in <code>tests/fuzz/corpus/&lt;target&gt;/</code>,
+generated by <code>tools/gen_fuzz_corpus.py</code> from the
+Python reference implementation and kept in sync by CI. Build with Clang and run all of them:</p>
+<div class="highlight"><pre><span></span><code>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build-fuzz<span class="w"> </span>-G<span class="w"> </span>Ninja<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Debug<span class="w"> </span>-DCMAKE_CXX_COMPILER<span class="o">=</span>clang++-19<span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>-DLIVOX_MID360_BUILD_FUZZERS<span class="o">=</span>ON<span class="w"> </span>-DLIVOX_MID360_ENABLE_ASAN<span class="o">=</span>ON<span class="w"> </span>-DLIVOX_MID360_ENABLE_UBSAN<span class="o">=</span>ON
+cmake<span class="w"> </span>--build<span class="w"> </span>build-fuzz<span class="w"> </span>--target<span class="w"> </span>fuzzers
+scripts/fuzz.sh<span class="w"> </span>build-fuzz<span class="w"> </span><span class="m">30</span><span class="w">   </span><span class="c1"># seconds per target; CI runs the same script</span>
+</code></pre></div>
+<h2 id="coverage">Coverage<a class="headerlink" href="#coverage" title="Permanent link">&para;</a></h2>
+<p>The <code>Coverage</code> workflow builds with GCC 14 and <code>LIVOX_MID360_ENABLE_COVERAGE=ON</code>, runs the
+Catch2 suite and uploads a gcovr report to <a href="https://codecov.io/gh/atinfinity/livox-mid360-core">Codecov</a>
+(README badge, line coverage). The HTML report is attached to each run as the <code>coverage-html</code>
+artifact. The counters are updated atomically (<code>-fprofile-update=atomic</code>): the tests are
+multithreaded, and racing counters make gcov report negative branch counts, which gcovr
+rejects (<a href="https://github.com/atinfinity/livox-mid360-core/issues/125">#125</a>). Locally (<code>gcovr</code> from apt or pip):</p>
+<div class="highlight"><pre><span></span><code>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build-cov<span class="w"> </span>-G<span class="w"> </span>Ninja<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Debug<span class="w"> </span>-DLIVOX_MID360_ENABLE_COVERAGE<span class="o">=</span>ON
+cmake<span class="w"> </span>--build<span class="w"> </span>build-cov<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build-cov
+gcovr<span class="w"> </span>--root<span class="w"> </span>.<span class="w"> </span>--txt-metric<span class="w"> </span>branch<span class="w"> </span>--filter<span class="w"> </span><span class="s1">'src/.*'</span><span class="w"> </span>--filter<span class="w"> </span><span class="s1">'include/livox/mid360/.*'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>--exclude<span class="w"> </span><span class="s1">'tests/.*'</span><span class="w"> </span>--exclude<span class="w"> </span><span class="s1">'build.*/.*'</span><span class="w"> </span>--html-details<span class="w"> </span>coverage.html<span class="w"> </span>--print-summary
+</code></pre></div>
+<p>Counted: <code>src/</code> and <code>include/livox/mid360/</code>. Excluded: tests, fuzzers, generated golden
+vectors, Catch2, and the non-Linux fallback branches in <code>src/transport.cpp</code> (marked with
+<code>GCOVR_EXCL_START</code> / <code>GCOVR_EXCL_STOP</code>, since CI measures on Linux). Branch coverage is
+reported but the badge and the Codecov status checks use line coverage; both checks are
+informational for now.</p>
+<h2 id="documentation-site">Documentation site<a class="headerlink" href="#documentation-site" title="Permanent link">&para;</a></h2>
+<p>The pages in <code>docs/</code>, this file, the README and the READMEs of <code>examples/</code> and <code>tools/</code> are
+published with the API reference as the <a href="https://atinfinity.github.io/livox-mid360-core/">project site</a>
+(<a href="https://github.com/atinfinity/livox-mid360-core/issues/104">#104</a>), built with MkDocs
+Material and deployed to GitHub Pages from <code>main</code> by the <code>Docs</code> workflow. Write the Markdown
+for GitHub: <code>scripts/mkdocs_hooks.py</code> rewrites the relative links and the <code>&gt; [!NOTE]</code> alerts
+for the site, and <code>mkdocs.yml</code> holds the navigation, so a new page in <code>docs/</code> needs an entry
+there. The build runs in strict mode and fails on a broken link or anchor. MkDocs and its
+plugins are locked in <code>requirements-docs.txt</code>; after editing <code>requirements-docs.in</code>, relock with
+<code>uv pip compile requirements-docs.in --python-version 3.12 --universal -o requirements-docs.txt</code>.</p>
+<h2 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
+<p>The public headers in <code>include/livox/mid360/</code> are the API reference: Doxygen generates it from
+their <code>///</code> comments (<a href="https://github.com/atinfinity/livox-mid360-core/issues/104">#104</a>). Every
+public symbol needs a comment. Write plain prose (the first sentence is the brief, no <code>@param</code>
+/ <code>@return</code>), use <code>///&lt;</code> after struct fields and enum values, start each header with a
+<code>/// @file</code> description, and group the members of a large class with <code>/// @name</code> and
+<code>///@{</code> / <code>///@}</code>. Symbols in a <code>detail</code> namespace are excluded. The <code>Doxyfile</code> turns every
+warning into an error, and the <code>Docs</code> workflow builds the reference on every pull request.</p>
+<p>Doxygen is pinned to one release, because other versions report different warnings.
+<code>scripts/install-doxygen.sh</code> downloads that release binary into <code>.cache/</code> and checks its SHA256.
+The upstream binaries cover Linux x86-64 and macOS; on other hosts, install the same version
+yourself and set <code>DOXYGEN</code>.</p>
+<div class="highlight"><pre><span></span><code>scripts/install-doxygen.sh<span class="w">           </span><span class="c1"># once: the pinned Doxygen into .cache/</span>
+scripts/build-docs.sh<span class="w">                </span><span class="c1"># the reference in docs/reference/, then the site in site/</span>
+scripts/build-docs.sh<span class="w"> </span>--serve<span class="w">        </span><span class="c1"># the same, served on http://127.0.0.1:8000 with reload</span>
+scripts/build-docs.sh<span class="w"> </span>--doxygen-only<span class="w"> </span><span class="c1"># the reference only, without Python</span>
+</code></pre></div>
+<p>The site steps run MkDocs through <a href="https://docs.astral.sh/uv/">uv</a>. Both output directories
+are git-ignored.</p>
+<h2 id="continuous-integration">Continuous integration<a class="headerlink" href="#continuous-integration" title="Permanent link">&para;</a></h2>
+<p><code>CI</code> runs gcc-13, gcc-14 and clang-19 in Release plus gcc-14 and clang-19 in Debug with
+ASan + UBSan, each on x86-64 and arm64 (<code>ubuntu-24.04-arm</code>), Apple Clang in Release on
+<code>macos-latest</code>, and separate jobs for the Python reference and simulator tests and a short run
+of every fuzzer. <code>Lint</code> runs clang-format 19,
+clang-tidy 19 and ruff; <code>Coverage</code> uploads to Codecov. <code>Docs</code> builds the API reference and the
+site, deploys it from <code>main</code>, and unlike the others also runs on documentation-only changes.</p>
+<p>To reproduce CI locally on any Docker host: <code>docker/check.sh [linux/arm64|linux/amd64]</code>. The
+platform defaults to the host's. On Apple Silicon <code>linux/arm64</code> runs natively; a non-native
+platform runs under QEMU emulation, where the script only does the Release builds, <code>ctest</code> and
+the Python tests and skips the sanitizer and fuzz steps. <code>docker/check.sh</code> runs the linters
+before the builds, so it is the one-stop pre-push check.</p>
+<h2 id="pull-requests">Pull requests<a class="headerlink" href="#pull-requests" title="Permanent link">&para;</a></h2>
+<ul>
+<li>One issue per PR where possible; title in the conventional style used in the history
+  (<code>feat(device): ...</code>, <code>fix: ...</code>, <code>docs: ...</code>, <code>ci: ...</code>, <code>test: ...</code>).</li>
+<li>Update the documentation that describes what you changed in the same PR: the per-layer page
+  in <code>docs/</code>, <code>docs/architecture.md</code> if threads, locks or data flow moved, and
+  <code>docs/roadmap.md</code> when an issue is finished.</li>
+<li>PRs are squash-merged; the PR title becomes the commit subject.</li>
+<li>The PR template (<code>.github/pull_request_template.md</code>) carries this list as a checklist; strike
+  through or remove the items that do not apply.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.sections", "navigation.top", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

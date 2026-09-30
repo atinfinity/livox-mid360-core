@@ -1,0 +1,20 @@
+var searchData=
+[
+  ['sample_0',['sample',['../structlivox_1_1mid360_1_1_imu_data.html#a80ac5c4667d59872e2a7d91e897caa30',1,'livox::mid360::ImuData']]],
+  ['scan_1',['scan',['../structlivox_1_1mid360_1_1_diag_status.html#ad12b4e9b14ce30489b52356e0bcedd02',1,'livox::mid360::DiagStatus']]],
+  ['scan_5fpattern_2',['scan_pattern',['../structlivox_1_1mid360_1_1_host_setup.html#adca8851cc2c4229a1a71f7606b8f2bed',1,'livox::mid360::HostSetup']]],
+  ['sender_5ftype_3',['sender_type',['../structlivox_1_1mid360_1_1_command_header.html#a64719e5c3b497903a06e81b5ee6c72b5',1,'livox::mid360::CommandHeader::sender_type'],['../structlivox_1_1mid360_1_1_command_frame_spec.html#ab3385d07b91b92403d8a4b2146f021a3',1,'livox::mid360::CommandFrameSpec::sender_type']]],
+  ['seq_5fnum_4',['seq_num',['../structlivox_1_1mid360_1_1_command_header.html#aeca7934ef75ea7abbbd8f48789aef185',1,'livox::mid360::CommandHeader::seq_num'],['../structlivox_1_1mid360_1_1_command_frame_spec.html#a293ccb2adb494b4941b0c07b562eff1c',1,'livox::mid360::CommandFrameSpec::seq_num'],['../structlivox_1_1mid360_1_1_raw_ack.html#a615e0cd16e15c42d294ddf498ccf5445',1,'livox::mid360::RawAck::seq_num']]],
+  ['serial_5fnumber_5',['serial_number',['../structlivox_1_1mid360_1_1_device_identity.html#abcdf256f2a3f6fa529040450eb476a3e',1,'livox::mid360::DeviceIdentity::serial_number'],['../structlivox_1_1mid360_1_1_log_record.html#aaddc506e6d0ff0c123e3dbef4ea64d3d',1,'livox::mid360::LogRecord::serial_number'],['../structlivox_1_1mid360_1_1_discovery_ack.html#a68fbbf5782c9d77084c47a3cf4654ad2',1,'livox::mid360::DiscoveryAck::serial_number'],['../structlivox_1_1mid360_1_1_discovered_device.html#a12dba5f3aa54a079b5d319d7d8a7b54e',1,'livox::mid360::DiscoveredDevice::serial_number']]],
+  ['session_6',['session',['../structlivox_1_1mid360_1_1_device_options.html#ac34b1306a06cd0bb22e1231a843db661',1,'livox::mid360::DeviceOptions::session'],['../structlivox_1_1mid360_1_1_device_error.html#a617fb2a29fcbb289830745347d9cd868',1,'livox::mid360::DeviceError::session']]],
+  ['source_7',['source',['../structlivox_1_1mid360_1_1_receive_info.html#a12a27adee7112d0c6315cf978b86ad1e',1,'livox::mid360::ReceiveInfo']]],
+  ['source_5ftype_8',['source_type',['../structlivox_1_1mid360_1_1_frame.html#a452ea6327bc75c8c54cc1bf29eee36d3',1,'livox::mid360::Frame']]],
+  ['src_5fport_9',['src_port',['../structlivox_1_1mid360_1_1_host_ip_config.html#a745a0d5669592bad0cca139ed210d950',1,'livox::mid360::HostIpConfig']]],
+  ['state_5finfo_5fhost_5fipcfg_10',['state_info_host_ipcfg',['../structlivox_1_1mid360_1_1_lidar_settings.html#a01dbc50f63033d1dd6b6f91aea48c5d8',1,'livox::mid360::LidarSettings']]],
+  ['state_5fpoll_5finterval_11',['state_poll_interval',['../structlivox_1_1mid360_1_1_session_options.html#a23eb3bc0c2f947ba1581a7f206bffcc8',1,'livox::mid360::SessionOptions']]],
+  ['stats_12',['stats',['../structlivox_1_1mid360_1_1_event.html#ac565d1e2ad68c8316f959ce65575bd0d',1,'livox::mid360::Event']]],
+  ['stats_5finterval_13',['stats_interval',['../structlivox_1_1mid360_1_1_device_options.html#a05054dffc67065b14b87855b3dc22cc5',1,'livox::mid360::DeviceOptions']]],
+  ['stop_14',['stop',['../structlivox_1_1mid360_1_1_discovery_options.html#af20f5ebfafc193692343c7a137eb8e78',1,'livox::mid360::DiscoveryOptions::stop'],['../structlivox_1_1mid360_1_1_session_options.html#a221736a9a4d58940f41e34c1dbacc237',1,'livox::mid360::SessionOptions::stop']]],
+  ['storage_15',['storage',['../structlivox_1_1mid360_1_1_host_setup_key_values.html#a38c3a4d56b97a759f79c299bcdb101cf',1,'livox::mid360::HostSetupKeyValues']]],
+  ['system_16',['system',['../structlivox_1_1mid360_1_1_diag_status.html#a00b2e37d826dcbfedb03cc776e3a6ed5',1,'livox::mid360::DiagStatus']]]
+];
