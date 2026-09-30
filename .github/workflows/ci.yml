@@ -20,10 +20,13 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.git-blame-ignore-revs'
 
+# Every job sets timeout-minutes to about 3x its usual run time, so a hung step fails
+# instead of holding the runner for GitHub's default of 360 minutes (issue #186).
 jobs:
   build-test:
     name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}${{ matrix.sanitize && ' / ASan+UBSan' || '' }}${{ matrix.tsan && ' / TSan' || '' }}${{ matrix.os == 'ubuntu-24.04-arm' && ' / arm64' || '' }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +103,7 @@ jobs:
   macos:
     name: Apple Clang / Release / macOS
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -116,6 +120,7 @@ jobs:
   golden-vectors-in-sync:
     name: Python reference & golden vectors
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Regenerate and diff
@@ -131,6 +136,7 @@ jobs:
   fuzz-smoke:
     name: libFuzzer smoke (clang-19)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -152,6 +158,7 @@ jobs:
   rerun:
     name: Rerun viewer tool (gcc-14)
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
