@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-format-19
+      - run: scripts/ci-apt-install.sh clang-format-19
       - run: git ls-files 'include/*.hpp' 'src/*.cpp' 'src/*.hpp' 'tests/*.cpp' 'tests/*.hpp' | grep -v '^tests/generated/' | xargs clang-format-19 --dry-run --Werror
 
   clang-tidy:
@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-19 clang-tidy-19 cmake ninja-build catch2
+      - run: scripts/ci-apt-install.sh clang-19 clang-tidy-19 cmake ninja-build catch2
       - name: Configure (compile_commands.json)
         env: { CC: clang-19, CXX: clang++-19 }
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cppcheck
+      - run: scripts/ci-apt-install.sh cppcheck
       - uses: astral-sh/setup-uv@v10.2.0
       - run: |
           for tool in ament_cppcheck ament_lint_cmake; do
