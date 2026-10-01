@@ -346,7 +346,7 @@ class DeviceModel:
     # -- work-state machine ------------------------------------------------
     @property
     def timed(self) -> bool:
-        """True while in a state that completes at ``state_deadline``."""
+        """Return whether the current state completes at ``state_deadline``."""
         return self.work_state in (WS_SELFCHECK, WS_MOTORSTARTUP)
 
     def tick(self, now: float) -> None:

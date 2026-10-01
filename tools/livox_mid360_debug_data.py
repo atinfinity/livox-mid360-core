@@ -64,10 +64,11 @@ def iter_records(data: bytes):
             raise FormatError(f'record header cut at offset {pos}')
         t, port, length = RECORD_HEADER.unpack_from(data, pos)
         pos += RECORD_HEADER.size
-        if pos + length > len(data):
+        end = pos + length
+        if end > len(data):
             raise FormatError(f'payload cut at offset {pos}')
-        yield Record(t, port, data[pos : pos + length])
-        pos += length
+        yield Record(t, port, data[pos:end])
+        pos = end
 
 
 def check_sim(index: int, payload: bytes, first_seq: int) -> str | None:
