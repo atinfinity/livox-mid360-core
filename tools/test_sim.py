@@ -948,8 +948,9 @@ class EndToEndTest(unittest.TestCase):
             (sim.WS_MOTORSTARTUP, sim.WS_READY),
             (sim.WS_READY, sim.WS_SAMPLING),
         ]
+        reboot = len(states) - len(boot)
         self.assertEqual(states[: len(boot)], boot)  # power-on
-        self.assertEqual(states[-len(boot) :], boot)  # after the reboot
+        self.assertEqual(states[reboot:], boot)  # after the reboot
         self.assertEqual(states.count((sim.WS_READY, sim.WS_SAMPLING)), 2)
 
     def test_ip_config_change_rebinds_after_reboot(self) -> None:
@@ -1409,9 +1410,10 @@ class PcapReplayTest(unittest.TestCase):
         temps = [core_temp(d) for d in self.received('push')]
         first = temps.index(RECORDED_CORE_TEMP)
         # 95 ms between the recorded pushes: 4-5 of the simulator's would have fallen there.
+        after = first + 2
         self.assertEqual(temps[first + 1], RECORDED_CORE_TEMP)
-        self.assertNotIn(RECORDED_CORE_TEMP, temps[first + 2 :])
-        self.assertGreater(len(temps), first + 2)
+        self.assertNotIn(RECORDED_CORE_TEMP, temps[after:])
+        self.assertGreater(len(temps), after)
 
     def test_unreadable_capture_fails_at_start_up(self) -> None:
         with self.assertRaises(SystemExit) as cm:
