@@ -53,9 +53,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: pipx install "ruff==${RUFF_VERSION}"
-      - run: ruff check tools/ scripts/
-      - run: ruff format --check tools/ scripts/
+      # setup-uv publishes no major-version tags since v8, so pin the release (as in docs.yml).
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uvx "ruff@${RUFF_VERSION}" check tools/ scripts/
+      - run: uvx "ruff@${RUFF_VERSION}" format --check tools/ scripts/
 
   # The ROS 2 (ament_lint_common) checks that are cheap and useful on a plain CMake library:
   # cppcheck and lint_cmake. See CONTRIBUTING.md (Lint) and issue #65 for what is left out.
@@ -66,7 +67,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cppcheck
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: |
-          pipx install "git+https://github.com/ament/ament_lint.git@${AMENT_LINT_BRANCH}#subdirectory=ament_cppcheck"
-          pipx install "git+https://github.com/ament/ament_lint.git@${AMENT_LINT_BRANCH}#subdirectory=ament_lint_cmake"
+          for tool in ament_cppcheck ament_lint_cmake; do
+            uv tool install "${tool} @ git+https://github.com/ament/ament_lint.git@${AMENT_LINT_BRANCH}#subdirectory=${tool}"
+          done
+          uv tool dir --bin >> "$GITHUB_PATH"
       - run: scripts/lint.sh --ament-only

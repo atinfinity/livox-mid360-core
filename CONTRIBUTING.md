@@ -52,21 +52,13 @@ class without a docstring needs a blank line before its first member, and `ruff 
 `a[x : y]` slice spacing trips `E203`; write `a[x:end]` with a named bound instead. Python
 snippets in docs and docstrings follow the same style. Whether the ruff configuration still
 matches the ROS 2 tools is checked by hand with the real tools (the ROS 2 side has no
-`pyproject.toml` support, so `livox-mid360-ros2` uses `ament_flake8` / `ament_pep257` defaults):
-
-```sh
-python3 -m venv .venv-ament && .venv-ament/bin/pip install flake8 flake8-blind-except \
-  flake8-builtins flake8-class-newline flake8-comprehensions flake8-deprecated \
-  flake8-docstrings flake8-import-order flake8-quotes pydocstyle \
-  "git+https://github.com/ament/ament_lint.git@rolling#subdirectory=ament_flake8" \
-  "git+https://github.com/ament/ament_lint.git@rolling#subdirectory=ament_pep257"
-.venv-ament/bin/ament_flake8 tools/ && .venv-ament/bin/ament_pep257 tools/
-```
+`pyproject.toml` support, so `livox-mid360-ros2` uses `ament_flake8` / `ament_pep257` defaults).
+`scripts/lint-ament-python.sh` runs both on `tools/` and `scripts/` through `uvx`.
 
 Of the ROS 2 `ament_lint_common` set, two more checks run here because they are cheap and
 useful on a plain CMake library ([#65](https://github.com/atinfinity/livox-mid360-core/issues/65)): `ament_cppcheck` (cppcheck from apt, with
 `AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1` because ament refuses cppcheck 2.x by default) and
-`ament_lint_cmake` (all-lower-case command names, 140 columns). Both are installed with pip
+`ament_lint_cmake` (all-lower-case command names, 140 columns). Both are installed with uv
 from the `jazzy` branch of [ament_lint](https://github.com/ament/ament_lint) (`AMENT_LINT_BRANCH`
 in `lint.yml`). The rest is deliberately not run: `ament_cpplint` would need five filters for
 tool limitations (C++23 headers, Catch2 macros) and its remaining findings were fixed once by
@@ -75,7 +67,11 @@ hand; `ament_copyright` requires the ROS 2 header format, and files here keep th
 ROS 2 driver package uses `ament_cmake_clang_format` instead. The driver's `colcon test` never
 lints this library's files, so these are consistency checks, not requirements.
 
-Run the same checks as CI locally with:
+Run the same checks as CI locally with the commands below. The Python tools come from uv
+([#191](https://github.com/atinfinity/livox-mid360-core/issues/191)); install them with
+`uv tool install ruff==0.16.9` (the `RUFF_VERSION` in `lint.yml`) and, for the ROS 2 checks,
+`uv tool install "ament_cppcheck @ git+https://github.com/ament/ament_lint.git@jazzy#subdirectory=ament_cppcheck"`,
+then the same for `ament_lint_cmake`. cppcheck itself comes from the system package manager.
 
 ```sh
 scripts/lint.sh              # check (clang-tidy needs clang-19 and builds build-tidy/)

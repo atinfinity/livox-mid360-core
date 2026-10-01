@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rerun-sdk==0.38.1"]  # LIVOX_MID360_RERUN_VERSION in CMakeLists.txt
+# ///
 """
 Generates tools/rerun/default_blueprint.rbl, the viewer layout livox-mid360-rerun sends (#147).
 
-Run from the repository root:  python3 tools/rerun/make_blueprint.py
-Needs the Rerun Python SDK of the version the tool is built with (pip install rerun-sdk==0.38.1);
-the output is committed and embedded at build time, so building the tool does not.
+Run from the repository root:  uv run tools/rerun/make_blueprint.py
+uv installs the Rerun Python SDK of the version the tool is built with, declared above (#191);
+the output is committed and embedded at build time, so building the tool does not need it.
 
 The layout: one 3D view of `lidar` with a fixed orbital eye, and a time panel on the `frame`
 timeline that follows the newest data. Without a blueprint the 3D view's default eye tracks the
