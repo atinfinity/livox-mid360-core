@@ -28,9 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++-14 cmake ninja-build catch2 gcovr
+        run: scripts/ci-apt-install.sh g++-14 cmake ninja-build catch2 gcovr
       - name: Configure
         env:
           CC: gcc-14

@@ -74,9 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ${{ matrix.compiler.apt }} cmake ninja-build catch2
+        run: scripts/ci-apt-install.sh ${{ matrix.compiler.apt }} cmake ninja-build catch2
       - name: Configure
         env:
           CC: ${{ matrix.compiler.cc }}
@@ -140,9 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-19 libclang-rt-19-dev cmake ninja-build
+        run: scripts/ci-apt-install.sh clang-19 libclang-rt-19-dev cmake ninja-build
       - name: Configure
         env: { CC: clang-19, CXX: clang++-19 }
         run: >
@@ -162,9 +158,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++-14 cmake ninja-build
+        run: scripts/ci-apt-install.sh g++-14 cmake ninja-build
       - name: Configure
         env: { CC: gcc-14, CXX: g++-14 }
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLIVOX_MID360_BUILD_RERUN=ON
