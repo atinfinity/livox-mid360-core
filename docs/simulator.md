@@ -21,7 +21,7 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--bind` | `0.0.0.0` | address to bind; also reported as `lidar_ip` in the discovery ACK (127.0.0.1 when unspecified) |
+| `--bind` | `0.0.0.0` | address to bind; also reported as `lidar_ip` in the discovery ACK. Bound to `0.0.0.0`, the ACK carries the local address on the route to the requester, so a host off loopback can connect ([#203](https://github.com/atinfinity/livox-mid360-core/issues/203)); key 0x0004 then reports 127.0.0.1 |
 | `--base-port` | 56000 | discovery port; cmd, push, pcl, imu, log follow at +100, +200, +300, +400, +500. `0` picks free ports |
 | `--sn` | `SIM0000000000001` | serial number (≤ 16 chars) |
 | `--product-info` | `MID360-SIM` | key 0x8001 (≤ 64 chars) |
