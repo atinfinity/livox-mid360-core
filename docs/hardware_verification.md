@@ -22,19 +22,30 @@ the run) and route only the LiDAR's address through the wired interface.
 
 **Keeping an overlapping Wi-Fi.** A `/32` route is more specific than the Wi-Fi's
 `192.168.1.0/24`, so it wins for that one address. With `enp2s0` as the wired interface and
-`192.168.1.1xx` as the LiDAR:
+`192.168.1.1xx` as the LiDAR, create a NetworkManager profile for the wired interface:
 
 ```sh
-sudo ip addr add 192.168.1.50/24 dev enp2s0 noprefixroute
-sudo ip route add 192.168.1.1xx/32 dev enp2s0 src 192.168.1.50
+nmcli con add type ethernet ifname enp2s0 con-name mid360 connection.autoconnect-priority 10 \
+  ipv4.method manual ipv4.addresses 192.168.1.50/24 ipv4.never-default yes \
+  ipv4.route-metric 1000 ipv4.routes "192.168.1.1xx/32 src=192.168.1.50" ipv6.method disabled
+```
+
+With the LiDAR plugged in and the profile active (`nmcli -f DEVICE,STATE,CONNECTION dev`):
+
+```sh
 ip route get 192.168.1.1xx    # must print "dev enp2s0 src 192.168.1.50"
 ip route get 192.168.1.1      # must still print the Wi-Fi interface
 ```
 
-- Keep `noprefixroute`. Without it the address adds a `192.168.1.0/24` route on `enp2s0`
-  with metric 0, which wins over the Wi-Fi's (metric 600 under NetworkManager): the rest of
-  the LAN, the router included, becomes unreachable, while the internet may keep working
-  through the default route and hide the problem.
+- Use the profile rather than `ip addr add`. The interface usually already has a DHCP profile
+  ("Wired connection 1" or similar), which NetworkManager activates when the LiDAR's link
+  comes up and which can remove a manually added address. `connection.autoconnect-priority 10`
+  makes NetworkManager pick `mid360` over it.
+- Keep `ipv4.route-metric 1000`. The address adds a `192.168.1.0/24` route on `enp2s0`; with
+  NetworkManager's default metric for Ethernet (100) it wins over the Wi-Fi's (600), and the
+  rest of the LAN, the router included, becomes unreachable, while the internet may keep
+  working through the default route and hide the problem. With `ip addr add`, the same
+  happens at metric 0 unless `noprefixroute` is given.
 - `--host-ip 192.168.1.50` is enough. Broadcast discovery (`255.255.255.255`) is sent from a
   socket bound to that address and leaves through `enp2s0`, so `--lidar-ip` is not needed.
   Without `--host-ip` the broadcast leaves through the Wi-Fi and finds nothing.
@@ -42,8 +53,8 @@ ip route get 192.168.1.1      # must still print the Wi-Fi interface
   that a device on the Wi-Fi network uses that address. The LiDAR stays reachable through
   the `/32` route, but that device does not, and a device on `192.168.1.50` conflicts with
   the host's wired address.
-- Undo after the run: `sudo ip route del 192.168.1.1xx/32` and
-  `sudo ip addr del 192.168.1.50/24 dev enp2s0`. Neither survives a reboot.
+- Undo after the run: `nmcli con delete mid360`. Until then the profile also comes back after
+  a reboot.
 
 **Firewall.** With `ufw` enabled, the run shows which ports have to be opened
 (the table in [getting_started.md](getting_started.md#6-connect-a-real-mid-360)). Run once
