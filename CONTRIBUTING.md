@@ -127,12 +127,15 @@ informational for now.
 
 The pages in `docs/`, this file, the README and the READMEs of `examples/` and `tools/` are
 published with the API reference as the [project site](https://atinfinity.github.io/livox-mid360-core/)
-([#104](https://github.com/atinfinity/livox-mid360-core/issues/104)), built with MkDocs
-Material and deployed to GitHub Pages from `main` by the `Docs` workflow. Write the Markdown
-for GitHub: `scripts/mkdocs_hooks.py` rewrites the relative links and the `> [!NOTE]` alerts
-for the site, and `mkdocs.yml` holds the navigation, so a new page in `docs/` needs an entry
-there. The build runs in strict mode and fails on a broken link or anchor. MkDocs and its
-plugins are locked in `requirements-docs.txt`; after editing `requirements-docs.in`, relock with
+([#104](https://github.com/atinfinity/livox-mid360-core/issues/104)), built with
+[Zensical](https://zensical.org/) ([#185](https://github.com/atinfinity/livox-mid360-core/issues/185))
+and deployed to GitHub Pages from `main` by the `Docs` workflow. Write the Markdown for GitHub:
+`scripts/stage_docs.py` copies it into `site-src/` (git-ignored) with the relative links and
+the `> [!NOTE]` alerts rewritten for the site, so edit the sources, not `site-src/`.
+`zensical.toml` holds the navigation, so a new page in `docs/` needs an entry there; a page
+without one, or an entry without a page, fails `stage_docs.py`. Zensical runs in strict mode
+and fails on a broken link or anchor. Zensical and its dependencies are locked in
+`requirements-docs.txt`; after editing `requirements-docs.in`, relock with
 `uv pip compile requirements-docs.in --python-version 3.12 --universal -o requirements-docs.txt`.
 
 ## API reference
@@ -153,12 +156,12 @@ yourself and set `DOXYGEN`.
 ```sh
 scripts/install-doxygen.sh           # once: the pinned Doxygen into .cache/
 scripts/build-docs.sh                # the reference in docs/reference/, then the site in site/
-scripts/build-docs.sh --serve        # the same, served on http://127.0.0.1:8000 with reload
+scripts/build-docs.sh --serve        # the same, served on http://localhost:8000 with reload
 scripts/build-docs.sh --doxygen-only # the reference only, without Python
 ```
 
-The site steps run MkDocs through [uv](https://docs.astral.sh/uv/). Both output directories
-are git-ignored.
+The site steps run `stage_docs.py` and Zensical through [uv](https://docs.astral.sh/uv/). All
+output directories are git-ignored.
 
 ## Continuous integration
 

@@ -51,6 +51,9 @@ force-sort-within-sections = true
 order-by-type = false
 case-sensitive = false
 known-first-party = ["livox_mid360_pcap", "livox_mid360_proto", "livox_mid360_sim"]
+# Standard library since Python 3.11, newer than target-version; used by scripts/stage_docs.py,
+# which runs on the Python 3.12 of scripts/build-docs.sh (#185).
+extra-standard-library = ["tomllib"]
 
 # No [tool.ruff.lint.pydocstyle] convention: ruff's "pep257" preset would also silence D213,
 # whereas ament_pep257 only ignores the codes listed above (so D213 is enforced).
