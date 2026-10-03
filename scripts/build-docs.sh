@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Builds the project site (issue #104): the API reference from the public headers with Doxygen
-# into docs/reference/, then the MkDocs site into site/ (both git-ignored). The Doxyfile turns
-# every Doxygen warning into an error, so this fails on undocumented or wrongly documented public
-# symbols; mkdocs runs with --strict, so it fails on broken links and anchors.
+# Builds the project site (issues #104, #185): the API reference from the public headers with
+# Doxygen into docs/reference/, then the pages staged by scripts/stage_docs.py into site-src/,
+# then the Zensical site into site/ (all git-ignored). The Doxyfile turns every Doxygen warning
+# into an error, so this fails on undocumented or wrongly documented public symbols;
+# stage_docs.py fails on a page missing from the nav, and Zensical runs with --strict, so it
+# fails on broken links and anchors.
 # Usage: scripts/build-docs.sh [--doxygen-only | --serve]
 #   --doxygen-only  only the API reference (no Python needed)
-#   --serve         build the reference, then serve the site on http://127.0.0.1:8000 with reload
-# MkDocs: the versions locked in requirements-docs.txt, run through uv (https://docs.astral.sh/uv/).
+#   --serve         build the reference, then serve the site on http://localhost:8000 with reload
+# Zensical: the versions locked in requirements-docs.txt, run through uv (https://docs.astral.sh/uv/).
 # Doxygen: the DOXYGEN env var, else the pinned binary from scripts/install-doxygen.sh, else
 # doxygen on PATH. Other versions than the pinned one may report different warnings.
 set -euo pipefail
@@ -44,12 +46,19 @@ if ! command -v uv >/dev/null; then
   echo "build-docs: uv not found; see https://docs.astral.sh/uv/ (or use --doxygen-only)" >&2
   exit 1
 fi
-# Material prints a banner about MkDocs 2.0 on every run (moving to Zensical is a later issue).
-export NO_MKDOCS_2_WARNING=1
-mkdocs=(uv run --no-project --python 3.12 --with-requirements requirements-docs.txt mkdocs)
+python=(uv run --no-project --python 3.12)
+zensical=("${python[@]}" --with-requirements requirements-docs.txt zensical)
 if [[ "$mode" == serve ]]; then
-  exec "${mkdocs[@]}" serve --strict
+  # Zensical watches site-src/; the stager keeps it in sync with docs/ and the READMEs.
+  "${python[@]}" scripts/stage_docs.py
+  "${python[@]}" scripts/stage_docs.py --watch &
+  trap 'kill $!' EXIT
+  "${zensical[@]}" serve -f zensical.toml
+  exit
 fi
-echo "== mkdocs"
-"${mkdocs[@]}" build --strict
+echo "== stage_docs"
+"${python[@]}" scripts/stage_docs.py
+echo "== zensical"
+rm -rf site
+"${zensical[@]}" build --strict -f zensical.toml
 echo "build-docs: site in site/index.html"
