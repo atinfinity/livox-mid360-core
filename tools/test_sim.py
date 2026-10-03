@@ -661,6 +661,35 @@ class SimulatorTest(unittest.TestCase):
         self.assertGreater(self.s._next_deadline(now), now)
         self.assertGreaterEqual(self.s.next_push, now + self.s.args.reboot_silence)
 
+    def test_discovery_ack_advertises_the_address_that_reaches_the_host(self) -> None:
+        # Bound to 0.0.0.0 the ACK carries the local address on the requester's route, not
+        # 127.0.0.1, so the simulator works off loopback too (#203).
+        args = sim.build_parser().parse_args(['--bind', '0.0.0.0', '--base-port', '0'])
+        wild = sim.Simulator(args, out=io.StringIO(), control=None)
+        self.addCleanup(lambda: [s.close() for s in wild.socks.values()])
+        req = proto.CommandFrame(1, sim.CMD_DISCOVERY, sim.REQ, 0, b'')
+        now = time.monotonic()
+
+        def advertised(peer: str) -> str:
+            _, payload = wild._dispatch(req, (peer, 56000), now)
+            return proto.parse_discovery_ack(payload)['lidar_ip']
+
+        self.assertEqual(advertised('127.0.0.1'), '127.0.0.1')
+        # An explicit --bind is advertised whatever the requester.
+        _, payload = self.s._dispatch(req, ('127.0.0.1', 56000), now)
+        self.assertEqual(proto.parse_discovery_ack(payload)['lidar_ip'], '127.0.0.1')
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.connect(('192.0.2.1', 9))  # TEST-NET-1: only the route is looked up
+                local = probe.getsockname()[0]
+        except OSError:
+            self.skipTest('no route off loopback')
+        if local.startswith('127.') or local == '0.0.0.0':
+            self.skipTest('no address off loopback')
+        self.assertEqual(advertised(local), local)
+        # Key 0x0004 keeps reporting the address the simulator started with.
+        self.assertEqual(wild.configured_ip(), '127.0.0.1')
+
     def test_factory_reset_keeps_the_answering_address(self) -> None:
         self.s._debug_control(True, ('127.0.0.1', self.rx.getsockname()[1]))
         self.s._do_reboot(time.monotonic(), factory=True)
