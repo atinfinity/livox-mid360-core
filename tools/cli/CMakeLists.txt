@@ -1,4 +1,4 @@
-add_executable(livox-mid360-cli main.cpp debug_data.cpp info.cpp record.cpp replay.cpp)
+add_executable(livox-mid360-cli main.cpp debug_data.cpp info.cpp list.cpp record.cpp replay.cpp)
 target_link_libraries(livox-mid360-cli PRIVATE livox::mid360_core)
 livox_mid360_apply_warnings(livox-mid360-cli)
 livox_mid360_apply_sanitizers(livox-mid360-cli)
@@ -25,5 +25,11 @@ if(LIVOX_MID360_BUILD_TESTS)
     COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_info.sh $<TARGET_FILE:livox-mid360-cli>
       ${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py)
   set_tests_properties(cli_info PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+    RESOURCE_LOCK sim_default_ports)
+  # list: unicast discovery of two simulators (127.0.0.1 and 127.0.0.2).
+  add_test(NAME cli_list
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_list.sh $<TARGET_FILE:livox-mid360-cli>
+      ${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py)
+  set_tests_properties(cli_list PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
     RESOURCE_LOCK sim_default_ports)
 endif()

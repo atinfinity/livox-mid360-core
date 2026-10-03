@@ -2,7 +2,8 @@
 // livox-mid360-cli: `record` writes the packet stream of one LiDAR to an lvx2 file, `replay`
 // plays such a file back through the frame assembler (issue #35, docs/lvx2.md), `debug-data`
 // collects the debug raw data stream (issue #93, docs/debug_data.md), `info` prints what
-// discovery and the identity keys report, without writing anything to the LiDAR.
+// discovery and the identity keys report, without writing anything to the LiDAR, `list` prints
+// every LiDAR that answers discovery.
 #include <csignal>
 #include <cstring>
 #include <exception>
@@ -54,6 +55,7 @@ void usage()
                "         [--window-ms N] [--quiet]\n"
                "  debug-data --out FILE [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] [--sn SN]\n"
                "         [--duration SECONDS] [--port N] [--start-sampling] [--max-size BYTES]\n"
+               "  list [--host-ip A.B.C.D] [--lidar-ip A.B.C.D]... [--timeout-ms N]\n"
                "  info [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] [--sn SN]\n"
                "  --version | --help\n";
 }
@@ -78,6 +80,9 @@ int run(int argc, char ** argv)
   }
   if (cmd == "debug-data") {
     return cli::run_debug_data(argc - 2, argv + 2);
+  }
+  if (cmd == "list") {
+    return cli::run_list(argc - 2, argv + 2);
   }
   if (cmd == "info") {
     return cli::run_info(argc - 2, argv + 2);

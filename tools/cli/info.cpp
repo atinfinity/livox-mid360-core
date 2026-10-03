@@ -2,7 +2,6 @@
 // `info`: discovery -> Session -> 0x0101 inquire of the identity keys. Read-only: unlike
 // Device::open it writes no host setup, so the LiDAR's configuration is left as it is.
 // Prints what the hardware checks of issue #110 / #11 record (dev_type, cmd_port, firmware).
-#include <format>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -75,9 +74,7 @@ int run_info(int argc, char ** argv)
     if (args->sn && d.serial_number != *args->sn) {
       continue;
     }
-    std::cout << std::format(
-      "discovery: sn={} ip={} cmd_port={} dev_type={} from={}\n", d.serial_number,
-      ip_to_string(d.ip), d.cmd_port, d.dev_type, to_string(d.from));
+    std::cout << "discovery: " << describe(d) << "\n";
     SessionOptions opts;
     opts.bind_address = args->host_ip;
     auto session = Session::connect(d, opts);
