@@ -1,4 +1,4 @@
-add_executable(livox-mid360-cli main.cpp debug_data.cpp record.cpp replay.cpp)
+add_executable(livox-mid360-cli main.cpp debug_data.cpp info.cpp record.cpp replay.cpp)
 target_link_libraries(livox-mid360-cli PRIVATE livox::mid360_core)
 livox_mid360_apply_warnings(livox-mid360-cli)
 livox_mid360_apply_sanitizers(livox-mid360-cli)
@@ -19,5 +19,11 @@ if(LIVOX_MID360_BUILD_TESTS)
       ${PROJECT_SOURCE_DIR}/tools/livox_mid360_debug_data.py
       ${CMAKE_CURRENT_BINARY_DIR}/debug_data.bin)
   set_tests_properties(cli_debug_data PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+    RESOURCE_LOCK sim_default_ports)
+  # info: discovery and the identity inquire against the simulator.
+  add_test(NAME cli_info
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_info.sh $<TARGET_FILE:livox-mid360-cli>
+      ${PROJECT_SOURCE_DIR}/tools/livox_mid360_sim.py)
+  set_tests_properties(cli_info PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
     RESOURCE_LOCK sim_default_ports)
 endif()

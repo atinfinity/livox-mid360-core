@@ -52,7 +52,7 @@ Besides the library, the build contains:
 | --- | --- |
 | `build/examples/minimal_receive` | Receives frames and IMU samples and prints one line per frame ([examples/README.md](../examples/README.md)) |
 | `build/examples/collect_firmware_log` | Saves the LiDAR's own firmware log |
-| `build/tools/cli/livox-mid360-cli` | Records to `.lvx2` and replays it ([lvx2.md](lvx2.md)) |
+| `build/tools/cli/livox-mid360-cli` | Records to `.lvx2` and replays it ([lvx2.md](lvx2.md)); `info` prints a LiDAR's serial number and firmware versions |
 
 ## 3. Receive point clouds from the simulator
 
@@ -204,6 +204,19 @@ found <serial number> at <LiDAR address>:56000
 Once you know the address, pass it as `--lidar-ip`, which also works when several LiDARs share
 the network. `Device::open` points the LiDAR's data streams at `--host-ip`, so no setting has to
 be changed on the LiDAR beforehand. Ctrl-C stops sampling and exits cleanly.
+
+**Identify.** `livox-mid360-cli info` takes the same `--host-ip` / `--lidar-ip` / `--sn` and
+prints what discovery reports and the identity keys, including the firmware version
+(`version_app`). It only reads, so it also works on a LiDAR you do not want reconfigured:
+
+```sh
+build/tools/cli/livox-mid360-cli info --host-ip 192.168.1.5
+```
+
+```
+discovery: sn=<serial number> ip=<LiDAR address> cmd_port=56100 dev_type=<n> from=<LiDAR address>:56000
+identity: sn=<serial number> product_info=<...> version_app=<a.b.c.d> version_loader=<...> version_hardware=<...> mac=<...>
+```
 
 **Troubleshooting** by exit code of `minimal_receive`:
 

@@ -36,6 +36,7 @@ nav = [
   { "Tools" = "tools.md" },
   { "Project" = [
     { "Roadmap" = "roadmap.md" },
+    { "Hardware verification" = "hardware_verification.md" },
     { "Contributing" = "contributing.md" },
   ] },
 ]
