@@ -16,8 +16,30 @@ Install `tcpdump` for the capture and `editcap` (`wireshark-common`) to trim it
 interface that address ([getting_started.md](getting_started.md#6-connect-a-real-mid-360)).
 If another interface of the host, such as Wi-Fi on a home router, is also in
 `192.168.1.0/24`, the host has two routes to the subnet and may send to the LiDAR through the
-wrong one, and the LiDAR's address may belong to another device on that network. Disconnect
-the other interface for the run.
+wrong one, and the LiDAR's address may belong to another device on that network. Either
+disconnect the other interface for the run, or keep it (for example to stay online during
+the run) and route only the LiDAR's address through the wired interface.
+
+**Keeping an overlapping Wi-Fi.** A `/32` route is more specific than the Wi-Fi's
+`192.168.1.0/24`, so it wins for that one address. With `enp2s0` as the wired interface and
+`192.168.1.1xx` as the LiDAR:
+
+```sh
+sudo ip addr add 192.168.1.50/24 dev enp2s0
+sudo ip route add 192.168.1.1xx/32 dev enp2s0 src 192.168.1.50
+ip route get 192.168.1.1xx    # must print "dev enp2s0 src 192.168.1.50"
+```
+
+- Pass `--lidar-ip 192.168.1.1xx` to the run. Broadcast discovery
+  (`255.255.255.255`) may leave through the Wi-Fi, which carries the default route. To check
+  broadcast discovery as well, run once more with the Wi-Fi disconnected and without
+  `--lidar-ip`.
+- Before plugging in the LiDAR, `ping 192.168.1.1xx` and `ping 192.168.1.50`. An answer means
+  that a device on the Wi-Fi network uses that address. The LiDAR stays reachable through
+  the `/32` route, but that device does not, and a device on `192.168.1.50` conflicts with
+  the host's wired address.
+- Undo after the run: `sudo ip route del 192.168.1.1xx/32` and
+  `sudo ip addr del 192.168.1.50/24 dev enp2s0`. Neither survives a reboot.
 
 **Firewall.** With `ufw` enabled, the run shows which ports have to be opened
 (the table in [getting_started.md](getting_started.md#6-connect-a-real-mid-360)). Run once
@@ -36,7 +58,9 @@ with the firewall disabled first, so that a failure is not mistaken for a librar
 | `livox-mid360-cli debug-data` | At least one debug raw data packet is written |
 
 ```sh
-scripts/hw-first-run.sh --host-ip 192.168.1.50 --pcap enp3s0
+scripts/hw-first-run.sh --host-ip 192.168.1.50 --pcap enp2s0
+# with an overlapping Wi-Fi kept up (see Network above):
+scripts/hw-first-run.sh --host-ip 192.168.1.50 --lidar-ip 192.168.1.1xx --pcap enp2s0
 ```
 
 `--pcap` captures the exchange with `tcpdump` (it asks for `sudo` once). The output directory,
