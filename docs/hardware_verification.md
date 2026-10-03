@@ -25,15 +25,19 @@ the run) and route only the LiDAR's address through the wired interface.
 `192.168.1.1xx` as the LiDAR:
 
 ```sh
-sudo ip addr add 192.168.1.50/24 dev enp2s0
+sudo ip addr add 192.168.1.50/24 dev enp2s0 noprefixroute
 sudo ip route add 192.168.1.1xx/32 dev enp2s0 src 192.168.1.50
 ip route get 192.168.1.1xx    # must print "dev enp2s0 src 192.168.1.50"
+ip route get 192.168.1.1      # must still print the Wi-Fi interface
 ```
 
-- Pass `--lidar-ip 192.168.1.1xx` to the run. Broadcast discovery
-  (`255.255.255.255`) may leave through the Wi-Fi, which carries the default route. To check
-  broadcast discovery as well, run once more with the Wi-Fi disconnected and without
-  `--lidar-ip`.
+- Keep `noprefixroute`. Without it the address adds a `192.168.1.0/24` route on `enp2s0`
+  with metric 0, which wins over the Wi-Fi's (metric 600 under NetworkManager): the rest of
+  the LAN, the router included, becomes unreachable, while the internet may keep working
+  through the default route and hide the problem.
+- `--host-ip 192.168.1.50` is enough. Broadcast discovery (`255.255.255.255`) is sent from a
+  socket bound to that address and leaves through `enp2s0`, so `--lidar-ip` is not needed.
+  Without `--host-ip` the broadcast leaves through the Wi-Fi and finds nothing.
 - Before plugging in the LiDAR, `ping 192.168.1.1xx` and `ping 192.168.1.50`. An answer means
   that a device on the Wi-Fi network uses that address. The LiDAR stays reachable through
   the `/32` route, but that device does not, and a device on `192.168.1.50` conflicts with
@@ -59,11 +63,14 @@ with the firewall disabled first, so that a failure is not mistaken for a librar
 
 ```sh
 scripts/hw-first-run.sh --host-ip 192.168.1.50 --pcap enp2s0
-# with an overlapping Wi-Fi kept up (see Network above):
+# discovery by unicast instead of broadcast:
 scripts/hw-first-run.sh --host-ip 192.168.1.50 --lidar-ip 192.168.1.1xx --pcap enp2s0
 ```
 
-`--pcap` captures the exchange with `tcpdump` (it asks for `sudo` once). The output directory,
+`--pcap` captures the exchange with `tcpdump` (it asks for `sudo` once). Run by hand,
+`tcpdump` needs no `-Z root`: on Ubuntu its AppArmor profile denies that and it crashes.
+The capture decodes with `tools/livox_mid360_pcap.py` and replays through the simulator's
+`--pcap` ([simulator.md](simulator.md)). The output directory,
 `hw-run-<UTC time>/` by default, holds every log, the `.lvx2` and debug data files, the
 capture, `env.txt` (OS, compiler, commit, addresses, the LiDAR's identity) and `summary.md`, a table to paste into
 the results below or into the issue. `--seconds` sets the duration of the first two steps
