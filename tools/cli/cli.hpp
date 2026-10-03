@@ -18,6 +18,7 @@ std::optional<livox::mid360::Ipv4> parse_ip(const std::string & s);
 
 // Exit codes: 0 ok, 1 usage, 2 setup / I/O failure, 3 nothing recorded.
 int run_debug_data(int argc, char ** argv);
+int run_info(int argc, char ** argv);
 int run_record(int argc, char ** argv);
 int run_replay(int argc, char ** argv);
 }  // namespace cli
