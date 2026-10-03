@@ -52,7 +52,7 @@ Besides the library, the build contains:
 | --- | --- |
 | `build/examples/minimal_receive` | Receives frames and IMU samples and prints one line per frame ([examples/README.md](../examples/README.md)) |
 | `build/examples/collect_firmware_log` | Saves the LiDAR's own firmware log |
-| `build/tools/cli/livox-mid360-cli` | Records to `.lvx2` and replays it ([lvx2.md](lvx2.md)); `info` prints a LiDAR's serial number and firmware versions |
+| `build/tools/cli/livox-mid360-cli` | Records to `.lvx2` and replays it ([lvx2.md](lvx2.md)); `list` prints the LiDARs on the network, `info` a LiDAR's serial number and firmware versions |
 
 ## 3. Receive point clouds from the simulator
 
@@ -204,6 +204,23 @@ found <serial number> at <LiDAR address>:56000
 Once you know the address, pass it as `--lidar-ip`, which also works when several LiDARs share
 the network. `Device::open` points the LiDAR's data streams at `--host-ip`, so no setting has to
 be changed on the LiDAR beforehand. Ctrl-C stops sampling and exits cleanly.
+
+**List.** `livox-mid360-cli list` broadcasts one discovery request and prints every LiDAR
+that answers within `--timeout-ms` (default 1000), one per line. It writes nothing to the
+LiDARs. Exit 2 means none answered:
+
+```sh
+build/tools/cli/livox-mid360-cli list --host-ip 192.168.1.5
+```
+
+```
+sn=<serial number> ip=<LiDAR address> cmd_port=56100 dev_type=<n> from=<LiDAR address>:56000
+found 1 LiDAR(s)
+```
+
+`--lidar-ip` (repeatable) asks the given addresses by unicast instead. A warning on stderr
+means that a LiDAR reports an address other than the one it answered from: commands go to
+the reported address, so it cannot be opened from this host as it is.
 
 **Identify.** `livox-mid360-cli info` takes the same `--host-ip` / `--lidar-ip` / `--sn` and
 prints what discovery reports and the identity keys, including the firmware version
