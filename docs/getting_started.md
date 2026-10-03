@@ -174,6 +174,15 @@ ip -br link                                   # find the interface name, e.g. en
 sudo ip addr add 192.168.1.5/24 dev enp3s0    # until the next reboot; use netplan to keep it
 ```
 
+On a desktop, NetworkManager usually has a DHCP profile for the interface. It activates that
+profile when the link comes up, which can remove an address added with `ip addr`. Give the
+interface its own profile instead:
+
+```sh
+nmcli con add type ethernet ifname enp3s0 con-name mid360 connection.autoconnect-priority 10 \
+  ipv4.method manual ipv4.addresses 192.168.1.5/24 ipv4.never-default yes ipv6.method disabled
+```
+
 **Firewall.** The host receives on these UDP ports:
 
 | Port | Stream |
