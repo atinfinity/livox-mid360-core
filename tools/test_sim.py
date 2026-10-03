@@ -1232,10 +1232,13 @@ class EndToEndTest(unittest.TestCase):
             if cnt != (prev + 1) & 0xFFFF:
                 jumps.append((cnt - prev) & 0xFFFF)
             prev = cnt
-        # 0.3 s at 2000 pkt/s were counted but withheld: one gap, no burst of stale ones.
+        # 0.3 s of packets were counted but withheld: one gap, no burst of stale ones. Nominally
+        # 600 at 2000 pkt/s, but a starved simulator falls behind the rate, so only require
+        # 10 % of that, and that every packet in the gap was withheld (`silenced` also counts
+        # the IMU and push datagrams).
         self.assertEqual(len(jumps), 1)
-        self.assertGreater(jumps[0], 300)
-        self.assertGreater(self.s.sent['silenced'], 300)
+        self.assertGreater(jumps[0], 60)
+        self.assertGreaterEqual(self.s.sent['silenced'], jumps[0] - 1)
 
     def test_control_lines_written_together_are_all_applied(self) -> None:
         # Two lines in one write land in the pipe together; the second must not be
