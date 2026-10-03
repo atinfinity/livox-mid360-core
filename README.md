@@ -38,7 +38,9 @@ same pages, with the API reference generated from the headers, are published as 
   with JetPack 6 (Ubuntu 22.04) is outside this support statement until a compatible toolchain
   is confirmed.
   Clang 18 with libstdc++ does not expose `<expected>` (it reports `__cpp_concepts` 201907);
-  use Clang 19+ or `-stdlib=libc++` there.
+  use Clang 19+ or `-stdlib=libc++` there. Clang links the libstdc++ of the newest GCC whose
+  `libgcc-N-dev` is installed: with `libgcc-14-dev` but no `libstdc++-14-dev` it fails with
+  `cannot find -lstdc++`, so install `libstdc++-14-dev` too.
 - CMake ≥ 3.28, Ninja recommended
 - Compiler flag `-std=c++23`: the code is C++20 plus `std::expected`, which standard libraries
   ship under C++23 only

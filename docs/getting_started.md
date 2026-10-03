@@ -20,10 +20,12 @@ sudo apt update
 sudo apt install -y build-essential cmake ninja-build catch2 python3 git
 ```
 
-Ubuntu 24.04 ships GCC 13 and CMake 3.28, which is enough. GCC 14 (`g++-14`) and Clang 19 also
-work. Python 3 is only needed for the simulator and the tests; the library has no runtime
-dependency. The full requirements, including other platforms, are in the
-[README](../README.md#requirements).
+Ubuntu 24.04 ships GCC 13 and CMake 3.28, which is enough. GCC 14 (`g++-14`) and Clang 19
+(`clang-19`) also work. Clang uses the newest GCC whose `libgcc-N-dev` is installed, and other
+packages (`libgccjit0`, for example) can pull in `libgcc-14-dev` alone. Clang then fails with
+`cannot find -lstdc++`; install `libstdc++-14-dev` as well. Python 3 is only needed for the
+simulator and the tests; the library has no runtime dependency. The full requirements,
+including other platforms, are in the [README](../README.md#requirements).
 
 ## 2. Build and test
 
