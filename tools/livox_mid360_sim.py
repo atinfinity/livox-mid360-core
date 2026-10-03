@@ -917,6 +917,24 @@ class Simulator:
             return self.args.bind
         return '127.0.0.1'
 
+    def advertised_ip(self, peer: tuple[str, int]) -> str:
+        """
+        lidar_ip of the discovery ACK sent to `peer`.
+
+        Bound to a wildcard address, the simulator answers from whichever local address routes
+        to the requester, so it advertises that one; 127.0.0.1 would only be reachable on
+        loopback (#203). Key 0x0004 still reports lidar_ip().
+        """
+        if self.bound_ip is not None or self.args.bind not in ('', '0.0.0.0'):
+            return self.lidar_ip()
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(peer)  # looks up the route; nothing is sent
+                local = s.getsockname()[0]
+        except OSError:
+            return self.lidar_ip()
+        return local if local != '0.0.0.0' else self.lidar_ip()
+
     def configured_ip(self) -> str:
         return '.'.join(str(b) for b in self.model.settings[KEY_LIDAR_IPCFG][:4])
 
@@ -1290,7 +1308,7 @@ class Simulator:
         m = self.model
         if f.cmd_id == CMD_DISCOVERY:
             sn = m.sn.encode().ljust(16, b'\0')[:16]
-            ip = bytes(int(x) for x in self.lidar_ip().split('.'))
+            ip = bytes(int(x) for x in self.advertised_ip(addr[:2]).split('.'))
             return RET_OK, struct.pack(
                 '<BB16s4sH', RET_OK, PROVISIONAL_DEV_TYPE, sn, ip, self.ports['cmd']
             )
