@@ -71,6 +71,7 @@ with the firewall disabled first, so that a failure is not mistaken for a librar
 | `collect_firmware_log` | At least one firmware log file is written and not empty |
 | `livox-mid360-cli record` / `replay` | 10 s are recorded and the replay reads the same number of packets |
 | `livox-mid360-cli debug-data` | At least one debug raw data packet is written |
+| `tools/livox_mid360_probe.py` | The LiDAR answers the discovery; the answers to the #11 questions are in `probe.json` |
 
 ```sh
 scripts/hw-first-run.sh --host-ip 192.168.1.50 --pcap enp2s0
@@ -83,7 +84,7 @@ scripts/hw-first-run.sh --host-ip 192.168.1.50 --lidar-ip 192.168.1.1xx --pcap e
 The capture decodes with `tools/livox_mid360_pcap.py` and replays through the simulator's
 `--pcap` ([simulator.md](simulator.md)). The output directory,
 `hw-run-<UTC time>/` by default, holds every log, the `.lvx2` and debug data files, the
-capture, `env.txt` (OS, compiler, commit, addresses, the LiDAR's identity) and `summary.md`, a table to paste into
+capture, `env.txt` (OS, compiler, commit, addresses, the LiDAR's identity), `probe.json` and `summary.md`, a table to paste into
 the results below or into the issue. `--seconds` sets the duration of the first two steps
 (default 60, as #110 asks).
 
@@ -92,6 +93,15 @@ To rehearse without a LiDAR, `--sim` runs the same steps against the simulator o
 
 The firmware version (`version_app`) and the `dev_type` from discovery, which #11 wants to
 confirm, come from the `info` step and are copied into `summary.md`.
+
+The probe step sends the requests that answer the protocol questions of #11: inquire of the
+whole settings and status key sets and of every known key, an unknown key and an unknown
+command id, writes to a read-only key, an unknown key, with a wrong length and out of range,
+a two-key write with one bad key, and a 5 s window of the `0x0102` push. A write the LiDAR
+accepts is undone with the value read before it, and the push destination (key `0x0005`) is
+restored after the window; it never reboots the LiDAR or writes its IP configuration, scan
+pattern, work mode or data type. `probe.json` holds every request and ACK in hex next to the
+decoded fields, so a checklist item can be settled from it without another run.
 
 ## Results
 

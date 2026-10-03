@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# First end-to-end run of the examples and the CLI on a Mid-360 (issue #110). Runs every step,
-# keeps going after a failure, and writes the logs and a Markdown summary into one directory
-# that can be attached to the issue or copied into the verification log.
+# First end-to-end run of the examples, the CLI and the #11 protocol probe on a Mid-360
+# (issue #110). Runs every step, keeps going after a failure, and writes the logs and a
+# Markdown summary into one directory that can be attached to the issue or copied into the
+# verification log.
 # Usage: scripts/hw-first-run.sh --host-ip A.B.C.D [--lidar-ip A.B.C.D] [--build DIR]
 #          [--out DIR] [--seconds N] [--pcap IFACE] [--sim]
 #   --host-ip   address of the host interface the LiDAR can reach (192.168.1.50 in the factory setup)
@@ -140,6 +141,14 @@ wrote=$(grep '^wrote ' "$out/debug_data.log" | tail -n 1)
 dpk=$(sed -n 's/^wrote .* packets=\([0-9]*\) .*/\1/p' <<< "$wrote")
 if [[ $status = 0 && ${dpk:-0} -gt 0 ]]; then verdict=PASS; else verdict=FAIL; fi
 result debug-data "$verdict" "exit=$status; packets=${dpk:-0}"
+
+# 5. Protocol probe for #11: rejected writes, unknown keys and commands, the push. Writes it
+# makes are restored; the answers are in probe.json.
+python3 tools/livox_mid360_probe.py "${target[@]}" --out "$out/probe.json" > "$out/probe.log" 2>&1
+status=$?
+probes=$(grep -c '^[a-z_]*: ' "$out/probe.log")
+if [[ $status = 0 && -s $out/probe.json ]]; then verdict=PASS; else verdict=FAIL; fi
+result probe "$verdict" "exit=$status; probes=$probes; see probe.json"
 
 cleanup
 trap - EXIT
