@@ -50,7 +50,12 @@ docstring-quotes = "double"
 force-sort-within-sections = true
 order-by-type = false
 case-sensitive = false
-known-first-party = ["livox_mid360_pcap", "livox_mid360_proto", "livox_mid360_sim"]
+known-first-party = [
+  "livox_mid360_pcap",
+  "livox_mid360_probe",
+  "livox_mid360_proto",
+  "livox_mid360_sim",
+]
 # Standard library since Python 3.11, newer than target-version; used by scripts/stage_docs.py,
 # which runs on the Python 3.12 of scripts/build-docs.sh (#185).
 extra-standard-library = ["tomllib"]

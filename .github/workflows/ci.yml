@@ -128,8 +128,8 @@ jobs:
           python3 tools/gen_replay_pcap.py
           git diff --exit-code -- tests/generated/golden_vectors.hpp tests/fuzz/corpus tests/data/replay.pcap
           test -z "$(git status --porcelain -- tests/fuzz/corpus)"
-      - name: Simulator unit tests
-        run: python3 -m unittest -v tools/test_sim.py
+      - name: Simulator and probe unit tests
+        run: python3 -m unittest -v tools/test_sim.py tools/test_probe.py
 
   fuzz-smoke:
     name: libFuzzer smoke (clang-19)
