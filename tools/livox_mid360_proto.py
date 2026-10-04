@@ -297,7 +297,8 @@ class DataPacket:
         if len(data) != dn * SAMPLE_SIZE[dt]:
             raise ValueError('bad dot_num')
         crc_end = 28 + 8 + len(data)
-        if verify_crc and crc32(pkt[28:crc_end]) != c32:
+        # A Mid-360 leaves crc32 at 0 in point cloud packets (#219): 0 means "no CRC".
+        if verify_crc and c32 != 0 and crc32(pkt[28:crc_end]) != c32:
             raise ValueError('bad CRC32')
         return cls(ti, dn, uc, fc, dt, tt, ts, data, rsv, ver)
 

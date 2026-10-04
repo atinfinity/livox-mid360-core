@@ -259,6 +259,7 @@ struct DataPacketView
 };
 
 /// Parses and validates a data packet (version, length, CRC32, data_type/dot_num consistency).
+/// A `crc32` of 0 is not checked: a Mid-360 leaves it at 0 in point cloud packets (#219).
 /// Set `verify_crc=false` to skip the CRC on hot paths after you have trusted the source.
 [[nodiscard]] std::expected<DataPacketView, ParseError> parse_data_packet(
   std::span<const std::byte> packet, bool verify_crc = true) noexcept;
