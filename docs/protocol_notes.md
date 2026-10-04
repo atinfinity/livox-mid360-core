@@ -16,7 +16,17 @@ actual contents here.
 ## Discovery ACK `dev_type`
 
 The wiki does not list the enumeration for `dev_type`. The library keeps it as a raw `uint8_t`.
-**[unverified]** Record the value a Mid-360 reports.
+A Mid-360 with firmware 13.18.0244 reports **9** and `cmd_port` 56100 (2026-10-04,
+[#110](https://github.com/atinfinity/livox-mid360-core/issues/110)).
+
+## Discovery ACK destination
+
+A Mid-360 (firmware 13.18.0244) sends the `0x0000` ACK to **255.255.255.255**, at the source
+port of the request, for a broadcast request and for a unicast one alike; the other ACKs
+(`0x0101` checked) go unicast to the sender. A socket bound to a unicast address never
+receives the discovery ACK, so `discover()` with a `bind_address` also listens on
+`255.255.255.255:<its port>` ([#217](https://github.com/atinfinity/livox-mid360-core/issues/217)).
+That bind is refused on BSD / macOS, where only a `bind_address` of 0.0.0.0 receives the ACK.
 
 ## Unaligned fields
 
