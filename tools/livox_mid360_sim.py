@@ -12,7 +12,8 @@ Control: JSON lines on stdin, e.g. {"cmd": "silence", "seconds": 2}, {"cmd": "qu
 Events:  JSON lines on stdout, e.g. {"event": "ready", "ports": {...}, "ip": "..."}.
 
 Behaviour the simulator assumes and that must be reconciled with hardware (#11):
-  * unicast discovery is answered like broadcast discovery,
+  * unicast discovery is answered like broadcast discovery (by default to the sender; a
+    Mid-360 sends the ACK to 255.255.255.255, see --discovery-ack-broadcast and #217),
   * settings persist across 0x0200 reboot except work_tgt_mode,
   * dev_type in the discovery ACK is a provisional value,
   * losing time synchronisation leaves the clock where it was (no step back, #133).
@@ -1271,6 +1272,11 @@ class Simulator:
             self.emit(event='ack_dropped', cmd_id=frame.cmd_id, seq=frame.seq_num)
             return
         ack = proto.CommandFrame(frame.seq_num, frame.cmd_id, ACK, SENDER_LIDAR, payload).encode()
+        if frame.cmd_id == CMD_DISCOVERY and self.args.discovery_ack_broadcast:
+            # Like a Mid-360 (#217): to 255.255.255.255 at the sender's port, also for a
+            # unicast request.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            addr = ('255.255.255.255', addr[1])
         sock.sendto(ack, addr)
         self._apply_pending_rebind()
 
@@ -1751,6 +1757,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=proto.PORT_DISCOVERY,
         help='discovery port; cmd/push/pcl/imu/log follow at +100..+500. 0 = pick free ports',
+    )
+    p.add_argument(
+        '--discovery-ack-broadcast',
+        action='store_true',
+        help='send the 0x0000 ACK to 255.255.255.255 at the sender port, as a Mid-360 does',
     )
     p.add_argument('--sn', default='SIM0000000000001')
     p.add_argument('--product-info', default='MID360-SIM', help='key 0x8001 (<= 64 chars)')
