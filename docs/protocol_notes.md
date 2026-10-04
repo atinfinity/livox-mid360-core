@@ -61,9 +61,14 @@ implementation that computes it anyway is compatible.)
 
 `seq_num` is a free-running 32-bit counter per host; ACKs echo it. Wrap-around is not special.
 The LiDAR-originated `0x0102` push is a REQ with `sender_type = 1` and, per the sequence
-diagram, is not acknowledged by the host. The wiki does not enumerate the keys it carries
-[unverified: the simulator pushes every read-only key `0x8000`–`0x8011`; the SDK merges every
-status key (0x8006–0x8011) into `Device::pushed_status()`, tolerating any missing key] ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
+diagram, is not acknowledged by the host. The wiki does not enumerate the keys it carries.
+A Mid-360 (firmware 13.18.0244, [#235](https://github.com/atinfinity/livox-mid360-core/issues/235)) pushes the writable keys `0x0000`, `0x0001`,
+`0x0004`–`0x0007`, `0x0012`, `0x0015`–`0x0019`, `0x001A`, `0x001C` followed by `0x8000`–`0x800C`,
+`0x800E`, `0x8010`, `0x8011` (not `0x0009` nor the keys from `0x0021` on), once per second on a
+fixed phase plus once, within about 20 ms, after every work-state change and every `0x0100`
+request whatever its result (not after `0x0101`). Its `seq_num` advances by about 26 per
+second, so gaps in it do not mean lost pushes. The SDK merges every status key
+(0x8006–0x8011) into `Device::pushed_status()`, tolerating any missing key.
 Key `0x800E` `lidar_diag_status` is read as four 2-bit-wide nibbles (system, scan, ranging,
 communication; 0 normal, 1 warning, 2 error, 3 safety error) [unverified, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)]. Whether
 `0x8007` `core_temp` and the time-sync keys `0x8009`–`0x800C` are refreshed in every push or
