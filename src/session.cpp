@@ -122,6 +122,7 @@ std::string to_string(const SessionError & err)
         s += " key " + hex16(err.error_key);
       }
       break;
+    case SessionErrorKind::kTimeout:  // wait_for_state(): the state it was still in
     case SessionErrorKind::kUnexpectedState:
       if (err.work_state) {
         s += ": " + std::string(to_string(*err.work_state));
