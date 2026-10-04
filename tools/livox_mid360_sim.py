@@ -901,6 +901,8 @@ class Simulator:
         self.debug_seq = 0
         self.next_debug = 0.0
         self.silence_until = 0.0  # nothing is received or sent before this (link drop, reboot)
+        self.reboot_at: float | None = None  # a requested reboot powers down at this time
+        self.reboot_factory = False  # ... as a factory reset
         self.drop_ack = 0
         # fail_cmd control: cmd_id -> {'skip', 'count', 'ret', 'key'}
         self.fail_cmds: dict[int, dict] = {}
@@ -1030,6 +1032,9 @@ class Simulator:
         )
         while self.running:
             now = time.monotonic()
+            if self.reboot_at is not None and now >= self.reboot_at:
+                self._power_down(now)
+                self._apply_pending_rebind()
             self.model.tick(now)
             self._send_periodic(now)
             timeout = max(0.0, min(self._next_deadline(now) - now, 0.05))
@@ -1043,6 +1048,8 @@ class Simulator:
 
     def _next_deadline(self, now: float) -> float:
         d = [now if self.push_due else self.next_push, self.next_stats]
+        if self.reboot_at is not None:
+            d.append(self.reboot_at)
         if self.log_streams:
             d.append(self.next_log)
         if self.debug_dest is not None:
@@ -1229,7 +1236,28 @@ class Simulator:
         self.emit(event='time_sync', **clock.describe(now, wall))
 
     def _do_reboot(self, now: float, factory: bool = False) -> None:
-        """0x0200 reboot, or 0x0201 factory reset when `factory` (settings back to defaults)."""
+        """
+        0x0200 reboot, or 0x0201 factory reset when `factory` (settings back to defaults).
+
+        Like a Mid-360 (#236), the LiDAR keeps running for `--reboot-delay` after the ACK, then
+        reports ERROR in one last push and powers down. A second request meanwhile does not
+        postpone it; a factory reset among them wins.
+        """
+        if self.reboot_at is None:
+            self.reboot_at = now + self.args.reboot_delay
+        self.reboot_factory = self.reboot_factory or factory
+        if now >= self.reboot_at:
+            self._power_down(now)
+
+    def _power_down(self, now: float) -> None:
+        """Finish a reboot: ERROR push, counters reset, silence, power-on."""
+        factory = self.reboot_factory
+        self.reboot_at = None
+        self.reboot_factory = False
+        self.model.force_state(WS_ERROR, now)
+        if self.replay is None:
+            self._send_push()  # the last datagram before the silence
+        self.push_due = False
         self.seq = 0
         self.udp_cnt_pcl = self.udp_cnt_imu = 0
         self.frame_cnt = 0
@@ -1240,10 +1268,12 @@ class Simulator:
         self.next_push = max(self.next_push, up)
         self.next_log = max(self.next_log, up)
         if factory:
-            self.model.factory_reset(up)
+            self.model.factory_reset(now)
         else:
-            self.model.reboot(up)
-        self.debug_dest = None  # [unverified] assumed not to survive a reboot (#106)
+            self.model.reboot(now)
+        # SELFCHECK spans the silence: the first push after it shows MOTORSTARTUP (or IDLE).
+        self.model.state_deadline = max(self.model.state_deadline, up)
+        self.debug_dest = None  # does not survive a reboot (#236)
         for f in self.faults.values():
             f.held = None  # still in the LiDAR when it powered down
         self.debug_seq = 0
@@ -1841,7 +1871,17 @@ def build_parser() -> argparse.ArgumentParser:
         help='seconds spent in SELFCHECK after power-on / reboot',
     )
     p.add_argument(
-        '--reboot-silence', type=float, default=0.5, help='seconds of silence after 0x0200'
+        '--reboot-delay',
+        type=float,
+        default=0.0,
+        help='seconds the LiDAR keeps running after the 0x0200 / 0x0201 ACK '
+        '(a Mid-360 takes about 1.25)',
+    )
+    p.add_argument(
+        '--reboot-silence',
+        type=float,
+        default=0.5,
+        help='seconds of silence after the power-down that follows 0x0200 / 0x0201',
     )
     p.add_argument(
         '--frame-ms',
