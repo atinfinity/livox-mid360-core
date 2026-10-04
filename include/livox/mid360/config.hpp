@@ -50,8 +50,9 @@ struct HostSetup
   std::optional<bool> time_filter;                   ///< key 0x0026, see `detect_mode`
   std::optional<ImuSensorConfig> imu_sensor_config;  ///< key 0x002B, see `detect_mode`
   /// After setting `work_tgt_mode`, poll 0x8006 until it is observed. 0: return right after
-  /// the ACK.
-  std::chrono::milliseconds wait_timeout{10000};
+  /// the ACK. A Mid-360 spends up to 10.1 s in MOTORSTARTUP when started shortly after a stop
+  /// (#221), hence twice that.
+  std::chrono::milliseconds wait_timeout{20000};
 };
 
 /// Outcome of apply_host_setup().
