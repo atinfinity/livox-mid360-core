@@ -130,8 +130,14 @@ Consequences for the SDK:
   the Livox-SDK2 enum, which is shared with the HAP) is not in the Mid-360 table and is
   rejected too. Key `0x0020` (work mode after boot) exists for the HAP only (Livox-SDK2
   changelog 1.2.5) and is not modelled.
-- After a reboot the LiDAR comes back through `SELFCHECK` and `IDLE` and then follows
-  `work_tgt_mode`, which is not persisted (default `SAMPLING`).
+- After a reboot request the LiDAR keeps running (and answering) for about 1.25 s, sends
+  pushes reporting `ERROR`, then is silent; on firmware 13.18.0244 the first push came 8.9 s
+  after the ACK and reported `MOTORSTARTUP` (`SELFCHECK` and `IDLE` were never pushed),
+  `READY` followed at 13.5 s and then the `work_tgt_mode` target
+  ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)). `udp_cnt`, the
+  timestamp and the debug raw data stream do not survive. The wiki marks `work_tgt_mode` as
+  not persisted (default `SAMPLING`); the capture cannot confirm it, since the target was
+  `SAMPLING` before the reboot too.
 
 Settled by the figure: the states, the edges and which targets are requestable. Still
 **unverified** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) and
