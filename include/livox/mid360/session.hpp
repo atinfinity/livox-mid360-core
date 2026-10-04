@@ -66,7 +66,7 @@ struct SessionError
   /// kLidarRejected on 0x0100 (from the ACK) and 0x0101 (for kParamNotSupport the first
   /// requested key the ACK leaves out), kInvalidArgument
   std::uint16_t error_key = 0;
-  std::optional<WorkState> work_state;      ///< kUnexpectedState only
+  std::optional<WorkState> work_state;  ///< kUnexpectedState only
 };
 
 /// Human readable one-line description.
