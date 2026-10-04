@@ -160,7 +160,9 @@ The process is driven over its standard streams so that any test harness can use
 - **Streaming** while SAMPLING: point-cloud packets of 96 points in the configured
   `pcl_data_type` at 2000 pkt/s to the host in key `0x0006`, IMU packets at the `0x002B` rate (200 pkt/s by default) to the
   host in `0x0007` when `imu_data_en = 1`, and a `0x0102` push once per second to the host in
-  `0x0005`. Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps and
+  `0x0005`, plus one at once on every work-state change and after every `0x0100` request
+  whatever its result, off the periodic phase (not during a `--pcap` replay,
+  [#235](https://github.com/atinfinity/livox-mid360-core/issues/235)). Nothing is sent to a host whose IP is 0.0.0.0. Packet timestamps and
   `time_type` come from the LiDAR clock (below). The scheduler bounds catch-up bursts to
   256 packets or 20 ms, whichever ends first, so commands are answered and the push is sent
   while it catches up ([#183](https://github.com/atinfinity/livox-mid360-core/issues/183)). It
@@ -293,7 +295,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | `lidar_ipcfg` write | ret `0x21` (reboot required) when the value changes | wiki lists `0x21` but not when the firmware uses it |
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
-| Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
+| Push contents and timing | keys `0x0000`, `0x0001`, `0x0004`–`0x0007`, `0x0012`, `0x0015`–`0x0019`, `0x001A`, `0x001C`, then `0x8000`–`0x800C`, `0x800E`, `0x8010`, `0x8011`; an extra push on each state change and after each `0x0100` request | verified on firmware 13.18.0244 ([#235](https://github.com/atinfinity/livox-mid360-core/issues/235)); the real push `seq_num` is not contiguous (about 26 per second at one push per second), the simulator's counts its own pushes |
 | Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93), [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)) | `0x0303` answers `0x00` on the log port in every work state, also when repeated (the stream then moves to the new destination), when disabling a disabled stream and for an enable with port 0 (which stops the stream); the command port does not answer; short payloads answer `0x01`; the stream leaves port 60301 only while sampling, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | verified on firmware 13.18.0244 except the reboot and the datagram content |
 | Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)) and resends an unacknowledged chunk; the counting and end-of-file behaviour are unknown |
 | FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
