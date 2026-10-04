@@ -223,7 +223,9 @@ std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
       continue;
     }
     for (const auto & e : *ev) {
-      const UdpSocket & from_sock = e.tag == kBroadcastTag ? *broadcast_sock : *sock;
+      // kBroadcastTag is registered only together with broadcast_sock.
+      const UdpSocket & from_sock =
+        e.tag == kBroadcastTag && broadcast_sock ? *broadcast_sock : *sock;
       while (true) {
         const auto d = from_sock.recv_one(buf);
         if (!d) {
