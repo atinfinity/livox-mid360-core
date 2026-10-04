@@ -37,8 +37,9 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
 | `--reboot-delay` | 0.3 s | the LiDAR keeps running for this long after the 0x0200 / 0x0201 ACK before it powers down (a Mid-360 takes about 1.25 s, [#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after the power-down that follows 0x0200 / 0x0201 |
-| `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) |
-| `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and the IMU rate (200 pkt/s unless `0x002B` selects another) |
+| `--frame-ms` | 0 | `frame_cnt` increments at this period; `0` keeps it at 0, as a Mid-360 does ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246)) |
+| `--pcl-crc` | | fill `crc32` in point-cloud packets; a Mid-360 leaves it 0 ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246)), IMU packets always carry it |
+| `--rate-multiplier` | 1.0 | scales the 2083 pkt/s point-cloud rate (with `time_interval`) and the IMU rate (200 pkt/s unless `0x002B` selects another) |
 | `--push-rate` | 1.0 | 0x0102 push rate in Hz, not affected by `--rate-multiplier` |
 | `--drop-rate` | 0 | fraction of point-cloud packets silently dropped (`udp_cnt` still advances) |
 | `--imu-cfg-unsupported` | | emulate firmware without key `0x002B`: its write, read and any inquire naming it answer `0x20` |
@@ -170,7 +171,8 @@ The process is driven over its standard streams so that any test harness can use
   real factory address 192.168.1.100; after a rebind it moves back). All durations
   and the return codes are assumptions ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
 - **Streaming** while SAMPLING: point-cloud packets of 96 points in the configured
-  `pcl_data_type` at 2000 pkt/s to the host in key `0x0006`, IMU packets at the `0x002B` rate (200 pkt/s by default) to the
+  `pcl_data_type` every 480 µs (about 2083 pkt/s, `time_interval` 4750, `crc32` 0, as a
+  Mid-360 sends them, [#246](https://github.com/atinfinity/livox-mid360-core/issues/246)) to the host in key `0x0006`, IMU packets at the `0x002B` rate (200 pkt/s by default) to the
   host in `0x0007` when `imu_data_en = 1`, and a `0x0102` push once per second to the host in
   `0x0005`, plus one at once on every work-state change and after every `0x0100` request
   whatever its result, off the periodic phase (not during a `--pcap` replay,
@@ -178,7 +180,8 @@ The process is driven over its standard streams so that any test harness can use
   `time_type` come from the LiDAR clock (below). The scheduler bounds catch-up bursts to
   256 packets or 20 ms, whichever ends first, so commands are answered and the push is sent
   while it catches up ([#183](https://github.com/atinfinity/livox-mid360-core/issues/183)). It
-  resynchronises if it falls more than 0.5 s behind. `frame_cnt` follows the
+  resynchronises if it falls more than 0.5 s behind. IMU packets carry `time_interval` 0.
+  With `--frame-ms`, `frame_cnt` follows the
   packets' scheduled times, so a burst still changes it once per `--frame-ms`, and a resync
   changes it once ([#155](https://github.com/atinfinity/livox-mid360-core/issues/155)).
 - **Time** ([#133](https://github.com/atinfinity/livox-mid360-core/issues/133)): the LiDAR clock stamps every data packet and answers keys
@@ -234,17 +237,16 @@ The process is driven over its standard streams so that any test harness can use
   capture written by `tools/gen_replay_pcap.py` (three frames of eight ring-scene packets,
   twelve IMU packets, two pushes with `core_temp` 43.21 °C, one log chunk, and command and
   unrelated traffic that must be skipped); CI regenerates it and fails on a difference.
-- **FOV cropping** [unverified]: when `fov_cfg_en` enables at least one window, a point is
-  sent only if it lies inside an enabled window (yaw `[start, stop)` with wrap-around when
-  `start > stop`, `start == stop` empty; pitch `[start, stop]`). Cartesian points use
-  `yaw = atan2(y, x)`, `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and
-  `90° - theta`. Each packet draws up to 16 batches of 96 points to fill its 96 slots, so a
-  narrow window only slows the generator. A narrow enough window makes it slower than the
-  packet rate: the stream then runs behind and resynchronises every 0.5 s. `dot_num` is the
-  number of points kept, so a tiny window sends shorter packets and an empty one packets
-  with `dot_num = 0`. The ring scene instead crops its next 96 points on their exact angles,
-  whatever the data type, and sends what is left, so the kept set is known: a window of yaw `[0, 90)` and pitch `[0, 15]` keeps
-  exactly the `k < 64` with `k % 4` in {0, 1}.
+- **FOV cropping**: when `fov_cfg_en` enables at least one window, a point outside every
+  enabled window stays in its packet as (0, 0, 0) with reflectivity 60 and tag 0, so every
+  packet keeps 96 points and an empty window zeroes them all, as on a Mid-360 ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246); measured
+  in Cartesian32, [unverified] that spherical points zero depth, theta and phi alike). The
+  window test is [unverified]: yaw `[start, stop)` with wrap-around when `start > stop`,
+  `start == stop` empty; pitch `[start, stop]`. Cartesian points use `yaw = atan2(y, x)`,
+  `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and `90° - theta`. The ring scene
+  crops its next 96 points on their exact angles, whatever the data type, so the kept set is
+  known: a window of yaw `[0, 90)` and pitch `[0, 15]` keeps exactly the `k < 64` with
+  `k % 4` in {0, 1}.
 
 ## Tests
 
@@ -315,6 +317,6 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | `pattern_mode` | only 0 accepted; 1 / 2 → `0x20`, others → `0x03`; never restarts the motor | the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code |
 | `pcl_data_type` change while SAMPLING | the next packet is already in the new format | the wiki does not say whether the switch is immediate or aligned to a frame |
 | Install attitude `0x0012` | stored only; with `--apply-attitude`, Cartesian points moved by `Rz * Ry * Rx` + translation after the FOV crop, spherical untouched | whether the firmware applies the key to its output at all, in which convention and to which data types ([#110](https://github.com/atinfinity/livox-mid360-core/issues/110)) |
-| FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window | the wiki defines neither the edge inclusivity nor the wrap-around |
+| FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window, else a zero point with reflectivity 60 (measured) | the wiki defines neither the edge inclusivity nor the wrap-around |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
-| `frame_cnt` period | 100 ms (`--frame-ms`) | the wiki marks `frame_cnt` invalid for a non-repetitive scanner. Livox's sample `.lvx2` files have `frame_counter` 0 in every package, but the LVX2 spec marks that field reserved, so they say nothing about the firmware ([#164](https://github.com/atinfinity/livox-mid360-core/issues/164), [lvx2.md](lvx2.md#livox-sample-files)) |
+| `frame_cnt` period | none: stays 0, as on a Mid-360 ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246)); `--frame-ms` for tests | the wiki marks `frame_cnt` invalid for a non-repetitive scanner. Livox's sample `.lvx2` files have `frame_counter` 0 in every package, but the LVX2 spec marks that field reserved, so they say nothing about the firmware ([#164](https://github.com/atinfinity/livox-mid360-core/issues/164), [lvx2.md](lvx2.md#livox-sample-files)); a Mid-360 on 13.18.0244 was seen to keep it 0 |

@@ -282,7 +282,7 @@ TEST_CASE("Device: open errors", "[sim][device]")
 
 TEST_CASE("Device: frames, IMU, stats and stop", "[sim][device]")
 {
-  Fixture f;
+  Fixture f({"--frame-ms", "100"});  // frame_cnt closes the frames checked below
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
@@ -745,7 +745,7 @@ TEST_CASE("Device: duplicated and reordered packets count as reordered", "[sim][
 
 TEST_CASE("Device: a late packet of the previous frame does not split the next", "[sim][device]")
 {
-  Fixture f;
+  Fixture f({"--frame-ms", "100"});
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
@@ -789,6 +789,49 @@ TEST_CASE("Device: --frame-ms drives frame_cnt splitting", "[sim][device]")
     packets += fr.packets;
   }
   CHECK(packets / rec.kept.size() < 25);  // 20 ms at 500 pkt/s = 10 packets
+}
+
+TEST_CASE("Device: the default simulator sends data packets as a Mid-360 does", "[sim][device]")
+{
+  // #246: 96 points per packet with crc32 0, frame_cnt 0 and time_interval 4750 (19000 at the
+  // fixture's --rate-multiplier 0.25); IMU packets with time_interval 0. The frames come from
+  // the time-window fallback.
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  std::mutex mutex;
+  std::size_t pcl = 0;
+  std::size_t imu = 0;
+  bool pcl_ok = true;
+  bool imu_ok = true;
+  auto dev = f.open();
+  REQUIRE(dev
+            ->on_packet([&](const DataPacketView & v, const ReceiveInfo &) {
+              const std::lock_guard lock(mutex);
+              const DataPacketHeader & h = v.header;
+              if (h.data_type == DataType::kImu) {
+                ++imu;
+                imu_ok = imu_ok && h.time_interval == 0 && h.crc32 != 0;
+              } else {
+                ++pcl;
+                pcl_ok = pcl_ok && h.dot_num == 96 && h.crc32 == 0 && h.frame_cnt == 0 &&
+                         h.time_interval == 4750 * 4;
+              }
+            })
+            .has_value());
+  REQUIRE(dev->set_imu_enabled(true).has_value());
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] {
+    const std::lock_guard lock(mutex);
+    return pcl >= 100 && imu >= 5;
+  }));
+  REQUIRE(wait_until([&] { return dev->stats().frame_cnt_fallback >= 1; }));
+  REQUIRE(dev->stop_sampling().has_value());
+  CHECK(dev->stats().frame_cnt_fallback == 1);
+  const std::lock_guard lock(mutex);
+  CHECK(pcl_ok);
+  CHECK(imu_ok);
 }
 
 TEST_CASE("Device: --frame-ms 0 falls back to the time window", "[sim][device]")

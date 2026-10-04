@@ -260,11 +260,12 @@ class DataPacket:
     data: bytes
     reserved: bytes = b'\0' * 12
     version: int = 0
+    with_crc: bool = True  # False: crc32 0, as a Mid-360 sends point cloud packets (#219)
 
     def encode(self) -> bytes:
         length = DATA_HEADER_SIZE + len(self.data)
         ts = struct.pack('<Q', self.timestamp_ns)
-        c32 = crc32(ts + self.data)
+        c32 = crc32(ts + self.data) if self.with_crc else 0
         return (
             struct.pack(
                 '<BHHHHBBB12sI',
