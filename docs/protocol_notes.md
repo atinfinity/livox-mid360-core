@@ -162,17 +162,30 @@ Command `0x0303` ("debug raw data collection configuration", protocol document r
 for ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)). The request is `enable` (u8), `host_ip` (u8[4]), `host_port` (u16) and two
 reserved bytes; the ACK is a `ret_code`. The SDK treats the stream as opaque bytes.
 
-Everything else is taken from the Livox-SDK2 source and **[unverified]** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)):
+Measured on a Mid-360, firmware 13.18.0244 ([#106](https://github.com/atinfinity/livox-mid360-core/issues/106)), host sockets only (no pcap):
 
-- Which LiDAR port accepts `0x0303`. SDK2 sends it like `0x0301`, to 56500; the SDK does the
-  same and the simulator also answers on 56100.
-- Whether the stream leaves port 60301 (`kDebugDataPort`) and what a datagram looks like.
-  SDK2 listens on host port 44332 (`kDefaultHostDebugDataPort`).
-- Whether the point cloud keeps flowing while the stream is enabled, and the bandwidth of
-  the stream.
-- The `ret_code` of a repeated enable and of an enable outside `SAMPLING`.
-- The meaning of offset 7: `reserved` in the protocol document, `bandwidth` (Mbps) in SDK2,
-  which sends 0. `DebugDataControlRequest::reserved` defaults to 0.
+- `0x0303` is accepted on the log port 56500. The command port 56100 does not answer it.
+- The stream leaves port 60301 (`kDebugDataPort`) towards `host_ip:host_port` of the request.
+  SDK2 listens on host port 44332 (`kDefaultHostDebugDataPort`). Every datagram was 1114
+  bytes, about 4000 per second (about 4.5 MB/s, 36 Mbit/s). The datagrams start with `0xA5`,
+  `0x07` and a u16 equal to the datagram size. The rest of the layout is unknown.
+- The stream flows only while the LiDAR is `SAMPLING`. An enable in `IDLE` is ACKed with
+  `0x00` and sends nothing until sampling starts ([#225](https://github.com/atinfinity/livox-mid360-core/issues/225)).
+- The point cloud (about 2090 packets/s) and IMU (200 packets/s) keep flowing at their usual
+  rate while the stream is on.
+- The ACK is `0x00` in each of these cases:
+  - a repeated enable;
+  - an enable with another port, which moves the stream;
+  - an enable with port 0, after which nothing more arrived;
+  - a disable;
+  - a disable while disabled.
+- Offset 7 (`reserved` in the protocol document, `bandwidth` (Mbps) in SDK2) had no visible
+  effect with 1 or `0xFFFF`: the rate stayed the same. `DebugDataControlRequest::reserved`
+  defaults to 0, like SDK2.
+- The stream did not stop on its own within 30 s.
+
+Still **[unverified]**:
+
 - Whether the setting survives a reboot.
 - The layout of the file SDK2 writes (`.LivoxDebugPointCloudData`: a header with `file_ver`,
   `dev_type`, `data_type`, `sn` and a CRC16, then the datagrams unmodified). Field widths

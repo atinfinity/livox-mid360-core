@@ -46,7 +46,7 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--log-ignore-hostcfg` | | send log chunks to the sender of 0x0301 instead of the host in key 0x0009 |
 | `--debug-data-port` | 60301 | source port of the debug raw data stream ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)); `0` or `--base-port 0` picks a free port |
 | `--debug-data-interval` | 0.01 s | period of the debug raw data datagrams while `0x0303` has enabled them |
-| `--debug-data-bytes` | 1024 | size of a debug raw data datagram |
+| `--debug-data-bytes` | 1114 | size of a debug raw data datagram (as measured on a Mid-360) |
 | `--no-quit-on-eof` | | keep running when stdin closes (default: quit) |
 | `--verbose` | | log to stderr |
 
@@ -114,7 +114,7 @@ The process is driven over its standard streams so that any test harness can use
   flag, every `--log-ack-every`th the ACK flag; host ACKs (REQ `0x0300` with `{ret, type,
   file_index, trans_index}`) are counted in `status.log_acks_received`.
 - **Debug raw data** ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)): `0x0303` (payload `{enable, host_ip, host_port, reserved}`) is
-  answered on the log socket and on the command socket. While enabled, a datagram of
+  answered on the log socket only, as on a Mid-360. While enabled and sampling, a datagram of
   `--debug-data-bytes` goes to `host_ip:host_port` every `--debug-data-interval`: a `u32`
   sequence number (little-endian, from 0) followed by bytes counting up from its low byte, so
   that a receiver can detect loss and corruption. The source socket is bound by the first
@@ -293,7 +293,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
 | Push contents | every read-only key `0x8000`–`0x8011` | the wiki does not enumerate the pushed keys |
-| Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)) | `0x0303` answers `0x00` on the log and the command port, in every work state, also when repeated (the stream then moves to the new destination) or when disabling a disabled stream; short payloads and an enable with port 0 answer `0x01`; the stream leaves port 60301, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | the protocol document gives the request layout only; ports come from the SDK2 source; nothing about the stream is known |
+| Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93), [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)) | `0x0303` answers `0x00` on the log port in every work state, also when repeated (the stream then moves to the new destination), when disabling a disabled stream and for an enable with port 0 (which stops the stream); the command port does not answer; short payloads answer `0x01`; the stream leaves port 60301 only while sampling, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | verified on firmware 13.18.0244 except the reboot and the datagram content |
 | Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)) and resends an unacknowledged chunk; the counting and end-of-file behaviour are unknown |
 | FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |

@@ -83,7 +83,7 @@ struct DeviceOptions
   ReconnectOptions reconnect;  ///< disconnect detection and automatic recovery
   /// LiDAR-side port that 0x0301 is sent to (#44). Tests point it at the simulator.
   std::uint16_t lidar_log_port = kLogPort;
-  /// LiDAR-side port that 0x0303 is sent to (#93); SDK2 uses the log port [unverified].
+  /// LiDAR-side port that 0x0303 is sent to (#93): the log port; the command port does not answer.
   std::uint16_t lidar_debug_data_port = kLogPort;
 };
 
@@ -342,7 +342,7 @@ public:
 
   /// @name Debug raw data collection
   /// Debug raw data collection (issue #93): 0x0303 on the LiDAR's log port, the stream
-  /// on the Context's debug data socket. Unverified on hardware (#106).
+  /// on the Context's debug data socket. The Mid-360 streams only while sampling (#225).
   ///@{
 
   /// Sends 0x0303 enable with this host and the Context's debug data port from the log
