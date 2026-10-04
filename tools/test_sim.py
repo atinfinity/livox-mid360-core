@@ -693,6 +693,19 @@ class SimulatorTest(unittest.TestCase):
         # Key 0x0004 keeps reporting the address the simulator started with.
         self.assertEqual(wild.configured_ip(), '127.0.0.1')
 
+    def test_discovery_ack_carries_the_dev_type_flag(self) -> None:
+        req = proto.CommandFrame(1, sim.CMD_DISCOVERY, sim.REQ, 0, b'')
+        _, payload = self.s._dispatch(req, ('127.0.0.1', 56000), time.monotonic())
+        self.assertEqual(proto.parse_discovery_ack(payload)['dev_type'], proto.DEV_TYPE_MID360)
+        args = sim.build_parser().parse_args(['--base-port', '0', '--dev-type', '200'])
+        other = sim.Simulator(args, out=io.StringIO(), control=None)
+        self.addCleanup(lambda: [s.close() for s in other.socks.values()])
+        _, payload = other._dispatch(req, ('127.0.0.1', 56000), time.monotonic())
+        self.assertEqual(proto.parse_discovery_ack(payload)['dev_type'], 200)
+        with self.assertRaises(SystemExit) as cm:
+            sim.main(['--base-port', '0', '--dev-type', '256'])
+        self.assertIn('--dev-type', str(cm.exception))
+
     def test_factory_reset_keeps_the_answering_address(self) -> None:
         self.s._debug_control(True, ('127.0.0.1', self.rx.getsockname()[1]))
         self.s._do_reboot(time.monotonic(), factory=True)

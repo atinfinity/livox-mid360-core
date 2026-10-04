@@ -76,7 +76,7 @@ class ProbeTest(unittest.TestCase):
         status, report = self.run_probe(s, '--lidar-ip', '127.0.0.1')
         self.assertEqual(status, 0)
         r = self.results(report)
-        self.assertEqual(r['discovery']['dev_type'], sim.PROVISIONAL_DEV_TYPE)
+        self.assertEqual(r['discovery']['dev_type'], sim.proto.DEV_TYPE_MID360)
         self.assertEqual(r['discovery']['cmd_port'], s.ports['cmd'])
         self.assertEqual(r['inquire_settings_keys']['answered'], 16)
         self.assertEqual(r['inquire_status_keys']['answered'], 10)

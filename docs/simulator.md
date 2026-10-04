@@ -25,6 +25,7 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--base-port` | 56000 | discovery port; cmd, push, pcl, imu, log follow at +100, +200, +300, +400, +500. `0` picks free ports |
 | `--discovery-ack-broadcast` | off | send the `0x0000` ACK to `255.255.255.255` at the sender's port, as a Mid-360 does ([#217](https://github.com/atinfinity/livox-mid360-core/issues/217)); off, it goes to the sender |
 | `--sn` | `SIM0000000000001` | serial number (≤ 16 chars) |
+| `--dev-type` | `9` | `dev_type` in the discovery ACK, 0..255 (9 is a Mid-360, #58) |
 | `--product-info` | `MID360-SIM` | key 0x8001 (≤ 64 chars) |
 | `--version-app` / `--version-loader` / `--version-hardware` | `0.0.0.1` | keys 0x8002–0x8004 as `a.b.c.d` |
 | `--seed` | 1 | seed for deterministic point / IMU data and packet drops |
@@ -126,8 +127,8 @@ The process is driven over its standard streams so that any test harness can use
   then a `reorder` (one packet held at a time), then the send (twice for a `duplicate`). A
   packet still held back at a reboot is lost.
 
-- **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries `dev_type = 9`
-  (provisional), the bound address and the real command port), `0x0100` configure, `0x0101`
+- **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries the `--dev-type`
+  value, the bound address and the real command port), `0x0100` configure, `0x0101`
   inquire, `0x0200` reboot, `0x0201` factory reset, `0x0202` GPS time. Anything else is
   answered with ret `0x01`.
 - **Configure** validates every key first with the wiki return codes (`RetCode` in
@@ -273,7 +274,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 
 | Topic | Simulator behaviour | Why unverified |
 |---|---|---|
-| `dev_type` in the discovery ACK | 9 | verified: a Mid-360 (firmware 13.18.0244) reports 9 |
+| `dev_type` in the discovery ACK | 9 (`--dev-type`) | verified: a Mid-360 (firmware 13.18.0244) reports 9 |
 | Unicast discovery | answered like broadcast | verified on the same subnet: answered, but the ACK goes to 255.255.255.255 (`--discovery-ack-broadcast`, [#217](https://github.com/atinfinity/livox-mid360-core/issues/217)); from outside the broadcast domain still unverified |
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | verified: 56100 |
 | Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |

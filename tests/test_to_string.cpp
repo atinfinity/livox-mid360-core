@@ -268,6 +268,11 @@ TEST_CASE("to_string: transport error codes", "[to_string][transport]")
 
 TEST_CASE("to_string: SessionError names the command and the cause", "[to_string][session]")
 {
+  check_names<DeviceType>({
+    {DeviceType::kUnknown, "unknown"},
+    {DeviceType::kMid360, "mid360"},
+  });
+
   check_names<SessionErrorKind>({
     {SessionErrorKind::kTransport, "transport"},
     {SessionErrorKind::kTimeout, "timeout"},
