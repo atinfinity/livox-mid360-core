@@ -295,7 +295,8 @@ std::expected<DataPacketView, ParseError> parse_data_packet(
   if (data.size() != static_cast<std::size_t>(h.dot_num) * sample_size(h.data_type)) {
     return std::unexpected(ParseError::kBadDotNum);
   }
-  if (verify_crc) {
+  // A Mid-360 leaves crc32 at 0 in point cloud packets (#219): 0 means "no CRC".
+  if (verify_crc && h.crc32 != 0) {
     // CRC covers timestamp (8 bytes at offset 28) followed by data: contiguous on the wire.
     const auto covered = packet.subspan(28, 8 + data.size());
     if (crc::crc32(covered) != h.crc32) {

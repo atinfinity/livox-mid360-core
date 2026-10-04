@@ -28,6 +28,11 @@ fields are misaligned. All parsing uses `memcpy`-based reads; never cast the buf
 `crc32` at offset 24 covers `timestamp` (offset 28, 8 bytes) followed by `data`. These are
 contiguous on the wire, so the CRC is computed over `packet[28 : 28 + 8 + data_len]`.
 
+A Mid-360 with firmware 13.18.0244 leaves `crc32` at **0** in every point cloud packet (data
+type 1 checked), while its IMU packets carry the CRC. A `crc32` of 0 is therefore not checked
+([#219](https://github.com/atinfinity/livox-mid360-core/issues/219)); a real CRC of 0 goes
+unchecked with probability 2^-32.
+
 ## Per-point timestamps
 
 `t_i = timestamp + i * time_interval * 100 ns / (dot_num - 1)`. Integer division is used

@@ -231,4 +231,10 @@ TEST_CASE("data packet validation errors", "[data]")
   bad = ok;
   bad[30] = std::byte{0xAB};  // corrupt timestamp: also covered by CRC
   CHECK(parse_data_packet(bad).error() == ParseError::kBadCrc32);
+
+  // crc32 0 is "no CRC", as a Mid-360 sends point cloud packets (#219).
+  bad[24] = bad[25] = bad[26] = bad[27] = std::byte{0};
+  const auto no_crc = parse_data_packet(bad);
+  REQUIRE(no_crc.has_value());
+  CHECK(no_crc->header.crc32 == 0);
 }
