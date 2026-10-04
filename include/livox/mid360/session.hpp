@@ -63,7 +63,9 @@ struct SessionError
   std::optional<TransportError> transport;  ///< kTransport only
   std::optional<ParseError> parse;          ///< kBadResponse when the ACK payload did not parse
   RetCode ret_code = RetCode::kSuccess;     ///< kLidarRejected only
-  std::uint16_t error_key = 0;              ///< kLidarRejected on 0x0100 / 0x0101, kInvalidArgument
+  /// kLidarRejected on 0x0100 (from the ACK) and 0x0101 (for kParamNotSupport the first
+  /// requested key the ACK leaves out), kInvalidArgument
+  std::uint16_t error_key = 0;
   std::optional<WorkState> work_state;      ///< kUnexpectedState only
 };
 

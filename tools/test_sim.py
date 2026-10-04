@@ -233,7 +233,10 @@ class DeviceModelTest(unittest.TestCase):
         m = sim.DeviceModel(imu_cfg_unsupported=True)
         key = sim.KEY_IMU_SENSOR_CFG
         self.assertEqual(m.configure([(key, b'\x01\x00\x00')]), (sim.RET_PARAM_NOT_SUPPORT, key))
-        self.assertEqual(m.inquire([key], 0), (sim.RET_PARAM_NOT_SUPPORT, [(key, b'')]))
+        self.assertEqual(m.inquire([key], 0), (sim.RET_PARAM_NOT_SUPPORT, []))
+        # The supported keys of the same request are still answered (#228).
+        ret, kvs = m.inquire([sim.KEY_IMU_EN, key], 0)
+        self.assertEqual((ret, [k for k, _ in kvs]), (sim.RET_PARAM_NOT_SUPPORT, [sim.KEY_IMU_EN]))
         self.assertEqual(m.imu_rate, 200.0)
         # The other keys are untouched.
         self.assertEqual(m.inquire([sim.KEY_IMU_EN], 0), (sim.RET_OK, [(sim.KEY_IMU_EN, b'\x00')]))
@@ -1085,7 +1088,8 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual((ret, list(kvs)), (0, [sim.KEY_SN]))
         self.send_control(f'{{"cmd":"inquire_override","key":{key},"unsupported":true}}')
         time.sleep(0.1)
-        self.assertEqual(ask(), (0x20, {key: b''}))
+        ret, kvs = ask()
+        self.assertEqual((ret, list(kvs)), (0x20, [sim.KEY_SN]))  # left out, as on a Mid-360
         self.send_control(f'{{"cmd":"inquire_override","key":{key},"clear":true}}')
         time.sleep(0.1)
         self.assertEqual(len(ask()[1][key]), 4)

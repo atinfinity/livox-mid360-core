@@ -470,7 +470,7 @@ std::expected<InquireResult, SessionError> Session::inquire(
   if (!r) {
     return std::unexpected(r.error());
   }
-  return detail::to_inquire_result(std::move(*r));
+  return detail::to_inquire_result(std::move(*r), keys);
 }
 
 std::expected<InquireResult, SessionError> Session::inquire(
@@ -643,7 +643,8 @@ std::expected<ParamConfigAck, SessionError> to_config_ack(const RawAck & ack)
   return *a;
 }
 
-std::expected<InquireResult, SessionError> to_inquire_result(RawAck ack)
+std::expected<InquireResult, SessionError> to_inquire_result(
+  RawAck ack, std::span<const std::uint16_t> requested)
 {
   InquireResult res;
   res.raw = std::move(ack.data);
@@ -652,7 +653,15 @@ std::expected<InquireResult, SessionError> to_inquire_result(RawAck ack)
     return std::unexpected(bad_response(a.error(), ack.cmd_id, 0));
   }
   if (a->ret_code != RetCode::kSuccess) {
-    const std::uint16_t key = a->values.empty() ? 0 : a->values.front().key;
+    const auto answered = [&](std::uint16_t k) {
+      return std::ranges::any_of(
+        a->values, [k](const KeyValue & kv) { return kv.key == k && !kv.value.empty(); });
+    };
+    const auto missing = std::ranges::find_if_not(requested, answered);
+    std::uint16_t key = a->values.empty() ? 0 : a->values.front().key;
+    if (a->ret_code == RetCode::kParamNotSupport && missing != requested.end()) {
+      key = *missing;
+    }
     return std::unexpected(rejected(a->ret_code, key, ack.cmd_id, 0));
   }
   res.ret_code = a->ret_code;

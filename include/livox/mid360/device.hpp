@@ -192,8 +192,9 @@ public:
   std::expected<DeviceIdentity, DeviceError> identity(
     std::optional<RequestOptions> opts = std::nullopt);
   /// The 16 modelled writable keys as stored by the LiDAR; see decode_settings(). A key the
-  /// firmware rejects with kParamNotSupport (0x002B on older firmware) is dropped and the
-  /// inquire repeated, so its optional is empty rather than the whole call failing.
+  /// firmware rejects with kParamNotSupport (0x0026 and 0x002B on firmware 13.18.0244) is
+  /// dropped and the inquire repeated, so its optional is empty rather than the whole call
+  /// failing.
   std::expected<LidarSettings, DeviceError> settings(
     std::optional<RequestOptions> opts = std::nullopt);
   /// Keys 0x8006-0x8011 by inquire; see decode_status(). pushed_status() has the same data
