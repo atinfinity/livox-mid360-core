@@ -1038,6 +1038,7 @@ TEST_CASE("Device: firmware log starts when the LiDAR does not support key 0x000
   }
   auto dev = f.open();
   REQUIRE(f.sim->control(R"({"cmd":"fail_cmd","cmd_id":256,"ret":32,"key":9,"count":100})"));
+  REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());  // applied before the 0x0100
   std::atomic<std::uint64_t> n{0};
   REQUIRE(dev->on_firmware_log([&](const FirmwareLogChunk &) { ++n; }).has_value());
   REQUIRE(dev->start_firmware_log().has_value());
@@ -1053,6 +1054,7 @@ TEST_CASE("Device: firmware log start fails when the LiDAR rejects key 0x0009", 
   }
   auto dev = f.open();
   REQUIRE(f.sim->control(R"({"cmd":"fail_cmd","cmd_id":256,"ret":1,"key":9})"));
+  REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());  // applied before the 0x0100
   const auto r = dev->start_firmware_log();
   REQUIRE(!r.has_value());
   REQUIRE(r.error().session.has_value());
