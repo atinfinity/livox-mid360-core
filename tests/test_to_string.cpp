@@ -284,6 +284,9 @@ TEST_CASE("to_string: SessionError names the command and the cause", "[to_string
   e.cmd_id = 0x0101;
   e.attempts = 3;
   CHECK(to_string(e) == "timeout cmd 0x0101 after 3 attempt(s)");
+  e.attempts = 0;
+  e.work_state = WorkState::kMotorStartup;  // wait_for_state() gave up (#221)
+  CHECK(to_string(e) == "timeout cmd 0x0101 after 0 attempt(s): MOTORSTARTUP");
 
   e = {};
   e.kind = SessionErrorKind::kTransport;
