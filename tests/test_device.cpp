@@ -943,20 +943,21 @@ TEST_CASE("Device: firmware log start, chunks in order, ACKs and stop", "[sim][d
   rec.attach(*dev);
   CHECK(dev->stats().log_chunks == 0);
   REQUIRE(dev->start_firmware_log().has_value());
-  REQUIRE(wait_until([&] { return rec.chunks >= 10; }));
+  REQUIRE(wait_until([&] { return rec.chunks >= 12; }));
   REQUIRE(dev->stop_firmware_log().has_value());
-  REQUIRE(wait_until([&] { return rec.ends >= 1; }));
+  // As on a Mid-360 (#244), the stream just stops: no end chunk follows the disable.
   const auto after = rec.chunks.load();
   std::this_thread::sleep_for(100ms);
-  CHECK(rec.chunks == after);  // nothing after the end packet
+  CHECK(rec.chunks == after);
+  CHECK(rec.ends == 0);
   CHECK(rec.begins == 1);
   CHECK(rec.gap_events == 0);
   CHECK(rec.ok);
   {
     const std::lock_guard lock(rec.mutex);
-    REQUIRE(rec.trans.size() >= 10);
+    REQUIRE(rec.trans.size() >= 12);
     for (std::size_t i = 0; i < rec.trans.size(); ++i) {
-      CHECK(rec.trans[i] == i + 1);
+      CHECK(rec.trans[i] == i);  // the file begins at trans_index 0
     }
   }
   const DeviceStats s = dev->stats();
@@ -964,7 +965,7 @@ TEST_CASE("Device: firmware log start, chunks in order, ACKs and stop", "[sim][d
   CHECK(s.log_bytes == rec.bytes);
   CHECK(s.log_bytes >= 1000);
   CHECK(s.log_gaps == 0);
-  CHECK(s.log_acks_sent == s.log_chunks);  // --log-ack-every defaults to 1
+  CHECK(s.log_acks_sent == 9);  // the LiDAR asks for an ACK on chunks 0-8 only
   CHECK(s.bad_log_packets == 0);
   CHECK(s.last_log_time_ns > 0);
   CHECK(f.context->stats().log_datagrams >= s.log_chunks);
@@ -979,7 +980,7 @@ TEST_CASE("Device: firmware log start, chunks in order, ACKs and stop", "[sim][d
 
 TEST_CASE("Device: firmware log gap event and new file", "[sim][device]")
 {
-  Fixture f({"--log-chunk-interval", "0.02", "--log-ack-every", "0"});
+  Fixture f({"--log-chunk-interval", "0.02", "--log-ack-first", "0"});
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
@@ -1000,7 +1001,7 @@ TEST_CASE("Device: firmware log gap event and new file", "[sim][device]")
   }
   CHECK(dev->stats().log_gaps == 1);
   CHECK(dev->stats().log_acks_sent == 0);
-  // A new file restarts trans_index at 1 without a gap.
+  // A new file restarts trans_index at 0 without a gap.
   REQUIRE(f.sim->control(R"({"cmd":"log_new_file"})"));
   REQUIRE(wait_until([&] { return rec.begins >= 2 && rec.ends >= 1; }));
   REQUIRE(wait_until([&] { return rec.chunks >= 12; }));

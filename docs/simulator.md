@@ -45,7 +45,8 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--unsupported-keys` | none | comma-separated writable keys the firmware lacks, handled like `0x002B` under `--imu-cfg-unsupported`; `mid360` names the set of a Mid-360 on 13.18.0244: `0x0021`, `0x0026`, `0x0029`, `0x002B` ([#242](https://github.com/atinfinity/livox-mid360-core/issues/242); only the `0x002B` write was seen rejected) |
 | `--log-chunk-interval` | 0.05 s | period of firmware log chunks (0x0300) per enabled log type ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) |
 | `--log-chunk-bytes` | 512 | data bytes per log chunk |
-| `--log-ack-every` | 1 | ask for a host ACK on every Nth chunk; `0` never (the file-end packet always asks) |
+| `--log-ack-first` | 9 | ask for a host ACK on chunks 0..N-1 of a file, as a Mid-360 does ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)) |
+| `--log-ack-every` | 0 | also ask on every Nth chunk and on the `log_new_file` end chunk; `0` never |
 | `--log-ignore-hostcfg` | | send log chunks to the sender of 0x0301 instead of the host in key 0x0009 |
 | `--debug-data-port` | 60301 | source port of the debug raw data stream ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)); `0` or `--base-port 0` picks a free port |
 | `--debug-data-interval` | 0.01 s | period of the debug raw data datagrams while `0x0303` has enabled them |
@@ -113,9 +114,12 @@ The process is driven over its standard streams so that any test harness can use
 
 - **Firmware log** ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)): a sixth socket at `+500` answers `0x0301` (payload `{log_type,
   enable}`) and streams `0x0300` chunks of `--log-chunk-bytes` synthetic text every
-  `--log-chunk-interval` for each enabled type. The first chunk of a file carries the begin
-  flag, every `--log-ack-every`th the ACK flag; host ACKs (REQ `0x0300` with `{ret, type,
-  file_index, trans_index}`) are counted in `status.log_acks_received`.
+  `--log-chunk-interval` for each enabled type. As on a Mid-360 on 13.18.0244 ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)), a
+  file begins at `trans_index` 0 with the begin flag, byte 2 (`file_num`) is 0 in that chunk
+  and 1 afterwards, `timestamp` is 0, the first `--log-ack-first` chunks ask for an ACK, and
+  disabling a type stops it without an end chunk. Only `log_new_file` sends an empty
+  end-flagged chunk ([unverified] how a file ends on the device). Host ACKs (REQ `0x0300` with
+  `{ret, type, file_index, trans_index}`) are counted in `status.log_acks_received`.
 - **Debug raw data** ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93)): `0x0303` (payload `{enable, host_ip, host_port, reserved}`) is
   answered on the log socket only, as on a Mid-360. While enabled and sampling, a datagram of
   `--debug-data-bytes` goes to `host_ip:host_port` every `--debug-data-interval`: a `u32`
