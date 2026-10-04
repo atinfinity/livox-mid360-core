@@ -417,8 +417,12 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(kvs[sim.KEY_CUR_WORK_STATE], bytes([sim.WS_SELFCHECK]))
         self.assertEqual(struct.unpack('<8I', kvs[sim.KEY_HMS])[0], 0x02100003)
         self.assertEqual(kvs[sim.KEY_LOCAL_TIME], struct.pack('<Q', 123))
-        # Every read-only key is pushed [unverified].
-        self.assertEqual(sorted(kvs), sorted(range(0x8000, 0x800D)) + [0x800E, 0x8010, 0x8011])
+        # The key set of a Mid-360 push (#235).
+        writable = [0x0000, 0x0001, 0x0004, 0x0005, 0x0006, 0x0007, 0x0012]
+        writable += [0x0015, 0x0016, 0x0017, 0x0018, 0x0019, 0x001A, 0x001C]
+        status = list(range(0x8000, 0x800D)) + [0x800E, 0x8010, 0x8011]
+        self.assertEqual(list(kvs), writable + status)
+        self.assertEqual(kvs[sim.KEY_WORK_TGT_MODE], bytes([sim.WS_SAMPLING]))
 
 
 class LidarClockTest(unittest.TestCase):
@@ -630,6 +634,56 @@ class SimulatorTest(unittest.TestCase):
             else:
                 self.assertGreater(pkt.dot_num, 0)
                 self.assertTrue(all(m.keeps_point(1, p) for p in pkt.samples()))
+
+    def pushed_states(self) -> list[int]:
+        """Drain the pushes received so far; return their cur_work_state values."""
+        self.rx.settimeout(0.2)
+        got = []
+        try:
+            while True:
+                f = proto.CommandFrame.parse(self.rx.recvfrom(4096)[0])
+                got.append(dict(proto.parse_info_push(f.data))[sim.KEY_CUR_WORK_STATE][0])
+        except TimeoutError:
+            return got
+
+    def test_state_change_and_config_request_push_at_once(self) -> None:
+        # A Mid-360 pushes once per state change and after every 0x0100 request, whatever its
+        # result, while its periodic push keeps its phase (#235).
+        m = self.s.model
+        host = proto.encode_host_ipcfg('127.0.0.1', self.rx.getsockname()[1], 0)
+        self.assertEqual(m.configure([(sim.KEY_STATE_HOST, host)]), (sim.RET_OK, 0))
+        now = time.monotonic()
+        periodic = self.s.next_push
+        m.force_state(sim.WS_IDLE, now)
+        self.assertEqual(self.s._next_deadline(now), now)
+        self.s._send_periodic(now)
+        self.assertEqual(self.pushed_states(), [sim.WS_IDLE])
+        self.assertEqual(self.s.next_push, periodic)
+        self.s._send_periodic(now)  # owed once only
+        self.assertEqual(self.pushed_states(), [])
+
+        rejected = proto.encode_param_config([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_ERROR]))])
+        req = proto.CommandFrame(1, sim.CMD_PARAM_CONFIG, sim.REQ, 0, rejected)
+        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.addCleanup(tx.close)
+        tx.sendto(req.encode(), ('127.0.0.1', self.s.ports['cmd']))
+        time.sleep(0.05)
+        self.s._handle_datagram('cmd')
+        ack = proto.CommandFrame.parse(tx.recvfrom(2048)[0])
+        self.assertNotEqual(proto.parse_param_config_ack(ack.data)[0], sim.RET_OK)
+        self.s._send_periodic(time.monotonic())
+        self.assertEqual(self.pushed_states(), [sim.WS_IDLE])
+
+        # Inquiries do not cause one.
+        req = proto.CommandFrame(
+            2, sim.CMD_PARAM_INQUIRE, sim.REQ, 0, proto.encode_param_inquire([0x8006])
+        )
+        tx.sendto(req.encode(), ('127.0.0.1', self.s.ports['cmd']))
+        time.sleep(0.05)
+        self.s._handle_datagram('cmd')
+        tx.recvfrom(2048)
+        self.s._send_periodic(time.monotonic())
+        self.assertEqual(self.pushed_states(), [])
 
     def test_slow_catch_up_returns_to_the_main_loop(self) -> None:
         # A narrow FOV window makes each packet draw all MAX_FOV_DRAWS batches, slower than

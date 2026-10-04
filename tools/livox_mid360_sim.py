@@ -498,8 +498,23 @@ class DeviceModel:
         return ro.get(key)
 
     def push_payload(self, now_ns: int) -> bytes:
-        # Every read-only key 0x8000-0x8011 [unverified: the real push key set, issue #11].
+        # The key set of a Mid-360 push (firmware 13.18.0244, #235): most writable keys, then
+        # the read-only ones. 0x0009 and the keys from 0x0021 on are not pushed.
         keys = [
+            KEY_PCL_DATA_TYPE,
+            KEY_PATTERN_MODE,
+            KEY_LIDAR_IPCFG,
+            KEY_STATE_HOST,
+            KEY_PCL_HOST,
+            KEY_IMU_HOST,
+            KEY_INSTALL_ATTITUDE,
+            KEY_FOV0,
+            KEY_FOV1,
+            KEY_FOV_EN,
+            KEY_DETECT_MODE,
+            KEY_FUNC_IO,
+            KEY_WORK_TGT_MODE,
+            KEY_IMU_EN,
             KEY_SN,
             KEY_PRODUCT_INFO,
             KEY_VERSION_APP,
@@ -858,6 +873,9 @@ class Simulator:
         self.frame_cnt = 0
         self.frame_started = 0.0
         self.next_pcl = self.next_imu = self.next_push = self.next_stats = 0.0
+        # An extra push is owed: a Mid-360 pushes at once on a state change and after a 0x0100
+        # request, off its periodic phase (#235).
+        self.push_due = False
         self.sent = {
             'pcl': 0,
             'imu': 0,
@@ -995,6 +1013,7 @@ class Simulator:
 
     def _on_state(self, old: int, new: int) -> None:
         self.emit(event='state', **{'from': old, 'to': new})
+        self.push_due = True
         if new == WS_SAMPLING:
             now = time.monotonic()
             self.frame_started = now
@@ -1023,7 +1042,7 @@ class Simulator:
         self.emit(event='exit', sent=self.sent)
 
     def _next_deadline(self, now: float) -> float:
-        d = [self.next_push, self.next_stats]
+        d = [now if self.push_due else self.next_push, self.next_stats]
         if self.log_streams:
             d.append(self.next_log)
         if self.debug_dest is not None:
@@ -1263,6 +1282,8 @@ class Simulator:
                 return
         failed = self._injected_failure(frame)
         ret, payload = failed if failed else self._dispatch(frame, addr, now)
+        if frame.cmd_id == CMD_PARAM_CONFIG:
+            self.push_due = True  # whatever the result, also for a rejected write (#235)
         self.emit(
             event='cmd',
             cmd_id=frame.cmd_id,
@@ -1566,6 +1587,11 @@ class Simulator:
                     budget -= 1
                 if now - self.next_imu > 0.5:
                     self.next_imu = now
+        if self.push_due:
+            self.push_due = False
+            # Off the periodic phase, which stays as it was. A replay brings the capture's own.
+            if self.replay is None:
+                self._send_push()
         if now >= self.next_push:
             if not self._replaying_pushes():
                 self._send_push()
