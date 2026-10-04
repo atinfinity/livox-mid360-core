@@ -99,7 +99,10 @@ Consequences for the SDK:
 - `IDLE → SAMPLING` passes through `MOTORSTARTUP` and `READY`; `SAMPLING → IDLE` passes
   through `READY`; `READY ↔ SAMPLING` is direct. `wait_for_state()` polls through the
   intermediate states, so `start_sampling()` from `IDLE` takes at least the motor start-up
-  time (unknown, see below).
+  time. Measured on a Mid-360 with firmware 13.18.0244 by polling `0x8006` every 50 ms
+  ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)): `MOTORSTARTUP` lasts
+  6.1 s from a stopped motor and 10.1 s when `SAMPLING` is requested 0.3 s after a stop;
+  `SAMPLING → IDLE` shows `READY` for about 60 ms.
 - `work_tgt_mode` is a stored parameter that the machine chases; `decode_work_state()` accepts
   the seven values above and rejects everything else. `0x07` (`kLivoxLidarMotorStoping` in
   the Livox-SDK2 enum, which is shared with the HAP) is not in the Mid-360 table and is
@@ -110,9 +113,9 @@ Consequences for the SDK:
 
 Settled by the figure: the states, the edges and which targets are requestable. Still
 **unverified** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) and
-therefore assumptions in the simulator: the duration of `SELFCHECK` and `MOTORSTARTUP` and
-whether commands are answered during `SELFCHECK`; whether the pass-through `READY` is ever
-visible in the push; the return codes for a `work_tgt_mode` write of 4 / 5 / 6 / 8 (assumed
+therefore assumptions in the simulator: the duration of `SELFCHECK` and whether commands are
+answered during it; whether the pass-through `READY` is visible in the push (it is in a
+`0x0101` poll, see above); the return codes for a `work_tgt_mode` write of 4 / 5 / 6 / 8 (assumed
 `0x20`), of an undefined value (assumed `0x03`) and in `ERROR` / `UPGRADE` (assumed `0x02`);
 whether a write during `SELFCHECK` / `MOTORSTARTUP` is accepted and followed (assumed yes);
 whether `0x07` is ever reported; the persistence of `work_tgt_mode`; and whether a changed

@@ -277,7 +277,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | |
 | Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |
 | Silence after reboot | ~0.5 s, then SELFCHECK → IDLE → target | real durations unknown |
-| SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | real durations unknown; the figure gives the edges only |
+| SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | SELFCHECK unknown; MOTORSTARTUP measured at 6.1–10.1 s on a Mid-360 ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)), kept short here to keep the tests fast |
 | `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
 | Unknown key | ret `0x20` | same |

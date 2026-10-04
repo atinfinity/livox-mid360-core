@@ -98,7 +98,7 @@ HostSetup setup;           // ip defaults to the session socket's local address
 setup.point_port = 56301;  // host-side ports; defaults are 56201 / 56301 / 56401
 setup.pcl_data_type = DataType::kCartesian32;
 setup.imu_enable = true;
-setup.work_tgt_mode = WorkState::kSampling;  // optional; then waits up to wait_timeout (10 s)
+setup.work_tgt_mode = WorkState::kSampling;  // optional; then waits up to wait_timeout (20 s)
 auto r = apply_host_setup(*s, setup);        // std::expected<HostSetupResult, SessionError>
 if (r && r->reboot_required) {
   // an ACK said 0x21: reboot to apply
@@ -112,7 +112,8 @@ the LiDAR-side source ports 56200 / 56300 / 56400), `0x0000` and `0x001C`, then,
 can be requested. SAMPLING or READY requested from IDLE starts the motor
 (IDLE → MOTORSTARTUP → READY → SAMPLING, see
 [protocol_notes.md](protocol_notes.md#working-state)), so the wait takes at least the
-motor start-up time; the default `wait_timeout` of 10 s allows for that. The reverse path is
+motor start-up time, measured at 6–10 s on a Mid-360; the default `wait_timeout` of 20 s
+allows for that ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)). The reverse path is
 immediate. Arguments the LiDAR would never accept (that mode, or an empty `ip` on a
 `0.0.0.0` bind) are reported as `kInvalidArgument` with `error_key` before anything is sent;
 everything else is the plain session error, so a rejected key shows up as `kLidarRejected`
