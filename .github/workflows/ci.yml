@@ -126,8 +126,9 @@ jobs:
           python3 tools/gen_golden_vectors.py
           python3 tools/gen_fuzz_corpus.py
           python3 tools/gen_replay_pcap.py
-          git diff --exit-code -- tests/generated/golden_vectors.hpp tests/fuzz/corpus tests/data/replay.pcap
-          test -z "$(git status --porcelain -- tests/fuzz/corpus)"
+          python3 tools/gen_fixtures.py
+          git diff --exit-code -- tests/generated/golden_vectors.hpp tests/fuzz/corpus tests/data/replay.pcap tests/fixtures
+          test -z "$(git status --porcelain -- tests/fuzz/corpus tests/fixtures)"
       - name: Simulator and probe unit tests
         run: python3 -m unittest -v tools/test_sim.py tools/test_probe.py
 
