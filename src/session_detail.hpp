@@ -45,7 +45,11 @@ enum class AckMismatch : std::uint8_t
 [[nodiscard]] std::expected<DiscoveryAck, SessionError> to_discovery_ack(const RawAck & ack);
 [[nodiscard]] std::expected<ParamConfigAck, SessionError> to_config_ack(const RawAck & ack);
 /// Takes the ACK by value; the returned views point into InquireResult::raw (moved from ack.data).
-[[nodiscard]] std::expected<InquireResult, SessionError> to_inquire_result(RawAck ack);
+/// On kParamNotSupport `error_key` is the first of `requested` the ACK does not carry with a
+/// value: a Mid-360 answers the supported keys and omits the others (#228). Otherwise, or when
+/// every requested key is answered, it is the first key of the ACK (0 without one).
+[[nodiscard]] std::expected<InquireResult, SessionError> to_inquire_result(
+  RawAck ack, std::span<const std::uint16_t> requested = {});
 [[nodiscard]] std::expected<SimpleAck, SessionError> to_simple_ack(const RawAck & ack);
 /// Reads key 0x8006 out of an inquire result.
 [[nodiscard]] std::expected<WorkState, SessionError> to_work_state(const InquireResult & result);
