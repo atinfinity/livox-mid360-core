@@ -34,7 +34,7 @@ inline constexpr std::uint16_t kPushPort = 56200;        ///< LiDAR-side source 
 inline constexpr std::uint16_t kPointCloudPort = 56300;  ///< LiDAR-side source port for point cloud
 inline constexpr std::uint16_t kImuPort = 56400;         ///< LiDAR-side source port for IMU
 inline constexpr std::uint16_t kLogPort = 56500;         ///< LiDAR log port (0x03xx, #44)
-/// [unverified] LiDAR-side source port of the debug raw data stream (SDK2, #93)
+/// LiDAR-side source port of the debug raw data stream (#93, verified in #106)
 inline constexpr std::uint16_t kDebugDataPort = 60301;
 
 inline constexpr std::uint16_t kDefaultHostCommandPort = 56101;     ///< host port for commands

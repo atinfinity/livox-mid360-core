@@ -3,8 +3,8 @@
 /// Debug raw data collection (issue #93): command 0x0303 switches on a diagnostic stream that
 /// Livox support asks for ("debug raw data" in the protocol document, "debug point cloud" in
 /// Livox-SDK2). The stream itself is opaque to this SDK. The request layout follows the
-/// protocol document rev v1.4.12; ports and behaviour follow Livox-SDK2 and are unverified on
-/// hardware (#106). Unrelated to the firmware log (firmware_log.hpp).
+/// protocol document rev v1.4.12; ports and behaviour were checked on a Mid-360 (firmware
+/// 13.18.0244, #106, docs/protocol_notes.md). Unrelated to the firmware log (firmware_log.hpp).
 #pragma once
 
 #include <array>
@@ -30,8 +30,8 @@ struct DebugDataControlRequest
   bool enable = true;                                   ///< start (true) or stop the stream
   std::array<std::uint8_t, 4> host_ip{};                ///< destination IPv4 address, in order
   std::uint16_t host_port = kDefaultHostDebugDataPort;  ///< destination UDP port
-  /// [unverified] `reserved` in the protocol document; SDK2 calls it `bandwidth` (Mbps) and
-  /// sends 0.
+  /// `reserved` in the protocol document; SDK2 calls it `bandwidth` (Mbps) and sends 0. 1 and
+  /// 0xFFFF did not change the rate on a Mid-360 (#106).
   std::uint16_t reserved = 0;
 
   /// Field-wise comparison.
@@ -52,7 +52,7 @@ struct DebugDataControlRequest
 struct DebugDataPacket
 {
   std::uint64_t host_receive_time_ns = 0;  ///< Datagram::recv_time_ns of the datagram
-  Endpoint from;                           ///< the LiDAR; SDK2 expects port 60301 [unverified]
+  Endpoint from;                           ///< the LiDAR, port 60301 on a Mid-360
   std::span<const std::byte> data;         ///< the datagram as received
 };
 

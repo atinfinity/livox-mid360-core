@@ -800,9 +800,13 @@ opaque to this SDK, which delivers the datagrams as they arrive. The codec lives
   be changed while sampling is requested.
 - **Stats**: `debug_data_packets`, `debug_data_bytes`, `last_debug_data_time_ns`. A stream
   that falls silent raises no event; watch `last_debug_data_time_ns`.
-- **Unverified on hardware** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): the port that accepts `0x0303`, the source port and
-  layout of the stream, whether the point cloud keeps flowing, the `ret_code` of a repeated
-  enable and whether the setting survives a reboot.
+- **Verified on hardware** (firmware 13.18.0244, [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)):
+  - `0x0303` is accepted on the log port; the command port does not answer it.
+  - The stream leaves port 60301 as 1114-byte datagrams at about 4.5 MB/s.
+  - The point cloud keeps flowing.
+  - Every enable and disable is ACKed with `0x00`, also when repeated.
+  - Details are in [protocol_notes.md](protocol_notes.md).
+- **Unverified on hardware**: whether the setting survives a reboot.
 
 ## lvx2 record / replay
 
