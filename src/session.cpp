@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <optional>
 #include <utility>
 
 #include "log_detail.hpp"
@@ -18,6 +19,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 
 constexpr std::uint64_t kSocketTag = 1;
+constexpr std::uint64_t kBroadcastTag = 2;  ///< discover(): the 255.255.255.255 listener
 
 SessionError transport_error(TransportError e, std::uint16_t cmd_id = 0, std::uint32_t attempts = 0)
 {
@@ -166,6 +168,19 @@ std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
   if (auto r = poller->add(*sock, kSocketTag); !r) {
     return std::unexpected(transport_error(r.error(), 0));
   }
+  // The Mid-360 sends the ACK to 255.255.255.255 at the request's source port, also for a
+  // unicast request (#217). A socket bound to a unicast address never receives that, so
+  // listen on the limited broadcast address at the same port as well. The two bindings do
+  // not overlap and need no SO_REUSEADDR. Best effort: BSD / macOS refuse the bind.
+  std::optional<UdpSocket> broadcast_sock;
+  if (options.bind_address != Ipv4{0, 0, 0, 0}) {
+    SocketOptions bopts;
+    bopts.reuse_address = false;
+    auto b = UdpSocket::open(Endpoint::broadcast(sock->local_endpoint().port), bopts);
+    if (b && poller->add(*b, kBroadcastTag)) {
+      broadcast_sock = std::move(*b);
+    }
+  }
 
   CommandFrameSpec spec;
   spec.seq_num = 1;
@@ -207,25 +222,30 @@ std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
     if (ev->empty()) {
       continue;
     }
-    while (true) {
-      const auto d = sock->recv_one(buf);
-      if (!d) {
-        break;
-      }
-      auto dev = detail::parse_discovered_device(d->data, d->from);
-      if (!dev) {
-        continue;
-      }
-      const bool dup = std::any_of(found.begin(), found.end(), [&](const DiscoveredDevice & f) {
-        return f.serial_number == dev->serial_number;
-      });
-      if (!dup) {
-        found.push_back(std::move(*dev));
-      }
-      if (unicast) {
-        for (std::size_t i = 0; i < targets.size(); ++i) {
-          if (targets[i] == d->from || targets[i].ip == d->from.ip) {
-            answered[i] = true;
+    for (const auto & e : *ev) {
+      // kBroadcastTag is registered only together with broadcast_sock.
+      const UdpSocket & from_sock =
+        e.tag == kBroadcastTag && broadcast_sock ? *broadcast_sock : *sock;
+      while (true) {
+        const auto d = from_sock.recv_one(buf);
+        if (!d) {
+          break;
+        }
+        auto dev = detail::parse_discovered_device(d->data, d->from);
+        if (!dev) {
+          continue;
+        }
+        const bool dup = std::any_of(found.begin(), found.end(), [&](const DiscoveredDevice & f) {
+          return f.serial_number == dev->serial_number;
+        });
+        if (!dup) {
+          found.push_back(std::move(*dev));
+        }
+        if (unicast) {
+          for (std::size_t i = 0; i < targets.size(); ++i) {
+            if (targets[i] == d->from || targets[i].ip == d->from.ip) {
+              answered[i] = true;
+            }
           }
         }
       }
