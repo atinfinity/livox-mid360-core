@@ -3,6 +3,7 @@
 // the shape of a Mid-360 with firmware 13.18.0244: every datagram must parse, and the fields
 // measured on that device must read back as measured. See tests/fixtures/README.md.
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -131,10 +132,12 @@ struct FixturePoint
 std::vector<FixturePoint> points(const DataPacketView & pkt)
 {
   const std::size_t size = sample_size(pkt.header.data_type);
-  const std::size_t coord = pkt.header.data_type == DataType::kCartesian32 ? 12
-                            : pkt.header.data_type == DataType::kCartesian16
-                              ? 6
-                              : 4;  // spherical: depth only
+  std::size_t coord = 4;  // spherical: depth only
+  if (pkt.header.data_type == DataType::kCartesian32) {
+    coord = 12;
+  } else if (pkt.header.data_type == DataType::kCartesian16) {
+    coord = 6;
+  }
   std::vector<FixturePoint> out;
   for (std::size_t i = 0; i < pkt.header.dot_num; ++i) {
     const auto s = pkt.data.subspan(i * size, size);
@@ -286,10 +289,11 @@ TEST_CASE("fixture pcl_types: the three point cloud formats", "[fixtures]")
   // Each switch is ACKed and followed by a push carrying the new type.
   const auto ps = pushes(ds);
   REQUIRE(ps.size() == 3);
+  constexpr std::array kTypes{DataType::kCartesian32, DataType::kCartesian16, DataType::kSpherical};
   for (std::size_t i = 0; i < ps.size(); ++i) {
     const auto v = find_key(ps[i].second.values, Key::kPclDataType);
     REQUIRE(v.has_value());
-    CHECK(key_traits<Key::kPclDataType>::decode(*v) == static_cast<DataType>(1 + i));
+    CHECK(key_traits<Key::kPclDataType>::decode(*v) == kTypes.at(i));
   }
 }
 
