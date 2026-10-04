@@ -105,7 +105,7 @@ decoded fields, so a checklist item can be settled from it without another run.
 
 ## Results
 
-No run on hardware yet. Add one section per run, newest first:
+Add one section per run, newest first:
 
 ```markdown
 ### YYYY-MM-DD: <what was verified>
@@ -118,3 +118,52 @@ No run on hardware yet. Add one section per run, newest first:
 
 Findings: <issues filed, items of #11 confirmed or refuted>
 ```
+
+### 2026-10-04: first run of every binary, four builds
+
+- Host: Ubuntu 24.04.3 LTS, x86_64, Linux 7.0.0-28. Builds: GCC 13 and Clang 19, each in
+  Release and Debug.
+- Network:
+  - The host is on 192.168.1.50/24 (`enp2s0`, NetworkManager profile with a
+    `192.168.1.135/32` route).
+  - Wi-Fi is on the same subnet (192.168.1.8/24) and holds the default route.
+  - The LiDAR is directly connected.
+  - ufw is installed but not enabled (`ENABLED=no`), so the firewall row of #110 is still
+    open.
+- LiDAR:
+  - Mid-360 at 192.168.1.135, serial 47MDM5L0020035, MAC e4:7a:2c:8f:85:49.
+  - `product_info` is `FmVer:13180244 BuildTime:2025/04/01`, which `version_app` prints as
+    13.18.2.44. `version_loader` is 13.17.99.20.
+  - Discovery reports `dev_type` 9 and `cmd_port` 56100.
+- Commit: main at 0ab6a10, with the fixes of #217, #219, #221, #223 and #225 merged
+  locally (PRs #218, #220, #222, #224, #226). Without them `minimal_receive`, `record`,
+  `collect_firmware_log` and `debug-data` fail.
+- No pcap: `--pcap` needs `sudo`.
+
+All four builds passed every step. GCC Release:
+
+| Step | Result | Detail |
+| --- | --- | --- |
+| info | PASS | discovery: sn=47MDM5L0020035 ip=192.168.1.135 cmd_port=56100 dev_type=9 from=192.168.1.135:56000 |
+| minimal_receive | PASS | 60 s: 598 frames, 12022 IMU packets; packets=136556 points=11961024 frames=595 imu=11962 bad=0 dropped=0 reordered=0 |
+| collect_firmware_log | PASS | 429 chunks, 249624 bytes in 2 files, 0 gaps, 9 ACKs sent, 0 bad packets |
+| record / replay | PASS | recorded 20957 packets; replay: packets=20957 frames=100 points=2011872 dropped=0 |
+| debug-data | PASS | 40088 packets in 10 s |
+| probe | PASS | 14 probes, see the comment on #11 |
+
+The GCC Debug, Clang Release and Clang Debug runs match within normal variation:
+
+- minimal_receive: 136586 to 136625 packets, `bad=0 dropped=0`.
+- record / replay: 20872 to 21039 packets, equal on both sides.
+- debug-data: 40129 to 40143 packets.
+
+Findings:
+
+- Discovery: the LiDAR answers to `255.255.255.255`, also for a unicast request (#217).
+- Point cloud packets carry `crc32 = 0`; IMU packets carry a valid CRC (#219).
+- Motor start-up from IDLE takes 6.1 s, and 10.1 s when sampling is requested right after
+  a stop (#221).
+- Key `0x0009` is not supported. The firmware log goes to the sender of `0x0301` (#223).
+- The debug raw data stream flows only while sampling (#225). The other `0x0303` results are
+  in #106.
+- Protocol answers to the questions of #11 are in `probe.json` and summarised on #11.
