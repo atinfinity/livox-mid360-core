@@ -516,7 +516,7 @@ TEST_CASE("Device: push snapshot, on_push and diag events", "[sim][device]")
     CHECK(s->core_temp == 3500);
     CHECK(s->powerup_cnt == 1);
     CHECK(s->time_sync_type == TimeSyncType::kNone);
-    CHECK(s->fw_type == FwType::kLoader);
+    CHECK(s->fw_type == FwType::kApp);
     CHECK(s->local_time_now.has_value());
     REQUIRE(s->lidar_diag_status);
     CHECK(s->lidar_diag_status->normal());

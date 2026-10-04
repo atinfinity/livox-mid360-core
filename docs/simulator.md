@@ -42,6 +42,7 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--push-rate` | 1.0 | 0x0102 push rate in Hz, not affected by `--rate-multiplier` |
 | `--drop-rate` | 0 | fraction of point-cloud packets silently dropped (`udp_cnt` still advances) |
 | `--imu-cfg-unsupported` | | emulate firmware without key `0x002B`: its write, read and any inquire naming it answer `0x20` |
+| `--unsupported-keys` | none | comma-separated writable keys the firmware lacks, handled like `0x002B` under `--imu-cfg-unsupported`; `mid360` names the set of a Mid-360 on 13.18.0244: `0x0021`, `0x0026`, `0x0029`, `0x002B` ([#242](https://github.com/atinfinity/livox-mid360-core/issues/242); only the `0x002B` write was seen rejected) |
 | `--log-chunk-interval` | 0.05 s | period of firmware log chunks (0x0300) per enabled log type ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) |
 | `--log-chunk-bytes` | 512 | data bytes per log chunk |
 | `--log-ack-every` | 1 | ask for a host ACK on every Nth chunk; `0` never (the file-end packet always asks) |
@@ -144,6 +145,8 @@ The process is driven over its standard streams so that any test harness can use
   the known keys and leaves the unknown ones out, as a Mid-360 does ([#228](https://github.com/atinfinity/livox-mid360-core/issues/228)). A *changed* `lidar_ipcfg` is stored and answered with `0x21`
   (reboot required, [unverified] which keys the LiDAR does this for, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); writing the current
   value back is a plain `0x00`. Value lengths mirror `key_value_length()` in `keys.cpp`.
+  The factory FOV windows are yaw 0..0, pitch -7..52 with `fov_cfg_en` 0, and `FW_TYPE`
+  (`0x8010`) is 1 (app), as a Mid-360 on 13.18.0244 answers ([#242](https://github.com/atinfinity/livox-mid360-core/issues/242)).
 - **State machine** the figure in [protocol_notes.md](protocol_notes.md#working-state):
   power-on → SELFCHECK (`--selfcheck-delay`, commands are answered) → IDLE, then the machine
   chases `work_tgt_mode` (SAMPLING by default): IDLE → MOTORSTARTUP (`--startup-delay`) →
