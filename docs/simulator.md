@@ -138,8 +138,8 @@ The process is driven over its standard streams so that any test harness can use
   outside [0, 360) or pitch outside (-10, 60) → `0x03`, `detect_mode` / `time_filter` /
   `imu_data_en` above 1 → `0x03`, an `imu_sensor_cfg` byte past its last enumerator (rate
   > 3, accel > 3, gyro > 7) → `0x03`. All keys are applied only if none failed; the ACK's
-  `error_key` names the offender. A rejected `0x0101` inquire (unknown key) answers the
-  return code with the offending key as a single zero-length entry. A *changed* `lidar_ipcfg` is stored and answered with `0x21`
+  `error_key` names the offender. An inquire `0x0101` naming an unknown key answers `0x20` with
+  the known keys and leaves the unknown ones out, as a Mid-360 does ([#228](https://github.com/atinfinity/livox-mid360-core/issues/228)). A *changed* `lidar_ipcfg` is stored and answered with `0x21`
   (reboot required, [unverified] which keys the LiDAR does this for, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); writing the current
   value back is a plain `0x00`. Value lengths mirror `key_value_length()` in `keys.cpp`.
 - **State machine** the figure in [protocol_notes.md](protocol_notes.md#working-state):

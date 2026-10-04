@@ -452,7 +452,13 @@ class DeviceModel:
         return ret, 0
 
     def inquire(self, keys: list[int], now_ns: int) -> tuple[int, list[tuple[int, bytes]]]:
-        out = []
+        """
+        Answer a 0x0101.
+
+        As on a Mid-360 (#228), unsupported keys make the ret_code 0x20 and are left out,
+        while the supported ones are still answered.
+        """
+        out, ret = [], RET_OK
         for key in keys:
             rule = self.inquire_overrides.get(key)
             if rule == 'omit':
@@ -461,9 +467,10 @@ class DeviceModel:
             if isinstance(rule, bytes):
                 v = rule
             if v is None:
-                return RET_PARAM_NOT_SUPPORT, [(key, b'')]
+                ret = RET_PARAM_NOT_SUPPORT
+                continue
             out.append((key, v))
-        return RET_OK, out
+        return ret, out
 
     def read_key(self, key: int, now_ns: int) -> bytes | None:
         if key == KEY_IMU_SENSOR_CFG and self.imu_cfg_unsupported:
