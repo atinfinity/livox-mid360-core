@@ -732,8 +732,9 @@ set_log_handler([](const LogRecord & r) { my_logger(r.level, r.serial_number, r.
 The LiDAR can stream its own firmware log to the host ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)): `0x0301` "collection log" turns a
 log type on or off, after which the LiDAR pushes `0x0300` packets (a 16-byte header:
 `log_type`, `file_index`, `file_num`, `flag`, `timestamp`, `trans_index`, `data_length`, then
-raw log bytes) from its port 56500 to the host address written to key `0x0009`
-(`log_host_ipcfg`). The codec lives in `firmware_log.hpp` (`FirmwareLogPushHeader`,
+raw log bytes) from its port 56500 to the sender of the `0x0301`, i.e. the Context's log
+socket (verified on firmware 13.18.0244; the protocol document names key `0x0009`,
+`log_host_ipcfg`, which that firmware rejects). The codec lives in `firmware_log.hpp` (`FirmwareLogPushHeader`,
 `parse_firmware_log_push`, `encode_firmware_log_push_ack`, ...).
 
 - **Socket**: the Context opens a fourth receive socket, `ContextOptions::log_port` (default
@@ -745,7 +746,9 @@ raw log bytes) from its port 56500 to the host address written to key `0x0009`
   socket to `DeviceOptions::lidar_log_port` (56500) and waits for the ACK with the usual
   `RequestOptions` (timeout, attempts, same `seq` on retry, `cancel()` aborts it). Errors are
   `DeviceError` with the `SessionError` inside (`kTimeout`, `kLidarRejected` with the
-  `ret_code`, `kCancelled`, ...). `stop_firmware_log(type)` sends `enable=0`. A start that
+  `ret_code`, `kCancelled`, ...). A `PARAM_NOTSUPPORT` (`0x20`) answer to the key `0x0009`
+  write is not an error: firmware 13.18.0244 gives it and still streams to the `0x0301`
+  sender ([#223](https://github.com/atinfinity/livox-mid360-core/issues/223)). `stop_firmware_log(type)` sends `enable=0`. A start that
   succeeded is replayed after a reconnect until a stop succeeds; the destructor does not stop
   the stream (the LiDAR keeps pushing to a host that no longer listens, as with sampling).
 - **Delivery**: `on_firmware_log(cb)` receives every push as a `FirmwareLogChunk` (parsed
@@ -763,9 +766,11 @@ raw log bytes) from its port 56500 to the host address written to key `0x0009`
   (`<SN>_<UTC start>_<type>_<file_index>.log`) and prints a progress line per second; see
   `examples/README.md`. The simulator streams synthetic chunks (`--log-chunk-interval`,
   `--log-ack-every`, `log_drop` / `log_new_file` controls, [simulator.md](simulator.md)).
-- **Unverified on hardware** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): whether the LiDAR sends to key `0x0009` or to the `0x0301`
-  sender, the `ret_code` of a repeated enable, the meaning of `timestamp` / `file_num`, whether
-  the exception log (type 1) is supported and the frame type of the host ACK.
+- **Verified on hardware** (firmware 13.18.0244, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): pushes go to the `0x0301` sender;
+  without the host ACK the LiDAR resends the same chunk; `0x0301` for the exception log
+  (type 1) is ACKed with `0x00` but no chunk arrived within 6 s.
+- **Unverified on hardware**: the `ret_code` of a repeated enable, the meaning of
+  `timestamp` / `file_num` and the frame type of the host ACK.
 
 ## Debug raw data
 
