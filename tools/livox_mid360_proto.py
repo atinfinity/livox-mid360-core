@@ -47,7 +47,7 @@ PORT_DISCOVERY, PORT_CMD, PORT_PUSH, PORT_PCL, PORT_IMU, PORT_LOG = (
     56400,
     56500,
 )
-# Debug raw data (#93), as Livox-SDK2 [unverified]: LiDAR source port, host destination port.
+# Debug raw data (#93, verified in #106): LiDAR source port, host destination port (SDK2).
 PORT_DEBUG_DATA, HOST_PORT_DEBUG_DATA = 60301, 44332
 
 SAMPLE_SIZE = {0: 24, 1: 14, 2: 8, 3: 10}
