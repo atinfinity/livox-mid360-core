@@ -94,6 +94,30 @@ TEST_CASE("Session: unicast discovery and connect", "[sim][session]")
   CHECK(f.sim->stop() == 0);
 }
 
+TEST_CASE("Session: discovery ACK sent to 255.255.255.255", "[sim][session]")
+{
+#if !defined(__linux__)
+  SKIP("binding 255.255.255.255 is Linux-only");
+#endif
+  // A Mid-360 broadcasts the 0x0000 ACK even for a unicast request (#217); a socket bound to
+  // a unicast address alone never sees it.
+  std::string err;
+  auto sim = SimProcess::start(err, {"--discovery-ack-broadcast"});
+  if (!sim) {
+    SKIP("simulator unavailable: " << err);
+  }
+  DiscoveryOptions o;
+  o.targets = {Endpoint::loopback(sim->ports().discovery)};
+  o.timeout = 2s;
+  o.bind_address = {127, 0, 0, 1};
+  const auto devices = discover(o);
+  REQUIRE(devices.has_value());
+  REQUIRE(devices->size() == 1);
+  CHECK(devices->front().serial_number == sim->sn());
+  CHECK(devices->front().from == Endpoint::loopback(sim->ports().discovery));
+  CHECK(sim->stop() == 0);
+}
+
 TEST_CASE("Session: typed commands and rejections", "[sim][session]")
 {
   Fixture f;

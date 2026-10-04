@@ -25,6 +25,7 @@ from collections.abc import Callable
 import datetime
 import json
 import os
+import select
 import socket
 import struct
 import sys
@@ -85,6 +86,16 @@ class Prober:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((args.host_ip, args.host_cmd_port))
+        # The Mid-360 sends the discovery ACK to 255.255.255.255 at the sender's port, also
+        # for a unicast request (#217); a socket bound to a unicast address never sees it.
+        self.bcast: socket.socket | None = None
+        if args.host_ip not in ('', '0.0.0.0'):
+            b = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                b.bind(('255.255.255.255', self.sock.getsockname()[1]))
+                self.bcast = b
+            except OSError:  # BSD / macOS refuse the bind
+                b.close()
         self.seq = 0
         self.probes: list[dict] = []
         self.lidar_ip = args.lidar_ip
@@ -92,6 +103,8 @@ class Prober:
 
     def close(self) -> None:
         self.sock.close()
+        if self.bcast is not None:
+            self.bcast.close()
 
     # -- transport ---------------------------------------------------------
     def request(self, cmd_id: int, data: bytes, to: tuple[str, int]) -> dict:
@@ -112,11 +125,11 @@ class Prober:
             if left <= 0:
                 rec['ack'] = None
                 return rec
-            self.sock.settimeout(left)
-            try:
-                d, src = self.sock.recvfrom(2048)
-            except TimeoutError:
+            socks = [self.sock] if self.bcast is None else [self.sock, self.bcast]
+            ready, _, _ = select.select(socks, [], [], left)
+            if not ready:
                 continue
+            d, src = ready[0].recvfrom(2048)
             try:
                 f = proto.CommandFrame.parse(d)
             except ValueError:
