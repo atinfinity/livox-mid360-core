@@ -263,7 +263,12 @@ sequenceDiagram
 The same `attempt()` runs on the caller's thread for `Device::reconnect()` when automatic
 recovery is disabled. The other disconnect triggers (`kCommandTimeout` when a command times
 out and the push is stale, `kRebootRequested`, `kUser`) enter the same path through
-`declare_disconnected()`.
+`declare_disconnected()`. After `kRebootRequested` the worker first waits for the LiDAR to
+power down, since a Mid-360 keeps running for about 1.25 s after the ACK and an attempt then
+would reconnect to the instance that is about to go away
+([#238](https://github.com/atinfinity/livox-mid360-core/issues/238)): a push going into
+`ERROR`, half a `push_timeout` without a push since the request, or one `push_timeout` at
+most.
 
 ```mermaid
 stateDiagram-v2

@@ -3,6 +3,7 @@
 // tools/livox_mid360_sim.py: push-timeout / command-timeout / reboot detection, automatic
 // recovery with sampling replay, manual reconnect(), prompt destruction mid-attempt, and two
 // LiDARs on one Context looked up by serial number.
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -215,6 +216,98 @@ TEST_CASE(
   REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }, 5s));
   const auto frames_after = rec.frames.load();
   REQUIRE(wait_until([&] { return rec.frames >= frames_after + 3; }));
+  CHECK(dev->stats().reconnects == 1);
+}
+
+TEST_CASE(
+  "Reconnect: reboot() waits for the power-down before reconnecting (#238)", "[sim][reconnect]")
+{
+  // A Mid-360 keeps running for about 1.25 s after the reboot ACK, then pushes ERROR.
+  Fixture f({"--reboot-delay", "1.25", "--reboot-silence", "0.3"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  ScopedLogCapture log(LogLevel::kInfo);
+  DeviceOptions o = Fixture::options();
+  o.reconnect.push_timeout = 3s;  // the hold-off is capped at one push timeout
+  auto dev = f.open(o);
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 3; }));
+
+  const auto t0 = std::chrono::steady_clock::now();
+  REQUIRE(dev->reboot().has_value());
+  REQUIRE(wait_until([&] { return rec.disconnected == 1; }, 200ms));
+  REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 8s));
+  CHECK(std::chrono::steady_clock::now() - t0 >= 1200ms);
+  CHECK(log.count(LogLevel::kInfo, "reboot: powered down (error push)") == 1);
+  {
+    // The reconnect follows the ERROR push, not the still-running LiDAR before it.
+    const std::lock_guard lock(rec.mutex);
+    const auto error = std::ranges::find_if(rec.events, [](const Event & e) {
+      return e.kind == Event::Kind::kStateChanged && e.new_state == WorkState::kError;
+    });
+    const auto up = std::ranges::find_if(
+      rec.events, [](const Event & e) { return e.kind == Event::Kind::kReconnected; });
+    REQUIRE(error != rec.events.end());
+    CHECK(error < up);
+  }
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }, 5s));
+  const auto frames_after = rec.frames.load();
+  REQUIRE(wait_until([&] { return rec.frames >= frames_after + 3; }));
+  const DeviceStats s = dev->stats();
+  CHECK(s.disconnects == 1);
+  CHECK(s.reconnects == 1);
+}
+
+TEST_CASE(
+  "Reconnect: after reboot() the end of the pushes counts as the power-down (#238)",
+  "[sim][reconnect]")
+{
+  // No work state in the push, so no ERROR to see: the silence is the signal.
+  // Silent for longer than the half push timeout (1.5 s) the library waits for.
+  Fixture f({"--reboot-silence", "2.0"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  ScopedLogCapture log(LogLevel::kInfo);
+  DeviceOptions o = Fixture::options();
+  o.reconnect.push_timeout = 3s;
+  auto dev = f.open(o);
+  rec.attach(*dev);
+  REQUIRE(f.sim->control(R"({"cmd":"set_status","omit_keys":[32774]})"));
+  REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
+
+  REQUIRE(dev->reboot().has_value());
+  REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 8s));
+  // Half a push timeout of silence after the last push, not the 3 s cap.
+  CHECK(log.count(LogLevel::kInfo, "reboot: powered down (pushes stopped)") == 1);
+  CHECK(dev->stats().reconnects == 1);
+}
+
+TEST_CASE(
+  "Reconnect: a LiDAR that keeps pushing after reboot() is reconnected after one push timeout",
+  "[sim][reconnect]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  ScopedLogCapture log(LogLevel::kInfo);
+  auto dev = f.open();
+  rec.attach(*dev);
+  // The ACK says success but the simulator does not reboot.
+  REQUIRE(f.sim->control(R"({"cmd":"fail_cmd","cmd_id":512,"ret":0})"));
+  REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
+
+  const auto t0 = std::chrono::steady_clock::now();
+  REQUIRE(dev->reboot().has_value());
+  REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 5s));
+  CHECK(std::chrono::steady_clock::now() - t0 >= Fixture::options().reconnect.push_timeout);
+  CHECK(log.count(LogLevel::kInfo, "reboot: powered down (still pushing)") == 1);
   CHECK(dev->stats().reconnects == 1);
 }
 

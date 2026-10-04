@@ -35,7 +35,7 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--pcap-rate` | 1.0 | `--pcap` speed: `2` replays twice as fast as recorded, `0` as fast as possible |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
-| `--reboot-delay` | 0 s | the LiDAR keeps running for this long after the 0x0200 / 0x0201 ACK before it powers down (a Mid-360 takes about 1.25 s, [#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) |
+| `--reboot-delay` | 0.3 s | the LiDAR keeps running for this long after the 0x0200 / 0x0201 ACK before it powers down (a Mid-360 takes about 1.25 s, [#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) |
 | `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after the power-down that follows 0x0200 / 0x0201 |
 | `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) |
 | `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and the IMU rate (200 pkt/s unless `0x002B` selects another) |
@@ -285,7 +285,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unicast discovery | answered like broadcast | verified on the same subnet: answered, but the ACK goes to 255.255.255.255 (`--discovery-ack-broadcast`, [#217](https://github.com/atinfinity/livox-mid360-core/issues/217)); from outside the broadcast domain still unverified |
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | verified: 56100 |
 | Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |
-| Reboot timing ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) | runs on for `--reboot-delay` (0 s), one ERROR push, `--reboot-silence` (0.5 s), then MOTORSTARTUP → target; `udp_cnt` and the clock restart | measured on firmware 13.18.0244: runs on for 1.25 s, ERROR pushes, silent until +8.9 s, first push MOTORSTARTUP (SELFCHECK / IDLE never pushed), READY at +13.5 s, then SAMPLING; the defaults stay short to keep tests fast |
+| Reboot timing ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) | runs on for `--reboot-delay` (0.3 s), one ERROR push, `--reboot-silence` (0.5 s), then MOTORSTARTUP → target; `udp_cnt` and the clock restart | measured on firmware 13.18.0244: runs on for 1.25 s, ERROR pushes, silent until +8.9 s, first push MOTORSTARTUP (SELFCHECK / IDLE never pushed), READY at +13.5 s, then SAMPLING; the defaults stay short to keep tests fast |
 | SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | SELFCHECK unknown; MOTORSTARTUP measured at 6.1–10.1 s on a Mid-360 ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)), kept short here to keep the tests fast |
 | `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |

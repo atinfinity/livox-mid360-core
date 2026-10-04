@@ -180,7 +180,10 @@ public:
   std::expected<InquireResult, DeviceError> inquire(
     std::span<const Key> keys, std::optional<RequestOptions> opts = std::nullopt);
   /// 0x0200. Once acknowledged the Device declares itself disconnected (kRebootRequested)
-  /// and, when ReconnectOptions::enabled, reconnects after the LiDAR comes back.
+  /// and, when ReconnectOptions::enabled, reconnects after the LiDAR comes back. A Mid-360
+  /// keeps running for about 1.25 s after the ACK, so the worker first waits for it to go
+  /// down: a push going into ERROR, half a push_timeout without a push, or at most one
+  /// push_timeout (#238). Device::reconnect() does not wait.
   std::expected<void, DeviceError> reboot(std::optional<RequestOptions> opts = std::nullopt);
   ///@}
 
