@@ -186,6 +186,21 @@ TEST_CASE("typed ACK conversions", "[session][detail]")
     CHECK(rej.error().kind == SessionErrorKind::kLidarRejected);
     CHECK(rej.error().error_key == 0x1234);
   }
+  SECTION("inquire rejection names the first requested key the ACK leaves out")
+  {
+    // A Mid-360 answers the supported keys and omits the unsupported ones (#228).
+    auto data = bytes({0x20, 1, 0, 0x00, 0x00, 1, 0, 0x01});  // ret 0x20, key 0x0000 = 1
+    const std::uint16_t requested[] = {0x0000, 0x0026, 0x002B};
+    const auto rej = detail::to_inquire_result(raw_ack(0x0101, data), requested);
+    REQUIRE_FALSE(rej.has_value());
+    CHECK(rej.error().ret_code == RetCode::kParamNotSupport);
+    CHECK(rej.error().error_key == 0x0026);
+    // Another ret_code keeps the first key of the ACK.
+    data[0] = std::byte{0x01};
+    const auto other = detail::to_inquire_result(raw_ack(0x0101, data), requested);
+    REQUIRE_FALSE(other.has_value());
+    CHECK(other.error().error_key == 0x0000);
+  }
   SECTION("work state missing from the result")
   {
     InquireResult empty;
