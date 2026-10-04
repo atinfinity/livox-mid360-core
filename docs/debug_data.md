@@ -24,7 +24,7 @@ livox-mid360-cli debug-data --out FILE [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] 
 | `--sn` | Pick the LiDAR with this serial number. |
 | `--duration` | Seconds to collect. Without it the run lasts until Ctrl-C. |
 | `--port` | Host UDP port of the stream, default 44332 (the port Livox-SDK2 uses). |
-| `--start-sampling` | Put the LiDAR into SAMPLING first and back to IDLE at the end. Without it the work state is left alone. |
+| `--start-sampling` | Put the LiDAR into SAMPLING first and back to IDLE at the end. Without it the work state is left alone; the Mid-360 sends the stream only while sampling ([#225](https://github.com/atinfinity/livox-mid360-core/issues/225)), so an IDLE LiDAR gives exit code 3. |
 | `--max-size` | File size limit in bytes, default 4294967296 (4 GiB). Reaching it ends the run with exit code 0. |
 
 The stop request (`0x0303` with `enable = 0`) is sent on every exit path after the device was

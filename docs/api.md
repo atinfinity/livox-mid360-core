@@ -792,7 +792,9 @@ opaque to this SDK, which delivers the datagrams as they arrive. The codec lives
   `HostSetup::ip` or the command socket's address, `host_port` the Context's debug data port.
   Without that socket it fails with `kInvalidState` before anything is sent.
   `stop_debug_data(opts)` sends `enable=0` and works without the socket. Neither depends on
-  the work state. Both are idempotent. A start that succeeded is replayed after a reconnect
+  the work state, but the stream only flows while the LiDAR samples: firmware 13.18.0244 ACKs
+  an enable in IDLE with `0x00` and sends nothing until sampling starts
+  ([#225](https://github.com/atinfinity/livox-mid360-core/issues/225)). Both are idempotent. A start that succeeded is replayed after a reconnect
   until a stop succeeds; the destructor does not stop the stream.
 - **Delivery**: `on_debug_data(cb)` receives every datagram as a `DebugDataPacket`
   (`host_receive_time_ns`, `from`, `data` valid during the call) on the receive thread. The
