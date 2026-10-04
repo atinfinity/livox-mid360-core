@@ -320,9 +320,10 @@ TEST_CASE("Reconnect: disabled means detect only; reconnect() recovers by hand",
   auto dev = f.open(o);
   rec.attach(*dev);
   CHECK(dev->reconnect().has_value());  // no-op while connected
-  REQUIRE(wait_until([&] { return dev->work_state().has_value(); }));
+  // The simulator powers on through MOTORSTARTUP towards SAMPLING; take the baseline once it
+  // has settled, or a slow runner records the transient state (#233).
+  REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }));
   const WorkState before = *dev->work_state();
-  REQUIRE(before != WorkState::kError);
 
   REQUIRE(f.sim->control(R"({"cmd":"silence","seconds":0.8})"));
   REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
