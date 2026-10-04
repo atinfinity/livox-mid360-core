@@ -134,8 +134,8 @@ rep=$(sed -n 's/^packets=\([0-9]*\) .*/\1/p' <<< "$replay")
 if [[ $status = 0 && -n $rec && $rec = "$rep" ]]; then verdict=PASS; else verdict=FAIL; fi
 result "record / replay" "$verdict" "exit=$status; recorded packets=${rec:-?}; replay: ${replay:-failed}"
 
-# 4. Debug raw data (0x0303, #106).
-"$cli" debug-data --out "$out/debug_data.bin" "${target[@]}" --duration 10 > "$out/debug_data.log" 2>&1
+# 4. Debug raw data (0x0303, #106). The stream flows only while the LiDAR samples (#225).
+"$cli" debug-data --out "$out/debug_data.bin" "${target[@]}" --duration 10 --start-sampling > "$out/debug_data.log" 2>&1
 status=$?
 wrote=$(grep '^wrote ' "$out/debug_data.log" | tail -n 1)
 dpk=$(sed -n 's/^wrote .* packets=\([0-9]*\) .*/\1/p' <<< "$wrote")

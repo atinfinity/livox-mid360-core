@@ -70,7 +70,7 @@ with the firewall disabled first, so that a failure is not mistaken for a librar
 | `minimal_receive` | Discovery finds the LiDAR (by broadcast unless `--lidar-ip` is given), frames arrive and `bad=0` |
 | `collect_firmware_log` | At least one firmware log file is written and not empty |
 | `livox-mid360-cli record` / `replay` | 10 s are recorded and the replay reads the same number of packets |
-| `livox-mid360-cli debug-data` | At least one debug raw data packet is written |
+| `livox-mid360-cli debug-data --start-sampling` | At least one debug raw data packet is written (the stream needs SAMPLING) |
 | `tools/livox_mid360_probe.py` | The LiDAR answers the discovery; the answers to the #11 questions are in `probe.json` |
 
 ```sh
