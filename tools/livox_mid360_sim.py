@@ -43,7 +43,7 @@ import livox_mid360_proto as proto  # noqa: E402
 CMD_DISCOVERY, CMD_PARAM_CONFIG, CMD_PARAM_INQUIRE, CMD_INFO_PUSH = 0x0000, 0x0100, 0x0101, 0x0102
 CMD_REBOOT, CMD_FACTORY_RESET, CMD_SET_GPS_TIME = 0x0200, 0x0201, 0x0202
 CMD_PUSH_LOG, CMD_COLLECTION_LOG = 0x0300, 0x0301  # firmware log (#44), LiDAR port 56500
-CMD_DEBUG_DATA = 0x0303  # debug raw data (#93), accepted on the log and the command port
+CMD_DEBUG_DATA = 0x0303  # debug raw data (#93), log port only: the command port does not answer
 REQ, ACK = 0, 1
 SENDER_HOST, SENDER_LIDAR = 0, 1
 
@@ -1219,7 +1219,7 @@ class Simulator:
             self.model.factory_reset(up)
         else:
             self.model.reboot(up)
-        self.debug_dest = None  # [unverified] assumed not to survive a reboot
+        self.debug_dest = None  # [unverified] assumed not to survive a reboot (#106)
         for f in self.faults.values():
             f.held = None  # still in the LiDAR when it powered down
         self.debug_seq = 0
@@ -1248,8 +1248,8 @@ class Simulator:
             return
         if kind == 'discovery' and frame.cmd_id != CMD_DISCOVERY:
             return
-        if kind == 'cmd' and frame.cmd_id == CMD_DISCOVERY:
-            return
+        if kind == 'cmd' and frame.cmd_id in (CMD_DISCOVERY, CMD_DEBUG_DATA):
+            return  # the Mid-360 does not answer 0x0303 on the command port (#106)
         if kind == 'log':
             if frame.cmd_id == CMD_PUSH_LOG:  # host ACK for a pushed chunk (REQ 0x0300)
                 self._on_log_ack(frame, addr)
@@ -1471,14 +1471,15 @@ class Simulator:
         """
         Apply a 0x0303 request and return whether it was accepted.
 
-        A repeated enable moves the stream to the new destination; a disable while disabled
-        is accepted [unverified, #11].
+        As on a Mid-360 (#106): a repeated enable moves the stream to the new destination, a
+        disable while disabled is accepted, and an enable with port 0 is accepted and stops the
+        stream. The stream only flows while sampling (see tick()).
         """
-        if not enable:
+        if not enable or dest[1] == 0:
             self.debug_dest = None
             self.emit(event='debug_data', enabled=False)
             return True
-        if dest[1] == 0 or self._debug_socket() is None:
+        if self._debug_socket() is None:
             return False
         if self.debug_dest is None:
             self.next_debug = time.monotonic()
@@ -1568,7 +1569,9 @@ class Simulator:
             for stream in list(self.log_streams.values()):
                 self._send_log_chunk(stream)
             self.next_log = max(self.next_log + self.args.log_chunk_interval, now)
-        if self.debug_dest is not None:
+        if self.debug_dest is not None and not m.sampling:
+            self.next_debug = now  # the Mid-360 sends the stream only while sampling (#225)
+        elif self.debug_dest is not None:
             budget = 64  # bound catch-up bursts
             while now >= self.next_debug and budget > 0:
                 self._send_debug_data()
@@ -1855,7 +1858,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='seconds between debug raw data datagrams while 0x0303 has enabled them',
     )
     p.add_argument(
-        '--debug-data-bytes', type=int, default=1024, help='size of a debug raw data datagram'
+        '--debug-data-bytes', type=int, default=1114, help='size of a debug raw data datagram'
     )
     p.add_argument('--quit-on-eof', action='store_true', default=True)
     p.add_argument('--no-quit-on-eof', dest='quit_on_eof', action='store_false')

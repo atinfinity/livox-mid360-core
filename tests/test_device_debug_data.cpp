@@ -177,8 +177,13 @@ TEST_CASE("Device: debug data start, delivery, idempotence and stop", "[sim][dev
   CHECK(dev->stats().debug_data_packets == 0);
   CHECK(dev->stats().last_debug_data_time_ns == 0);
 
-  // No work-state precondition: the stream starts before sampling does.
+  // No work-state precondition for the request, but like a Mid-360 the simulator streams only
+  // while sampling (#225).
+  REQUIRE(dev->stop_sampling().has_value());
   REQUIRE(dev->start_debug_data().has_value());
+  std::this_thread::sleep_for(200ms);
+  CHECK(rec.packets == 0);
+  REQUIRE(dev->start_sampling().has_value());
   REQUIRE(wait_until([&] { return rec.packets >= 5; }));
   {
     const std::string s = status(*sim);
@@ -187,7 +192,6 @@ TEST_CASE("Device: debug data start, delivery, idempotence and stop", "[sim][dev
   }
   REQUIRE(dev->start_debug_data().has_value());  // idempotent
   // The point cloud keeps flowing next to the debug stream.
-  REQUIRE(dev->start_sampling().has_value());
   const auto before = rec.packets.load();
   REQUIRE(wait_until([&] { return frames >= 3 && rec.packets >= before + 5; }));
 

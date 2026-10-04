@@ -1177,11 +1177,24 @@ class EndToEndTest(unittest.TestCase):
                     enable, '127.0.0.1', sock.getsockname()[1], reserved
                 )
 
-            # Rejected: short payload, enable with port 0. Nothing is opened for them.
+            # A short payload is rejected; an enable with port 0 is accepted without a stream,
+            # as on a Mid-360 (#106). Nothing is opened for them.
             self.assertEqual(self.request(sim.CMD_DEBUG_DATA, b'\x01\x7f\x00', log).data, b'\x01')
             zero = proto.encode_debug_data_control(True, '127.0.0.1', 0)
-            self.assertEqual(self.request(sim.CMD_DEBUG_DATA, zero, log).data, b'\x01')
+            self.assertEqual(self.request(sim.CMD_DEBUG_DATA, zero, log).data, b'\x00')
             self.assertIsNone(self.s.debug_sock)
+            self.assertIsNone(self.s.debug_dest)
+            # The command port does not answer 0x0303 (#106).
+            self.seq += 1
+            enable = proto.CommandFrame(self.seq, sim.CMD_DEBUG_DATA, 0, 0, control(True, host))
+            self.host.sendto(enable.encode(), cmd)
+            self.host.settimeout(0.2)
+            try:
+                with self.assertRaises(TimeoutError):
+                    self.host.recvfrom(2048)
+            finally:
+                self.host.settimeout(3)
+            self.assertIsNone(self.s.debug_dest)
             # A disable before any enable is accepted.
             self.assertEqual(
                 self.request(sim.CMD_DEBUG_DATA, control(False, host), log).data, b'\x00'
@@ -1204,9 +1217,9 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(ev['port'], source_port)
             self.assertEqual(ev['dest'], f'127.0.0.1:{host.getsockname()[1]}')
 
-            # A repeated enable, here on the command port, moves the stream.
+            # A repeated enable moves the stream.
             self.assertEqual(
-                self.request(sim.CMD_DEBUG_DATA, control(True, other, 100), cmd).data, b'\x00'
+                self.request(sim.CMD_DEBUG_DATA, control(True, other, 100), log).data, b'\x00'
             )
             d, addr = other.recvfrom(2048)
             self.assertEqual(addr[1], source_port)
