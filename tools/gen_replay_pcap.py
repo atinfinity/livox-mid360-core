@@ -141,7 +141,7 @@ def records() -> list[tuple[int, bytes]]:
 
     out.append((0, arp_frame()))
     host(1000, '255.255.255.255', p.PORT_DISCOVERY, p.CommandFrame(1, 0, 0, 0).encode())
-    ack = bytes([0, sim.PROVISIONAL_DEV_TYPE]) + b'REPLAY0000000001'
+    ack = bytes([0, p.DEV_TYPE_MID360]) + b'REPLAY0000000001'
     ack += bytes(int(x) for x in LIDAR_IP.split('.')) + struct.pack('<H', p.PORT_CMD)
     lidar(2000, p.PORT_DISCOVERY, 56001, p.CommandFrame(1, 0, 1, 1, ack).encode())
     kvs = [(sim.KEY_PCL_HOST, p.encode_host_ipcfg(HOST_IP, 56301, p.PORT_PCL))]

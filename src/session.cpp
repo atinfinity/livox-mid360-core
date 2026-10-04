@@ -99,6 +99,17 @@ std::string_view to_string(SessionErrorKind kind) noexcept
   return "unknown";
 }
 
+std::string_view to_string(DeviceType type) noexcept
+{
+  switch (type) {
+    case DeviceType::kUnknown:
+      return "unknown";
+    case DeviceType::kMid360:
+      return "mid360";
+  }
+  return "unknown";
+}
+
 std::string to_string(const SessionError & err)
 {
   std::string s(to_string(err.kind));
@@ -236,10 +247,11 @@ std::expected<std::vector<DiscoveredDevice>, SessionError> discover(
         if (!dev) {
           continue;
         }
+        const bool wanted = !options.device_type || dev->device_type() == *options.device_type;
         const bool dup = std::any_of(found.begin(), found.end(), [&](const DiscoveredDevice & f) {
           return f.serial_number == dev->serial_number;
         });
-        if (!dup) {
+        if (wanted && !dup) {
           found.push_back(std::move(*dev));
         }
         if (unicast) {

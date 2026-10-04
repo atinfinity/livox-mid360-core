@@ -50,6 +50,9 @@ PORT_DISCOVERY, PORT_CMD, PORT_PUSH, PORT_PCL, PORT_IMU, PORT_LOG = (
 # Debug raw data (#93, verified in #106): LiDAR source port, host destination port (SDK2).
 PORT_DEBUG_DATA, HOST_PORT_DEBUG_DATA = 60301, 44332
 
+# dev_type in the 0x0000 ACK of a Mid-360 (firmware 13.18.0244, #110); see DeviceType (#58).
+DEV_TYPE_MID360 = 9
+
 SAMPLE_SIZE = {0: 24, 1: 14, 2: 8, 3: 10}
 SAMPLE_FMT = {0: '<6f', 1: '<iiiBB', 2: '<hhhBB', 3: '<IHHBB'}
 
