@@ -1028,6 +1028,38 @@ TEST_CASE("Device: firmware log without on_firmware_log still counts and ACKs", 
   REQUIRE(dev->stop_firmware_log().has_value());
 }
 
+TEST_CASE("Device: firmware log starts when the LiDAR does not support key 0x0009", "[sim][device]")
+{
+  // Firmware 13.18.0244 answers PARAM_NOTSUPPORT to key 0x0009 and pushes the log to the
+  // sender of the 0x0301 (#223).
+  Fixture f({"--log-chunk-interval", "0.02", "--log-ignore-hostcfg"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+  REQUIRE(f.sim->control(R"({"cmd":"fail_cmd","cmd_id":256,"ret":32,"key":9,"count":100})"));
+  std::atomic<std::uint64_t> n{0};
+  REQUIRE(dev->on_firmware_log([&](const FirmwareLogChunk &) { ++n; }).has_value());
+  REQUIRE(dev->start_firmware_log().has_value());
+  REQUIRE(wait_until([&] { return n >= 3; }));
+  REQUIRE(dev->stop_firmware_log().has_value());
+}
+
+TEST_CASE("Device: firmware log start fails when the LiDAR rejects key 0x0009", "[sim][device]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+  REQUIRE(f.sim->control(R"({"cmd":"fail_cmd","cmd_id":256,"ret":1,"key":9})"));
+  const auto r = dev->start_firmware_log();
+  REQUIRE(!r.has_value());
+  REQUIRE(r.error().session.has_value());
+  CHECK(r.error().session->kind == SessionErrorKind::kLidarRejected);
+  CHECK(r.error().session->error_key == 0x0009);
+}
+
 TEST_CASE(
   "Device: firmware log start times out when the LiDAR ignores the log port", "[sim][device]")
 {

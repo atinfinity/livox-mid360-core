@@ -40,7 +40,7 @@ ctest --test-dir build --output-on-failure -j4
 The summary of the test run should read:
 
 ```
-100% tests passed, 0 tests failed out of 256
+100% tests passed, 0 tests failed out of 258
 ```
 
 Many tests start the Python simulator on `127.0.0.1`. On macOS a few multi-device tests are

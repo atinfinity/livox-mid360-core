@@ -627,7 +627,8 @@ struct Device::Impl : detail::Receiver
     return host_ip.value_or(session.local_endpoint().ip);
   }
 
-  /// Key 0x0009 → this host / the Context's log port, then 0x0301. Under cmd_mutex.
+  /// Key 0x0009 → this host / the Context's log port (skipped when unsupported), then 0x0301.
+  /// Under cmd_mutex.
   std::expected<void, DeviceError> log_control_locked(
     FirmwareLogType type, bool enable, std::optional<RequestOptions> opts)
   {
@@ -639,7 +640,17 @@ struct Device::Impl : detail::Receiver
       const auto value = encode_host_ip_config({ip, context.options.log_port, kLogPort});
       const KeyValue kv[] = {{static_cast<std::uint16_t>(Key::kLogHostIpCfg), value}};
       if (auto r = session.configure(kv, opts); !r) {
-        return std::unexpected(wrap(r.error()));
+        // Firmware 13.18.0244 answers PARAM_NOTSUPPORT and pushes the log to the sender of
+        // the 0x0301, which is the Context's log socket (#223).
+        const auto & e = r.error();
+        const bool unsupported = e.kind == SessionErrorKind::kLidarRejected &&
+                                 e.ret_code == RetCode::kParamNotSupport &&
+                                 e.error_key == static_cast<std::uint16_t>(Key::kLogHostIpCfg);
+        if (!unsupported) {
+          return std::unexpected(wrap(e));
+        }
+        LIVOX_LOG(
+          LogLevel::kDebug, serial, "key 0x0009 not supported, the log goes to the 0x0301 sender");
       }
     }
     const auto payload = encode_firmware_log_control({.log_type = type, .enable = enable});
