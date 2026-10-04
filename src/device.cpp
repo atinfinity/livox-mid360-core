@@ -1186,6 +1186,12 @@ std::expected<std::unique_ptr<Device>, DeviceError> Device::open(
     rc.max_backoff < rc.initial_backoff || rc.discovery_timeout.count() <= 0) {
     return std::unexpected(error(DeviceError::Kind::kInvalidArgument));
   }
+  if (device.device_type() != DeviceType::kMid360) {
+    // The raw value may be a variant this SDK works with, so this is not an error (#58).
+    LIVOX_LOG(
+      LogLevel::kWarn, device.serial_number, "dev_type {} is not a Mid-360 ({}); continuing",
+      device.dev_type, kMid360DevType);
+  }
   std::stop_source stop;
   SessionOptions sopts = opts.session;
   if (sopts.bind_address == Ipv4{0, 0, 0, 0}) {

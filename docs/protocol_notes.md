@@ -15,9 +15,11 @@ actual contents here.
 
 ## Discovery ACK `dev_type`
 
-The wiki does not list the enumeration for `dev_type`. The library keeps it as a raw `uint8_t`.
-A Mid-360 with firmware 13.18.0244 reports **9** and `cmd_port` 56100 (2026-10-04,
-[#110](https://github.com/atinfinity/livox-mid360-core/issues/110)).
+The wiki does not list the enumeration for `dev_type`. A Mid-360 with firmware 13.18.0244
+reports **9** and `cmd_port` 56100 (2026-10-04,
+[#110](https://github.com/atinfinity/livox-mid360-core/issues/110)). The library keeps the raw
+`uint8_t` and maps it with `DeviceType`: 9 is `kMid360`, every other value `kUnknown`
+([#58](https://github.com/atinfinity/livox-mid360-core/issues/58)).
 
 ## Discovery ACK destination
 

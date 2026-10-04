@@ -15,7 +15,6 @@ Behaviour the simulator assumes and that must be reconciled with hardware (#11):
   * unicast discovery is answered like broadcast discovery (by default to the sender; a
     Mid-360 sends the ACK to 255.255.255.255, see --discovery-ack-broadcast and #217),
   * settings persist across 0x0200 reboot except work_tgt_mode,
-  * dev_type in the discovery ACK is a provisional value,
   * losing time synchronisation leaves the clock where it was (no step back, #133).
 """
 
@@ -71,7 +70,6 @@ RET_PARAM_NOT_SUPPORT, RET_PARAM_READ_ONLY, RET_PARAM_INVALID_LEN, RET_OUT_OF_RA
     0x03,
 )
 RET_PARAM_REBOOT_EFFECT = 0x21  # accepted, takes effect after reboot (kParamRebootEffect)
-PROVISIONAL_DEV_TYPE = 9  # [unverified] see docs/protocol_notes.md / #11
 
 KEY_PCL_DATA_TYPE, KEY_PATTERN_MODE, KEY_LIDAR_IPCFG = 0x0000, 0x0001, 0x0004
 KEY_STATE_HOST, KEY_PCL_HOST, KEY_IMU_HOST = 0x0005, 0x0006, 0x0007
@@ -1323,7 +1321,7 @@ class Simulator:
             sn = m.sn.encode().ljust(16, b'\0')[:16]
             ip = bytes(int(x) for x in self.advertised_ip(addr[:2]).split('.'))
             return RET_OK, struct.pack(
-                '<BB16s4sH', RET_OK, PROVISIONAL_DEV_TYPE, sn, ip, self.ports['cmd']
+                '<BB16s4sH', RET_OK, self.args.dev_type, sn, ip, self.ports['cmd']
             )
         if f.cmd_id == CMD_PARAM_CONFIG:
             try:
@@ -1774,6 +1772,12 @@ def build_parser() -> argparse.ArgumentParser:
         help='send the 0x0000 ACK to 255.255.255.255 at the sender port, as a Mid-360 does',
     )
     p.add_argument('--sn', default='SIM0000000000001')
+    p.add_argument(
+        '--dev-type',
+        type=int,
+        default=proto.DEV_TYPE_MID360,
+        help='dev_type byte in the 0x0000 ACK (default: the Mid-360 value)',
+    )
     p.add_argument('--product-info', default='MID360-SIM', help='key 0x8001 (<= 64 chars)')
     p.add_argument('--version-app', default='0.0.0.1', help='key 0x8002 as a.b.c.d')
     p.add_argument('--version-loader', default='0.0.0.1', help='key 0x8003 as a.b.c.d')
@@ -1877,6 +1881,8 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if len(args.sn) > 16:
         sys.exit('--sn must be at most 16 characters')
+    if not 0 <= args.dev_type <= 0xFF:
+        sys.exit('--dev-type must be 0..255')
     if args.pcap_rate < 0:
         sys.exit('--pcap-rate must not be negative')
     if args.pcap is not None:

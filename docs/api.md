@@ -63,6 +63,10 @@ dev.reset();  // before ctx
   `stop_sampling()` do (`work_tgt_mode` plus `wait_for_state`, bounded by
   `host_setup.wait_timeout`). `start_sampling()` is idempotent; `stop_sampling()` discards a
   partial frame.
+- `DiscoveredDevice::device_type()` maps the raw `dev_type` byte of the discovery ACK to
+  `DeviceType::kMid360` (9) or `kUnknown`; the raw byte is kept. `DiscoveryOptions::device_type`
+  keeps only the answers of one type. `Device::open` logs a warning for a device that is not
+  a Mid-360 and continues, since the value may be a variant this SDK works with (#58).
 - `Device` and `Context` are non-copyable and non-movable; `open`/`create` return
   `std::unique_ptr` so the pointer doubles as the future C handle. Every Device must be
   destroyed before its Context (asserted in debug builds).

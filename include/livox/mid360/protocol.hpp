@@ -389,7 +389,7 @@ void append_key_value_list(std::vector<std::byte> & out, std::span<const KeyValu
 struct DiscoveryAck
 {
   RetCode ret_code;                      ///< result of the request
-  std::uint8_t dev_type;                 ///< raw device type; the wiki lists no Mid-360 value
+  std::uint8_t dev_type;                 ///< raw device type; see DeviceType in session.hpp
   std::array<char, 16> serial_number;    ///< NUL-padded
   std::array<std::uint8_t, 4> lidar_ip;  ///< IPv4 address, first octet first
   std::uint16_t cmd_port;                ///< LiDAR command port

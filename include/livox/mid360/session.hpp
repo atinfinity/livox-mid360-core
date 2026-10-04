@@ -76,14 +76,40 @@ struct SessionError
 // Discovery
 // ---------------------------------------------------------------------------
 
+/// Device type named by the `dev_type` byte of the 0x0000 ACK (#58). The wiki lists no
+/// enumeration; only the Mid-360 value is known (9, recorded on hardware in #110).
+enum class DeviceType : std::uint8_t
+{
+  kUnknown,  ///< any other value; the raw byte stays in DiscoveredDevice::dev_type
+  kMid360,
+};
+
+/// `dev_type` a Mid-360 reports in the 0x0000 ACK.
+inline constexpr std::uint8_t kMid360DevType = 9;
+
+/// Map a raw `dev_type` byte; every value other than kMid360DevType is kUnknown.
+[[nodiscard]] constexpr DeviceType to_device_type(std::uint8_t dev_type) noexcept
+{
+  return dev_type == kMid360DevType ? DeviceType::kMid360 : DeviceType::kUnknown;
+}
+
+/// "mid360" or "unknown".
+[[nodiscard]] std::string_view to_string(DeviceType type) noexcept;
+
 /// One LiDAR that answered the 0x0000 discovery broadcast.
 struct DiscoveredDevice
 {
   std::string serial_number;   ///< from the ACK, NUL padding removed
   Ipv4 ip{};                   ///< lidar_ip from the ACK
   std::uint16_t cmd_port = 0;  ///< command port from the ACK
-  std::uint8_t dev_type = 0;   ///< device type code from the ACK
+  std::uint8_t dev_type = 0;   ///< device type code from the ACK, kept raw
   Endpoint from;               ///< where the ACK actually came from
+
+  /// `dev_type` as a DeviceType.
+  [[nodiscard]] constexpr DeviceType device_type() const noexcept
+  {
+    return to_device_type(dev_type);
+  }
 };
 
 /// Parameters of discover().
@@ -98,6 +124,9 @@ struct DiscoveryOptions
   /// Optional stop token: when a stop is requested the call returns kCancelled within about
   /// 100 ms (issue #8: the Device's reconnect thread must be interruptible).
   std::stop_token stop;
+  /// Keep only the devices of this type (#58); nullopt keeps every answer. A unicast target
+  /// whose answer is filtered out still counts as answered.
+  std::optional<DeviceType> device_type;
 };
 
 /// Send 0x0000 and collect ACKs. Duplicates (same serial number) are collapsed, first wins.
