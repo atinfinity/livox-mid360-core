@@ -769,10 +769,13 @@ socket (verified on firmware 13.18.0244; the protocol document names key `0x0009
 - **Sample**: `examples/collect_firmware_log.cpp` writes one file per firmware log file
   (`<SN>_<UTC start>_<type>_<file_index>.log`) and prints a progress line per second; see
   `examples/README.md`. The simulator streams synthetic chunks (`--log-chunk-interval`,
-  `--log-ack-every`, `log_drop` / `log_new_file` controls, [simulator.md](simulator.md)).
+  `--log-ack-first`, `--log-ack-every`, `log_drop` / `log_new_file` controls,
+  [simulator.md](simulator.md)).
 - **Verified on hardware** (firmware 13.18.0244, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): pushes go to the `0x0301` sender;
   without the host ACK the LiDAR resends the same chunk; `0x0301` for the exception log
-  (type 1) is ACKed with `0x00` but no chunk arrived within 6 s.
+  (type 1) is ACKed with `0x00` but no chunk arrived within 6 s. A file begins at
+  `trans_index` 0, only chunks 0-8 ask for the ACK, and a disable sends no end chunk, so
+  the `FirmwareLogFlags::file_end()` bit was never seen ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)).
 - **Unverified on hardware**: the `ret_code` of a repeated enable, the meaning of
   `timestamp` / `file_num` and the frame type of the host ACK.
 
