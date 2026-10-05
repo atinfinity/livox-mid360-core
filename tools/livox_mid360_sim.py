@@ -348,7 +348,12 @@ class DeviceModel:
 
     def reboot(self, now: float) -> None:
         self.powerup_cnt += 1
-        self.settings[KEY_WORK_TGT_MODE] = bytes([WS_SAMPLING])  # only tgt mode is not persisted
+        # Every setting persists, work_tgt_mode included; the host ipcfg keys read back with
+        # src_port 0 although the LiDAR keeps sending from its fixed ports (#12, #250).
+        for key in (KEY_STATE_HOST, KEY_PCL_HOST, KEY_IMU_HOST):
+            value = self.settings.get(key)
+            if value is not None and len(value) >= 8:
+                self.settings[key] = value[:6] + b'\x00\x00' + value[8:]
         self.power_on(now)
 
     def factory_reset(self, now: float) -> None:

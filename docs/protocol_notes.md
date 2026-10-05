@@ -136,8 +136,11 @@ Consequences for the SDK:
   `READY` followed at 13.5 s and then the `work_tgt_mode` target
   ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)). `udp_cnt`, the
   timestamp and the debug raw data stream do not survive. The wiki marks `work_tgt_mode` as
-  not persisted (default `SAMPLING`); the capture cannot confirm it, since the target was
-  `SAMPLING` before the reboot too.
+  not persisted (default `SAMPLING`), but firmware 13.18.0244 keeps it: a LiDAR set to `IDLE`
+  came back `IDLE`, one set to `SAMPLING` came back sampling ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12)). The other written keys
+  (`pcl_data_type`, `install_attitude`, FOV 0, `fov_en`, `detect_mode`, `imu_data_en` and the
+  host ip / dst port of `0x0005`–`0x0007`) persist too; the `src_port` of `0x0005`–`0x0007`
+  reads back as 0, while the LiDAR keeps sending from its fixed ports (56200 / 56300 / 56400).
 
 Settled by the figure: the states, the edges and which targets are requestable. Still
 **unverified** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) and
@@ -146,7 +149,7 @@ answered during it; whether the pass-through `READY` is visible in the push (it 
 `0x0101` poll, see above); the return codes for a `work_tgt_mode` write of 4 / 5 / 6 / 8 (assumed
 `0x20`), of an undefined value (assumed `0x03`) and in `ERROR` / `UPGRADE` (assumed `0x02`);
 whether a write during `SELFCHECK` / `MOTORSTARTUP` is accepted and followed (assumed yes);
-whether `0x07` is ever reported; the persistence of `work_tgt_mode`; and whether a changed
+whether `0x07` is ever reported; and whether a changed
 `pattern_mode` really restarts the motor ("scan mode changed" edge). The simulator no longer
 models that edge: it accepts only `pattern_mode` 0, the one pattern the base Mid-360 has, and
 answers 1 / 2 with `0x20`.
