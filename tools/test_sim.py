@@ -358,7 +358,8 @@ class DeviceModelTest(unittest.TestCase):
         ret, _ = self.m.inquire([0x7FFF], 0)
         self.assertEqual(ret, sim.RET_PARAM_NOT_SUPPORT)
 
-    def test_reboot_keeps_settings_but_resets_target_mode(self) -> None:
+    def test_reboot_keeps_settings_and_target_mode(self) -> None:
+        # A Mid-360 (13.18.0244) keeps work_tgt_mode across 0x0200, IDLE and SAMPLING (#250).
         self.m.power_on(0.0)
         self.m.tick(1.0)
         self.m.configure(
@@ -368,10 +369,31 @@ class DeviceModelTest(unittest.TestCase):
         self.assertEqual(self.m.work_state, sim.WS_SELFCHECK)
         self.assertTrue(self.m.imu_enabled)
         self.assertEqual(self.m.powerup_cnt, 2)
+        self.assertEqual(self.m.settings[sim.KEY_WORK_TGT_MODE], bytes([sim.WS_IDLE]))
         self.m.tick(5.1)
-        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)  # target is SAMPLING again
-        self.m.tick(6.1)
-        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)  # the target is still IDLE
+        self.m.tick(10.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+
+        self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_SAMPLING]))])
+        self.m.reboot(20.0)
+        self.assertEqual(self.m.settings[sim.KEY_WORK_TGT_MODE], bytes([sim.WS_SAMPLING]))
+        self.m.tick(20.1)
+        self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+
+    def test_reboot_zeroes_the_host_src_ports(self) -> None:
+        # The host ipcfg keys read back with src_port 0 after 0x0200; ip and dst port stay (#250).
+        self.m.configure(
+            [
+                (sim.KEY_STATE_HOST, proto.encode_host_ipcfg('192.168.1.5', 56211, 56201)),
+                (sim.KEY_PCL_HOST, proto.encode_host_ipcfg('192.168.1.5', 56311, 56301)),
+                (sim.KEY_IMU_HOST, proto.encode_host_ipcfg('192.168.1.5', 56411, 56401)),
+            ]
+        )
+        self.m.reboot(5.0)
+        self.assertEqual(self.m.host(sim.KEY_STATE_HOST), ('192.168.1.5', 56211, 0))
+        self.assertEqual(self.m.host(sim.KEY_PCL_HOST), ('192.168.1.5', 56311, 0))
+        self.assertEqual(self.m.host(sim.KEY_IMU_HOST), ('192.168.1.5', 56411, 0))
 
     def test_factory_reset_restores_defaults(self) -> None:
         self.m.configure([(sim.KEY_IMU_EN, b'\x01'), (sim.KEY_PCL_DATA_TYPE, b'\x03')])

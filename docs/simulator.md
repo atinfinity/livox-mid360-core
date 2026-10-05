@@ -166,7 +166,8 @@ The process is driven over its standard streams so that any test harness can use
   MOTORSTARTUP as on a Mid-360, and the push and log chunks resume after the silence. A
   second 0x0200 / 0x0201 during the delay does not postpone the power-down; a factory reset
   among them wins. Reboot keeps every
-  setting except `work_tgt_mode`; factory reset restores `factory_settings()` except key
+  setting, `work_tgt_mode` included, but zeroes the `src_port` of `0x0005`–`0x0007` as a
+  Mid-360 does (the simulator keeps sending from its own ports); factory reset restores `factory_settings()` except key
   `0x0004`, which goes back to the address the simulator started on (it cannot move to the
   real factory address 192.168.1.100; after a rebind it moves back). All durations
   and the return codes are assumptions ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
@@ -293,7 +294,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | `dev_type` in the discovery ACK | 9 (`--dev-type`) | verified: a Mid-360 (firmware 13.18.0244) reports 9 |
 | Unicast discovery | answered like broadcast | verified on the same subnet: answered, but the ACK goes to 255.255.255.255 (`--discovery-ack-broadcast`, [#217](https://github.com/atinfinity/livox-mid360-core/issues/217)); from outside the broadcast domain still unverified |
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | verified: 56100 |
-| Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |
+| Persistence across reboot | all keys, `work_tgt_mode` included; `src_port` of `0x0005`–`0x0007` reads back 0 | verified on firmware 13.18.0244 for the keys a host writes ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12), [#250](https://github.com/atinfinity/livox-mid360-core/issues/250)); the wiki marks `work_tgt_mode` as volatile, the firmware keeps it |
 | Reboot timing ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) | runs on for `--reboot-delay` (0.3 s), one ERROR push, `--reboot-silence` (0.5 s), then MOTORSTARTUP → target; `udp_cnt` and the clock restart | measured on firmware 13.18.0244: runs on for 1.25 s, ERROR pushes, silent until +8.9 s, first push MOTORSTARTUP (SELFCHECK / IDLE never pushed), READY at +13.5 s, then SAMPLING; the defaults stay short to keep tests fast |
 | SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | SELFCHECK unknown; MOTORSTARTUP measured at 6.1–10.1 s on a Mid-360 ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)), kept short here to keep the tests fast |
 | `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
