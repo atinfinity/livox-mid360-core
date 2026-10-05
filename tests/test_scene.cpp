@@ -300,7 +300,8 @@ TEST_CASE("ring scene: FOV cropping keeps exactly the points inside the window",
   rec.attach(*dev);
   // Yaw [0, 90) and pitch [0, 15]: azimuth 0 is kept and 90 is not, pitch 15 is kept and
   // -5 is not. The simulator crops on the exact angles, whatever the data type [unverified
-  // firmware behaviour, #11].
+  // firmware behaviour, #11]. As on a Mid-360 (#246), a cropped point stays in the packet at
+  // the origin with reflectivity 60 and tag 0.
   REQUIRE(dev
             ->set_fov(FovSettings{
               .fov0 =
@@ -326,12 +327,22 @@ TEST_CASE("ring scene: FOV cropping keeps exactly the points inside the window",
     REQUIRE(dev->set_point_format(t).has_value());
     std::set<unsigned> seen;
     for (const Frame & fr : rec.collect(t, 2)) {
-      const Deviation d = deviation(fr.points);
+      std::vector<Point> inside;
+      std::size_t cropped = 0;
+      for (const Point & p : fr.points) {
+        if (p.x == 0.0F && p.y == 0.0F && p.z == 0.0F) {
+          CHECK(p.reflectivity == 60);
+          CHECK(p.tag == 0);
+          ++cropped;
+        } else {
+          inside.push_back(p);
+          seen.insert(p.reflectivity);
+        }
+      }
+      CHECK(cropped > inside.size());  // 48 of the 256 ring points lie inside
+      const Deviation d = deviation(inside);
       CHECK(d.max_m <= tolerance(t));
       CHECK(d.tag_mismatches == 0);
-      for (const Point & p : fr.points) {
-        seen.insert(p.reflectivity);
-      }
     }
     CHECK(seen == want);
   }

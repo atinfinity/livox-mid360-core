@@ -196,8 +196,9 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
 - **Frame counter mode** (default): a frame closes when the header `frame_cnt` changes. The
   Mid-360 is a non-repetitive scanner and the wiki marks `frame_cnt` invalid for that, so if
   the counter has not changed for `2 × window` since the first packet the assembler falls back
-  to the time window and counts it in `DeviceStats::frame_cnt_fallback` (to be checked on
-  hardware, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). Livox's sample
+  to the time window and counts it in `DeviceStats::frame_cnt_fallback`. A Mid-360 on
+  firmware 13.18.0244 leaves `frame_cnt` at 0, so it always takes this fallback ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246));
+  `kTimeWindow` skips the `2 × window` wait. Livox's sample
   `.lvx2` recordings have `frame_counter` 0, a field the LVX2 specification marks reserved, so
   a replay of them takes this fallback and its first frame covers `2 × window`; `kTimeWindow`
   avoids that ([lvx2.md](lvx2.md#livox-sample-files)).

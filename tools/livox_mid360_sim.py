@@ -140,9 +140,13 @@ READ_ONLY = {
 }
 
 POINTS_PER_PACKET = 96
-MAX_FOV_DRAWS = 16  # batches of POINTS_PER_PACKET drawn per packet while FOV cropping
+# What a Mid-360 puts in place of a point outside the FOV windows (#246): the packet keeps its
+# 96 points. Measured in Cartesian32; [unverified] that the other types zero the same fields.
+CROPPED_SAMPLE = (0, 0, 0, 60, 0)
 CATCH_UP_SLICE_S = 0.02  # longest point-cloud burst between two select() calls (#183)
-PCL_PACKET_RATE = 2000.0  # packets/s  (≈192k points/s)
+# A Mid-360 sends a point cloud packet every 480 us, its points spanning 475 us (#246).
+PCL_PACKET_RATE = 1e6 / 480  # packets/s  (200k points/s)
+PCL_TIME_INTERVAL_RATIO = 4750 / 4800  # time_interval / packet period
 IMU_RATE = 200.0  # at imu_sensor_cfg output_rate 0
 IMU_RATES = {0: 200.0, 1: 500.0, 2: 100.0, 3: 50.0}  # key 0x002B data[0]
 PUSH_RATE = 1.0
@@ -1610,8 +1614,8 @@ class Simulator:
             pcl_host = m.host(KEY_PCL_HOST)
             interval = 1.0 / (PCL_PACKET_RATE * self.rate)
             budget = 256  # bound catch-up bursts
-            # Bound them by time too: a narrow FOV window makes each packet slower than the
-            # rate, and 256 of them would leave commands unanswered past the host's timeout.
+            # Bound them by time too: on a loaded machine each packet can take longer than the
+            # period, and 256 of them would leave commands unanswered past the host's timeout.
             slice_end = time.monotonic() + CATCH_UP_SLICE_S
             while now >= self.next_pcl and budget > 0:
                 # The packet's scheduled time, not `now`: in a catch-up burst `now` is a frame or
@@ -1708,9 +1712,10 @@ class Simulator:
 
     def _cropped_samples(self, dt: int) -> list[tuple]:
         """
-        Draw POINTS_PER_PACKET samples inside the enabled FOV windows.
+        Return the POINTS_PER_PACKET samples of the next packet, FOV-cropped.
 
-        Up to MAX_FOV_DRAWS batches are drawn; a packet ends up shorter only for a tiny window.
+        As on a Mid-360 (#246), a point outside every enabled window stays in the packet as
+        CROPPED_SAMPLE, so a packet always carries POINTS_PER_PACKET points.
         """
         m = self.model
         # --apply-attitude (#135): Cartesian points leave in the attitude's frame; the FOV
@@ -1718,28 +1723,25 @@ class Simulator:
         att = m.install_attitude() if self.apply_attitude and dt != 3 else None
         if self.scene == 'ring':
             # The next POINTS_PER_PACKET ring points, cropped on their exact angles whatever the
-            # data type: the packet carries fewer points instead of drawing more.
+            # data type.
             ks = range(self.ring_next, self.ring_next + POINTS_PER_PACKET)
             self.ring_next = (self.ring_next + POINTS_PER_PACKET) % RING_POINTS
-            return [ring_sample(dt, k, att) for k in ks if m.keeps_point(3, ring_point(k))]
-        if not m.fov_windows():
-            kept = self.points.samples(dt, POINTS_PER_PACKET)
-        else:
-            kept = []
-            for _ in range(MAX_FOV_DRAWS):
-                kept.extend(
-                    p for p in self.points.samples(dt, POINTS_PER_PACKET) if m.keeps_point(dt, p)
-                )
-                if len(kept) >= POINTS_PER_PACKET:
-                    break
-            kept = kept[:POINTS_PER_PACKET]
-        return kept if att is None else [attitude_sample(dt, p, att) for p in kept]
+            return [
+                ring_sample(dt, k, att) if m.keeps_point(3, ring_point(k)) else CROPPED_SAMPLE
+                for k in ks
+            ]
+        out = self.points.samples(dt, POINTS_PER_PACKET)
+        if m.fov_windows():
+            out = [p if m.keeps_point(dt, p) else CROPPED_SAMPLE for p in out]
+        if att is None:
+            return out
+        return [p if p is CROPPED_SAMPLE else attitude_sample(dt, p, att) for p in out]
 
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
-        samples = self._cropped_samples(dt)  # fewer than 96 for a narrow FOV window
+        samples = self._cropped_samples(dt)
         pkt = proto.DataPacket(
-            time_interval=min(int(interval_s * 1e7), 0xFFFF),
+            time_interval=min(round(interval_s * 1e7 * PCL_TIME_INTERVAL_RATIO), 0xFFFF),
             dot_num=len(samples),
             udp_cnt=self.udp_cnt_pcl,
             frame_cnt=self.frame_cnt,
@@ -1747,6 +1749,7 @@ class Simulator:
             time_type=self.model.clock.sync_type,
             timestamp_ns=self.now_ns(),
             data=proto.pack_samples(dt, samples),
+            with_crc=self.args.pcl_crc,  # a Mid-360 leaves it 0 (#246)
         )
         self.udp_cnt_pcl = (self.udp_cnt_pcl + 1) & 0xFFFF
         if host is None:
@@ -1758,7 +1761,7 @@ class Simulator:
 
     def _send_imu(self, host, interval_s: float) -> None:
         pkt = proto.DataPacket(
-            time_interval=min(int(interval_s * 1e7), 0xFFFF),
+            time_interval=0,  # as on a Mid-360 (#246)
             dot_num=1,
             udp_cnt=self.udp_cnt_imu,
             frame_cnt=self.frame_cnt,
@@ -1919,8 +1922,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--frame-ms',
         type=float,
-        default=100.0,
-        help='frame_cnt period; 0 = frame_cnt never changes (non-repetitive scan)',
+        default=0.0,
+        help='frame_cnt period; 0 = frame_cnt stays 0, as on a Mid-360 (default)',
+    )
+    p.add_argument(
+        '--pcl-crc',
+        action='store_true',
+        help='fill crc32 in point cloud packets (a Mid-360 leaves it 0)',
     )
     p.add_argument('--rate-multiplier', type=float, default=1.0)
     p.add_argument(
