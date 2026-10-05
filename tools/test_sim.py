@@ -9,6 +9,7 @@ python3 -m unittest tools/test_sim.py
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import json
 import math
@@ -1258,8 +1259,9 @@ class EndToEndTest(unittest.TestCase):
                 self.assertEqual(hdr[7], len(f.data) - 16)
                 return hdr, f.data[16:], addr
 
+            # As on a Mid-360 (#244): chunk 0 begins the file with byte 2 at 0, timestamp 0.
             hdr, data, addr = chunk()
-            self.assertEqual((hdr[0], hdr[1], hdr[6]), (0, 1, 1))
+            self.assertEqual((hdr[0], hdr[1], hdr[2], hdr[4], hdr[6]), (0, 1, 0, 0, 0))
             self.assertTrue(hdr[3] & sim.LOG_FLAG_BEGIN)
             self.assertTrue(hdr[3] & sim.LOG_FLAG_ACK)
             self.assertEqual(len(data), 64)
@@ -1270,12 +1272,15 @@ class EndToEndTest(unittest.TestCase):
                 proto.CommandFrame(9, sim.CMD_PUSH_LOG, 0, 0, ack_payload).encode(), addr
             )
             hdr, _, _ = chunk()
-            self.assertEqual(hdr[6], 2)
+            self.assertEqual((hdr[2], hdr[3], hdr[6]), (1, sim.LOG_FLAG_ACK, 1))
             self.send_control('{"cmd":"log_drop","n":2}')
-            seen = [chunk()[0][6] for _ in range(6)]
-            self.assertIn(5, seen)
+            hdrs = [chunk()[0] for _ in range(12)]
+            seen = [h[6] for h in hdrs]
+            self.assertIn(4, seen)
+            self.assertNotIn(2, seen)
             self.assertNotIn(3, seen)
-            self.assertNotIn(4, seen)
+            # The ACK is asked for on chunks 0-8 only.
+            self.assertEqual([h[6] for h in hdrs if h[3] & sim.LOG_FLAG_ACK], [4, 5, 6, 7, 8])
             self.send_control('{"cmd":"log_new_file"}')
             ended = begun = False
             for _ in range(20):
@@ -1284,11 +1289,16 @@ class EndToEndTest(unittest.TestCase):
                     ended = True
                     self.assertEqual(len(data), 0)
                 if hdr[1] == 2 and hdr[3] & sim.LOG_FLAG_BEGIN:
-                    self.assertEqual(hdr[6], 1)
+                    self.assertEqual(hdr[6], 0)
                     begun = True
                     break
             self.assertTrue(ended and begun)
             self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x00\x00', log).data, b'\x00')
+            # No end chunk follows the disable (#244); drain what was already in flight.
+            host_log.settimeout(0.2)
+            with contextlib.suppress(TimeoutError):
+                while True:
+                    self.assertFalse(chunk()[0][3] & sim.LOG_FLAG_END)
             self.send_control('{"cmd":"status"}')
             deadline = time.monotonic() + 3
             while '"event":"status"' not in self.out.getvalue() and time.monotonic() < deadline:

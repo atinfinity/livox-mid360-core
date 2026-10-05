@@ -194,7 +194,7 @@ class LogStream:
 
     log_type: int
     file_index: int = 1
-    trans_index: int = 0  # last sent; 0 = the next chunk begins the file
+    trans_index: int = 0  # of the next chunk; 0 begins the file, as on a Mid-360 (#244)
     requester: tuple[str, int] | None = None
 
     def new_file(self) -> None:
@@ -1450,7 +1450,7 @@ class Simulator:
             stream.requester = addr  # fallback destination when key 0x0009 is unset
             self.log(f'log type {log_type} enabled for {addr}')
         elif stream is not None:
-            self._send_log_chunk(stream, end=True)
+            # A Mid-360 just stops: no end-flagged chunk follows a disable (#244).
             del self.log_streams[log_type]
             self.log(f'log type {log_type} disabled')
 
@@ -1463,18 +1463,20 @@ class Simulator:
 
     def _send_log_chunk(self, stream: LogStream, end: bool = False) -> None:
         dest = self._log_dest(stream)
-        stream.trans_index = (stream.trans_index + 1) & 0xFFFFFFFF
+        trans = stream.trans_index
+        stream.trans_index = (trans + 1) & 0xFFFFFFFF
         flags = 0
-        if stream.trans_index == 1:
+        if trans == 0:
             flags |= LOG_FLAG_BEGIN
         if end:
             flags |= LOG_FLAG_END
+        # A Mid-360 asks for an ACK on the first nine chunks of a file only (#244).
         every = self.args.log_ack_every
-        if every > 0 and (stream.trans_index % every == 0 or end):
+        if trans < self.args.log_ack_first or (every > 0 and (trans % every == 0 or end)):
             flags |= LOG_FLAG_ACK
         line = (
             f'{self.model.sn} log{stream.log_type} file{stream.file_index} '
-            f'chunk{stream.trans_index} t={time.monotonic():.3f}\n'
+            f'chunk{trans} t={time.monotonic():.3f}\n'
         ).encode()
         n = 0 if end else self.args.log_chunk_bytes
         data = (line * (n // len(line) + 1))[:n]
@@ -1482,16 +1484,16 @@ class Simulator:
             '<BBBBIHIH',
             stream.log_type,
             stream.file_index,
-            1,
+            0 if trans == 0 else 1,  # byte 2 ("file_num") as a Mid-360 fills it
             flags,
-            int(time.time()) & 0xFFFFFFFF,
+            0,  # timestamp: always 0 on a Mid-360
             0,
-            stream.trans_index,
+            trans,
             len(data),
         )
         if not end and self.log_drop > 0:
             self.log_drop -= 1
-            self.emit(event='log_dropped', file_index=stream.file_index, trans=stream.trans_index)
+            self.emit(event='log_dropped', file_index=stream.file_index, trans=trans)
             return
         if dest is None:
             return
@@ -1951,10 +1953,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument('--log-chunk-bytes', type=int, default=512, help='data bytes per log chunk')
     p.add_argument(
+        '--log-ack-first',
+        type=int,
+        default=9,
+        help='request a host ACK on the first N chunks of a file (9 on a Mid-360)',
+    )
+    p.add_argument(
         '--log-ack-every',
         type=int,
-        default=1,
-        help='request a host ACK on every Nth chunk (0 = never; the file end always asks)',
+        default=0,
+        help='also request one on every Nth chunk and the file end (0 = never)',
     )
     p.add_argument(
         '--log-ignore-hostcfg',
