@@ -1873,7 +1873,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--reboot-delay',
         type=float,
-        default=0.0,
+        default=0.3,
         help='seconds the LiDAR keeps running after the 0x0200 / 0x0201 ACK '
         '(a Mid-360 takes about 1.25)',
     )
