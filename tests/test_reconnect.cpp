@@ -274,9 +274,9 @@ TEST_CASE("Reconnect: the udp_cnt restart after reboot() is not a drop (#249)", 
   o.reconnect.push_timeout = 3s;
   o.reconnect.initial_backoff = 1500ms;
   o.reconnect.max_backoff = 1500ms;
+  std::atomic<std::uint64_t> packets_while_down{0};  // before the Device (#253)
   auto dev = f.open(o);
   rec.attach(*dev);
-  std::atomic<std::uint64_t> packets_while_down{0};
   REQUIRE(dev
             ->on_packet([&](const DataPacketView &, const ReceiveInfo &) {
               if (rec.disconnected == 1 && rec.reconnected == 0) ++packets_while_down;
