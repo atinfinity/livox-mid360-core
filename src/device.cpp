@@ -108,6 +108,10 @@ struct Device::Impl : detail::Receiver
   std::atomic<std::uint64_t> disconnects{0};
   std::atomic<std::uint64_t> reconnects{0};
   std::atomic<std::int64_t> last_push_steady_ns{0};  ///< steady_clock ticks of the last push
+  /// steady_clock ticks of a reboot request whose power-down the worker still awaits; 0: none.
+  /// A Mid-360 keeps running for about 1.25 s after the ACK (#238).
+  std::atomic<std::int64_t> reboot_sent_ns{0};
+  std::atomic<bool> reboot_down{false};  ///< a push went into ERROR after reboot_sent_ns
 
   // --- callbacks: written under cb_mutex, copied by the receive thread on a
   // generation change --------------------------------------------------------
@@ -330,6 +334,11 @@ struct Device::Impl : detail::Receiver
           ev.old_state = *old;
           ev.new_state = *next.cur_work_state;
           state_event = ev;
+          if (
+            ev.new_state == WorkState::kError &&
+            reboot_sent_ns.load(std::memory_order_acquire) != 0) {
+            reboot_down.store(true, std::memory_order_release);
+          }
           LIVOX_LOG(
             LogLevel::kInfo, serial, "state {} -> {}", to_string(*old),
             to_string(*next.cur_work_state));
@@ -368,6 +377,10 @@ struct Device::Impl : detail::Receiver
       }
       pushed_status = next;
       delivered = next;
+    }
+    if (reboot_down.load(std::memory_order_acquire)) {
+      const std::lock_guard lock(conn_mutex);  // no lost wakeup in wait_for_power_down()
+      conn_cv.notify_all();
     }
     if (rx_event_cb) {
       if (state_event) {
@@ -1004,6 +1017,7 @@ struct Device::Impl : detail::Receiver
     }
     rebase_requested.store(true, std::memory_order_release);
     last_push_steady_ns.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
+    reboot_sent_ns.store(0, std::memory_order_release);
     reconnects.fetch_add(1, std::memory_order_relaxed);
     Event ev;
     ev.kind = Event::Kind::kReconnected;
@@ -1029,6 +1043,7 @@ struct Device::Impl : detail::Receiver
       if (stopping()) {
         break;
       }
+      wait_for_power_down(lock);
       auto backoff = options.reconnect.initial_backoff;
       while (!stopping() && !connected.load(std::memory_order_acquire)) {
         lock.unlock();
@@ -1048,6 +1063,44 @@ struct Device::Impl : detail::Receiver
         backoff = std::min(backoff * 2, options.reconnect.max_backoff);
       }
     }
+  }
+
+  /// Worker, under conn_mutex. After reboot() the LiDAR keeps running for a while (about
+  /// 1.25 s on a Mid-360); an attempt then would reconnect to the instance that is about to
+  /// power down (#238). Wait for a push going into ERROR, for half a push timeout without a
+  /// push since the request, or at most for one push timeout after it.
+  void wait_for_power_down(std::unique_lock<std::mutex> & lock)
+  {
+    const std::int64_t sent_ns = reboot_sent_ns.load(std::memory_order_acquire);
+    if (sent_ns == 0) {
+      return;
+    }
+    const auto sent = Clock::time_point(Clock::duration(sent_ns));
+    const auto timeout = options.reconnect.push_timeout;
+    const char * why = "stopping";
+    while (!stop.stop_requested()) {
+      if (reboot_down.load(std::memory_order_acquire)) {
+        why = "error push";
+        break;
+      }
+      const auto now = Clock::now();
+      const auto quiet = std::max(last_push_steady(), sent) + timeout / 2;
+      const auto cap = sent + timeout;
+      if (now >= quiet) {
+        why = "pushes stopped";
+        break;
+      }
+      if (now >= cap) {
+        why = "still pushing";
+        break;
+      }
+      conn_cv.wait_until(lock, std::min(quiet, cap), [&] {
+        return stop.stop_requested() || reboot_down.load(std::memory_order_acquire);
+      });
+    }
+    reboot_sent_ns.store(0, std::memory_order_release);
+    reboot_down.store(false, std::memory_order_release);
+    LIVOX_LOG(LogLevel::kInfo, serial, "reboot: powered down ({})", why);
   }
 
   [[nodiscard]] DiscoveredDevice snapshot_info() const
@@ -1693,7 +1746,11 @@ std::expected<void, DeviceError> Device::reboot(std::optional<RequestOptions> op
   if (auto c = impl_->check_connected(); !c) {
     return c;
   }
+  // Armed before the request: the ERROR push may overtake the ACK.
+  impl_->reboot_down.store(false, std::memory_order_release);
+  impl_->reboot_sent_ns.store(Clock::now().time_since_epoch().count(), std::memory_order_release);
   if (auto r = impl_->session.reboot(100, opts); !r) {
+    impl_->reboot_sent_ns.store(0, std::memory_order_release);
     impl_->note_command_error(r.error());
     return std::unexpected(wrap(r.error()));
   }
