@@ -110,6 +110,7 @@ private:
   bool frame_cnt_changed_ever_ = false;
   bool fallback_ = false;
   std::optional<std::uint64_t> first_time_;
+  std::uint64_t window_start_ = 0;  ///< start of the current time window, <= cur_.base_time_ns
 };
 
 /// Converts one sample of `pkt` (any point-cloud data type) to metres.
