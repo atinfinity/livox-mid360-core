@@ -148,6 +148,15 @@ IMU_RATES = {0: 200.0, 1: 500.0, 2: 100.0, 3: 50.0}  # key 0x002B data[0]
 PUSH_RATE = 1.0
 
 
+# Factory value of keys 0x0015 / 0x0016: yaw 0..0, pitch -7..52.
+FACTORY_FOV = struct.pack('<iiiiI', 0, 0, -7, 52, 0)
+# The keys a Mid-360 on firmware 13.18.0244 does not support (#242): inquires leave them out
+# with ret 0x20, and a write of 0x002B is rejected with 0x20. --unsupported-keys takes them.
+MID360_UNSUPPORTED_KEYS = frozenset(
+    {KEY_SPEED_MODE, KEY_TIME_FILTER, KEY_PC_FREQ_MOD, KEY_IMU_SENSOR_CFG}
+)
+
+
 def factory_settings() -> dict[int, bytes]:
     """Writable keys at factory defaults (pcl_data_type=1, imu off, no host configured)."""
     zero = lambda n: b'\0' * n  # noqa: E731
@@ -160,8 +169,9 @@ def factory_settings() -> dict[int, bytes]:
         KEY_IMU_HOST: zero(8),
         KEY_LOG_HOST: zero(8),
         KEY_INSTALL_ATTITUDE: zero(24),
-        KEY_FOV0: zero(20),
-        KEY_FOV1: zero(20),
+        # Both windows as a Mid-360 ships them (firmware 13.18.0244, #242), left disabled.
+        KEY_FOV0: FACTORY_FOV,
+        KEY_FOV1: FACTORY_FOV,
         KEY_FOV_EN: b'\x00',
         KEY_DETECT_MODE: b'\x00',
         KEY_FUNC_IO: zero(4),
@@ -309,6 +319,8 @@ class DeviceModel:
     startup_delay: float = 0.3
     selfcheck_delay: float = 0.1
     imu_cfg_unsupported: bool = False  # emulate firmware without key 0x002B
+    # Writable keys the firmware does not support: written and read with 0x20 (#242).
+    unsupported_keys: frozenset[int] = frozenset()
     # Key 0x0004 restored by a factory reset; None keeps factory_settings()'s 192.168.1.100.
     factory_lidar_ipcfg: bytes | None = None
     settings: dict[int, bytes] = field(default_factory=factory_settings)
@@ -406,7 +418,8 @@ class DeviceModel:
                 return RET_PARAM_READ_ONLY, key
             if key not in WRITABLE_LEN:
                 return RET_PARAM_NOT_SUPPORT, key
-            if key == KEY_IMU_SENSOR_CFG and self.imu_cfg_unsupported:
+            if self.unsupported(key):
+                # [unverified] for 0x0021 / 0x0026 / 0x0029: only the 0x002B write was seen.
                 return RET_PARAM_NOT_SUPPORT, key
             if len(value) != WRITABLE_LEN[key]:
                 return RET_PARAM_INVALID_LEN, key
@@ -470,8 +483,14 @@ class DeviceModel:
             out.append((key, v))
         return ret, out
 
+    def unsupported(self, key: int) -> bool:
+        """Whether the firmware lacks `key` (--unsupported-keys / --imu-cfg-unsupported)."""
+        return key in self.unsupported_keys or (
+            key == KEY_IMU_SENSOR_CFG and self.imu_cfg_unsupported
+        )
+
     def read_key(self, key: int, now_ns: int) -> bytes | None:
-        if key == KEY_IMU_SENSOR_CFG and self.imu_cfg_unsupported:
+        if self.unsupported(key):
             return None
         if key in self.settings:
             return self.settings[key]
@@ -492,7 +511,7 @@ class DeviceModel:
             ],
             KEY_TIME_SYNC_TYPE: bytes([self.clock.sync_type]),
             KEY_DIAG_STATUS: struct.pack('<H', self.diag_status),
-            KEY_FW_TYPE: b'\x00',
+            KEY_FW_TYPE: b'\x01',  # app, as a Mid-360 answers (#242)
             KEY_HMS: struct.pack('<8I', *self.hms),
         }
         return ro.get(key)
@@ -578,7 +597,7 @@ class DeviceModel:
     @property
     def imu_rate(self) -> float:
         """Return the IMU packet rate in Hz selected by key 0x002B (200 Hz when unsupported)."""
-        if self.imu_cfg_unsupported:
+        if self.unsupported(KEY_IMU_SENSOR_CFG):
             return IMU_RATE
         return IMU_RATES[self.settings[KEY_IMU_SENSOR_CFG][0]]
 
@@ -843,6 +862,7 @@ class Simulator:
             startup_delay=args.startup_delay,
             selfcheck_delay=args.selfcheck_delay,
             imu_cfg_unsupported=args.imu_cfg_unsupported,
+            unsupported_keys=frozenset(args.unsupported_keys),
         )
         self.model.on_state = self._on_state
         self.bound_ip: str | None = None  # set by a reboot that moved the LiDAR (#50)
@@ -1813,6 +1833,17 @@ def parse_version(text: str) -> tuple[int, int, int, int]:
     return parts[0], parts[1], parts[2], parts[3]
 
 
+def parse_key_list(text: str) -> list[int]:
+    """--unsupported-keys: "mid360" or comma-separated keys such as 0x0026,0x002B."""
+    if text == 'mid360':
+        return sorted(MID360_UNSUPPORTED_KEYS)
+    keys = [int(k, 0) for k in text.split(',') if k]
+    bad = [k for k in keys if k not in WRITABLE_LEN]
+    if bad:
+        raise argparse.ArgumentTypeError(f'not a writable key: {", ".join(map(hex, bad))}')
+    return keys
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Livox Mid-360 simulator')
     p.add_argument('--bind', default='0.0.0.0', help='address to bind (default 0.0.0.0)')
@@ -1903,6 +1934,14 @@ def build_parser() -> argparse.ArgumentParser:
         '--imu-cfg-unsupported',
         action='store_true',
         help='emulate firmware without key 0x002B (write and read answered with 0x20)',
+    )
+    p.add_argument(
+        '--unsupported-keys',
+        type=parse_key_list,
+        default=[],
+        metavar='KEYS',
+        help='comma-separated writable keys the firmware lacks, or "mid360" for the set of a '
+        'Mid-360 on 13.18.0244 (0x0021,0x0026,0x0029,0x002B); write and read answer 0x20',
     )
     p.add_argument(
         '--log-chunk-interval',

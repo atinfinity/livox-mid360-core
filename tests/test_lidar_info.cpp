@@ -374,7 +374,7 @@ TEST_CASE("Device::settings and status read every key from the simulator", "[lid
   CHECK(st->time_offset.has_value());
   CHECK(st->time_sync_type == TimeSyncType::kNone);
   CHECK(st->lidar_diag_status.has_value());
-  CHECK(st->fw_type == FwType::kLoader);
+  CHECK(st->fw_type == FwType::kApp);
   REQUIRE(st->hms_code.has_value());
   CHECK(to_string(*st).find("core_temp=35.00C") != std::string::npos);
   CHECK(to_string(*st).find("hms=[]") != std::string::npos);
