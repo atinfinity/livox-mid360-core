@@ -677,8 +677,14 @@ not reset). Callbacks stay frozen for the whole period when sampling had been re
    an IP held by another Device fails the attempt (`kAlreadyRegistered`) and it is retried;
 3. `apply_host_setup` with the setup recorded at `open()` (the LiDAR may have rebooted);
 4. `work_tgt_mode = SAMPLING` plus the state wait if sampling had been requested;
-5. the time offset (`kHostOffsetOnce`) is re-measured at the next packet, the partial frame
-   is discarded, and `kReconnected` is raised.
+5. the time offset (`kHostOffsetOnce`) is re-measured at the next packet, the drop counting
+   starts over (a restarted LiDAR counts `udp_cnt` from 0), the partial frame is discarded,
+   and `kReconnected` is raised.
+
+A LiDAR that restarts goes back to SAMPLING by itself when `work_tgt_mode` was SAMPLING, and
+its data packets can arrive before `kReconnected` (about 90 ms on a Mid-360). So the time
+offset and the drop counting also start over as soon as a push shows ERROR, SELFCHECK or
+MOTORSTARTUP while the Device is disconnected ([#249](https://github.com/atinfinity/livox-mid360-core/issues/249)).
 
 Any failure keeps the Device disconnected. With `enabled` (the default) a worker thread owned
 by the Device — started lazily at the first disconnect, joined by the destructor — repeats the

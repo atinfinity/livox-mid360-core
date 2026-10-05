@@ -48,6 +48,12 @@ DeviceError error(DeviceError::Kind kind)
   return DeviceError{.kind = kind, .session = std::nullopt, .key = std::nullopt};
 }
 
+/// States a LiDAR passes through when it powers down or starts over (#249).
+bool restarting(WorkState s) noexcept
+{
+  return s == WorkState::kError || s == WorkState::kSelfCheck || s == WorkState::kMotorStartup;
+}
+
 }  // namespace
 
 struct Device::Impl : detail::Receiver
@@ -338,6 +344,11 @@ struct Device::Impl : detail::Receiver
             ev.new_state == WorkState::kError &&
             reboot_sent_ns.load(std::memory_order_acquire) != 0) {
             reboot_down.store(true, std::memory_order_release);
+          }
+          if (!connected.load(std::memory_order_acquire) && restarting(ev.new_state)) {
+            // The LiDAR is starting over while disconnected (#249). It sends no data before
+            // SAMPLING, which comes before kReconnected: rebase now, not at the reconnect.
+            rebase_requested.store(true, std::memory_order_release);
           }
           LIVOX_LOG(
             LogLevel::kInfo, serial, "state {} -> {}", to_string(*old),
@@ -757,7 +768,7 @@ struct Device::Impl : detail::Receiver
       assembler.discard();
     }
     if (rebase_requested.exchange(false, std::memory_order_acq_rel)) {
-      assembler.time_mapper().reset();
+      assembler.rebase();
       imu_drops.reset();
     }
     if (policy_requested.exchange(false, std::memory_order_acq_rel)) {
