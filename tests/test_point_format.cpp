@@ -2,6 +2,7 @@
 // Point format, scan pattern and frame policy (issue #40): Device::set_point_format() /
 // point_format(), set_scan_pattern() / scan_pattern(), set_frame_policy() / frame_policy(),
 // HostSetup::scan_pattern and the reconnect replay of run-time written keys.
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -108,6 +109,13 @@ struct Recorder
               .has_value());
   }
 
+  [[nodiscard]] std::size_t count(DataType t)
+  {
+    const std::lock_guard lock(mutex);
+    return static_cast<std::size_t>(
+      std::ranges::count_if(kept, [t](const Frame & f) { return f.source_type == t; }));
+  }
+
   [[nodiscard]] std::vector<DataType> types()
   {
     const std::lock_guard lock(mutex);
@@ -178,15 +186,15 @@ TEST_CASE(
   REQUIRE(wait_until([&] { return rec.frames >= 2; }));
   REQUIRE(dev->set_point_format(DataType::kCartesian16).has_value());
   CHECK(dev->point_format().value() == DataType::kCartesian16);
-  const auto n16 = rec.frames.load();
-  REQUIRE(wait_until([&] { return rec.frames >= n16 + 3; }));
+  // Wait on frames of the new format, not on a frame count: packets already queued in the
+  // old format may still close several frames after the ACK on a slow (sanitizer) runner.
+  REQUIRE(wait_until([&] { return rec.count(DataType::kCartesian16) >= 2; }));
   REQUIRE(dev->set_point_format(DataType::kSpherical).has_value());
-  const auto nsph = rec.frames.load();
-  REQUIRE(wait_until([&] { return rec.frames >= nsph + 3; }));
+  REQUIRE(wait_until([&] { return rec.count(DataType::kSpherical) >= 2; }));
   REQUIRE(dev->stop_sampling().has_value());
 
   const auto types = rec.types();
-  REQUIRE(types.size() >= 8);
+  REQUIRE(types.size() >= 5);
   // Monotone: 32 ... 32, 16 ... 16, spherical ... spherical, each present.
   std::size_t i = 0;
   const auto skip = [&](DataType t) {
