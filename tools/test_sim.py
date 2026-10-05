@@ -645,7 +645,9 @@ class SimulatorTest(unittest.TestCase):
     def events(self) -> list[dict]:
         return [json.loads(line) for line in self.out.getvalue().splitlines()]
 
-    def test_fov_cropped_packet_announces_the_points_it_carries(self) -> None:
+    def test_fov_cropped_points_stay_in_the_packet_zeroed(self) -> None:
+        # As on a Mid-360 (#246): 96 points whatever the window, the cropped ones (0, 0, 0)
+        # with reflectivity 60 and tag 0; an empty window zeroes them all.
         m = self.s.model
         for window, expect_empty in (
             (proto.encode_fov_cfg(0, 90, -5, 5), False),
@@ -654,12 +656,30 @@ class SimulatorTest(unittest.TestCase):
             m.configure([(sim.KEY_FOV0, window), (sim.KEY_FOV_EN, b'\x01')])
             self.s._send_pcl(self.rx_host, 1 / sim.PCL_PACKET_RATE)
             d, _ = self.rx.recvfrom(2048)
-            pkt = proto.DataPacket.parse(d)  # raises 'bad dot_num' on a mismatch
+            pkt = proto.DataPacket.parse(d)
+            self.assertEqual(pkt.dot_num, sim.POINTS_PER_PACKET)
+            cropped = [p for p in pkt.samples() if p == sim.CROPPED_SAMPLE]
             if expect_empty:
-                self.assertEqual(pkt.dot_num, 0)
+                self.assertEqual(len(cropped), sim.POINTS_PER_PACKET)
             else:
-                self.assertGreater(pkt.dot_num, 0)
-                self.assertTrue(all(m.keeps_point(1, p) for p in pkt.samples()))
+                self.assertGreater(len(cropped), 0)
+                kept = [p for p in pkt.samples() if p != sim.CROPPED_SAMPLE]
+                self.assertGreater(len(kept), 0)
+                self.assertTrue(all(m.keeps_point(1, p) for p in kept))
+
+    def test_data_packet_header_fields(self) -> None:
+        # As on a Mid-360 (#246): point cloud crc32 0 and time_interval 4750 at the full
+        # rate, frame_cnt 0; IMU time_interval 0 with the CRC filled.
+        self.s._send_pcl(self.rx_host, 1 / sim.PCL_PACKET_RATE)
+        d = self.rx.recvfrom(2048)[0]
+        pkt = proto.DataPacket.parse(d)
+        raw_crc = struct.unpack_from('<I', d, 24)[0]
+        self.assertEqual((pkt.time_interval, pkt.frame_cnt, raw_crc), (4750, 0, 0))
+        self.s._send_imu(self.rx_host, 1 / 200)
+        d = self.rx.recvfrom(2048)[0]
+        imu = proto.DataPacket.parse(d)
+        self.assertEqual(imu.time_interval, 0)
+        self.assertNotEqual(struct.unpack_from('<I', d, 24)[0], 0)
 
     def pushed_states(self) -> list[int]:
         """Drain the pushes received so far; return their cur_work_state values."""
@@ -712,13 +732,17 @@ class SimulatorTest(unittest.TestCase):
         self.assertEqual(self.pushed_states(), [])
 
     def test_slow_catch_up_returns_to_the_main_loop(self) -> None:
-        # A narrow FOV window makes each packet draw all MAX_FOV_DRAWS batches, slower than
-        # the packet rate. One catch-up call must still end within a time slice, sending the
-        # due push, so that commands are answered (#183).
+        # When each packet takes longer than the packet period (a loaded machine), one
+        # catch-up call must still end within a time slice, sending the due push, so that
+        # commands are answered (#183).
         m = self.s.model
-        m.configure(
-            [(sim.KEY_FOV0, proto.encode_fov_cfg(30, 60, 0, 10)), (sim.KEY_FOV_EN, b'\x01')]
-        )
+        send_pcl = self.s._send_pcl
+
+        def slow_send_pcl(host, interval_s: float) -> None:
+            time.sleep(0.001)
+            send_pcl(host, interval_s)
+
+        self.s._send_pcl = slow_send_pcl
         now = time.monotonic()
         m.force_state(sim.WS_SAMPLING, now)
         self.s.next_pcl = now - 0.4  # 800 packets overdue at the full rate
@@ -878,7 +902,9 @@ class SimulatorTest(unittest.TestCase):
         window = proto.encode_fov_cfg(0, 90, 0, 15)
         m.configure([(sim.KEY_FOV0, window), (sim.KEY_FOV_EN, b'\x01')])
         self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
-        kept = [smp[3] for pkt in self.ring_packets(8) for smp in pkt.samples()]
+        samples = [smp for pkt in self.ring_packets(8) for smp in pkt.samples()]
+        self.assertEqual(len(samples), 8 * 96)
+        kept = [smp[3] for smp in samples if smp != sim.CROPPED_SAMPLE]
         ring = [k for k in range(64) if k % 4 in (0, 1)]  # pitch 0 or 15
         self.assertEqual(kept, ring * 3)  # 8 packets of 96 = 3 rings
 
@@ -902,9 +928,14 @@ class SimulatorTest(unittest.TestCase):
         m.configure([(sim.KEY_FOV0, window), (sim.KEY_FOV_EN, b'\x01')])
         m.settings[sim.KEY_PCL_DATA_TYPE] = b'\x01'
         self.s.apply_control({'cmd': 'scene', 'name': 'ring'})
-        kept = [smp for pkt in self.ring_packets(3) for smp in pkt.samples()]
-        inside = [k % 256 for k in range(3 * 96) if k % 256 < 64 and k % 4 in (0, 1)]
-        self.assertEqual(kept, [sim.ring_sample(1, k, att) for k in inside])
+        got = [smp for pkt in self.ring_packets(3) for smp in pkt.samples()]
+        want = [
+            sim.ring_sample(1, k % 256, att)
+            if k % 256 < 64 and k % 4 in (0, 1)
+            else sim.CROPPED_SAMPLE  # zeroed, never moved
+            for k in range(3 * 96)
+        ]
+        self.assertEqual(got, want)
 
     def test_time_sync_sets_the_packet_time(self) -> None:
         (free,) = self.ring_packets(1)
