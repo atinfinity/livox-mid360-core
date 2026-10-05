@@ -8,6 +8,7 @@ python3 -m unittest tools/test_sim.py
 
 from __future__ import annotations
 
+import argparse
 import io
 import json
 import math
@@ -241,6 +242,27 @@ class DeviceModelTest(unittest.TestCase):
         # The other keys are untouched.
         self.assertEqual(m.inquire([sim.KEY_IMU_EN], 0), (sim.RET_OK, [(sim.KEY_IMU_EN, b'\x00')]))
 
+    def test_mid360_unsupported_keys(self) -> None:
+        m = sim.DeviceModel(unsupported_keys=sim.MID360_UNSUPPORTED_KEYS)
+        for key in sorted(sim.MID360_UNSUPPORTED_KEYS):
+            self.assertEqual(m.inquire([key], 0), (sim.RET_PARAM_NOT_SUPPORT, []))
+            value = b'\0' * sim.WRITABLE_LEN[key]
+            self.assertEqual(m.configure([(key, value)]), (sim.RET_PARAM_NOT_SUPPORT, key))
+        self.assertEqual(m.imu_rate, 200.0)
+        self.assertEqual(sim.parse_key_list('mid360'), [0x0021, 0x0026, 0x0029, 0x002B])
+        self.assertEqual(sim.parse_key_list('0x0026,43'), [0x0026, 0x002B])
+        with self.assertRaises(argparse.ArgumentTypeError):
+            sim.parse_key_list('0x8000')
+
+    def test_factory_fov_and_fw_type(self) -> None:
+        # As a Mid-360 on 13.18.0244 answers (#242).
+        fov = proto.encode_fov_cfg(0, 0, -7, 52)
+        self.assertEqual(self.m.settings[sim.KEY_FOV0], fov)
+        self.assertEqual(self.m.settings[sim.KEY_FOV1], fov)
+        self.assertEqual(self.m.settings[sim.KEY_FOV_EN], b'\x00')
+        self.assertEqual(self.m.fov_windows(), [])
+        self.assertEqual(self.m.read_key(sim.KEY_FW_TYPE, 0), b'\x01')
+
     def test_func_io_out_of_range(self) -> None:
         self.assertEqual(
             self.m.configure([(sim.KEY_FUNC_IO, b'\x00\x00\x02\x01')]), (sim.RET_OK, 0)
@@ -289,7 +311,7 @@ class DeviceModelTest(unittest.TestCase):
                 self.m.configure([(sim.KEY_FOV1, bad)]), (sim.RET_OUT_OF_RANGE, sim.KEY_FOV1)
             )
         self.assertEqual(self.m.settings[sim.KEY_FOV0], ok)
-        self.assertEqual(self.m.settings[sim.KEY_FOV1], bytes(20))
+        self.assertEqual(self.m.settings[sim.KEY_FOV1], sim.FACTORY_FOV)
 
     def test_fov_cropping_semantics(self) -> None:
         cart = (1000, 1000, 0, 0, 0)  # yaw 45, pitch 0

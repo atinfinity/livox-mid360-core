@@ -239,7 +239,7 @@ TEST_CASE("Device::get<K>: every read-only key decodes", "[device][keys][sim]")
   CHECK(diag->system == DiagLevel::kNormal);
   auto fw = dev->get<Key::kFwType>();
   REQUIRE(fw.has_value());
-  CHECK(*fw == FwType::kLoader);
+  CHECK(*fw == FwType::kApp);
   auto hms = dev->get<Key::kHmsCode>();
   REQUIRE(hms.has_value());
   CHECK((*hms)[0] == 0);

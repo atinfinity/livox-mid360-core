@@ -246,11 +246,11 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   }
   auto dev = f.open();
 
-  // Factory default: both windows zero, nothing enabled.
+  // Factory default, as on a Mid-360 (#242): yaw 0..0, pitch -7..52, nothing enabled.
   auto initial = dev->fov();
   REQUIRE(initial.has_value());
   REQUIRE(initial->fov0.has_value());
-  CHECK(same(*initial->fov0, FovConfig{}));
+  CHECK(same(*initial->fov0, FovConfig{0, 0, -7, 52, 0}));
   REQUIRE(initial->enable.has_value());
   CHECK_FALSE(initial->enable->fov0);
 

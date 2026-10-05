@@ -314,6 +314,40 @@ TEST_CASE("Firmware without key 0x002B answers kParamNotSupport", "[settings][si
   CHECK_FALSE(dev->imu_enabled().value());
 }
 
+TEST_CASE("A Mid-360's key set: unsupported keys, factory FOV windows, FW_TYPE", "[settings][sim]")
+{
+  Fixture f({"--unsupported-keys", "mid360"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  auto dev = f.open();
+
+  // As on firmware 13.18.0244 (#242): settings() succeeds without 0x0026 and 0x002B, and the
+  // windows hold their factory value.
+  const auto s = dev->settings();
+  REQUIRE(s.has_value());
+  CHECK_FALSE(s->time_filter.has_value());
+  CHECK_FALSE(s->imu_sensor_cfg.has_value());
+  for (const auto & fov : {s->fov_cfg0, s->fov_cfg1}) {
+    REQUIRE(fov.has_value());
+    CHECK(fov->yaw_start_deg == 0);
+    CHECK(fov->yaw_stop_deg == 0);
+    CHECK(fov->pitch_start_deg == -7);
+    CHECK(fov->pitch_stop_deg == 52);
+  }
+
+  const auto tf = dev->set<Key::kTimeFilter>(true);
+  REQUIRE_FALSE(tf.has_value());
+  check_rejected(tf.error(), RetCode::kParamNotSupport, 0x0026);
+  const auto imu = dev->set_imu_sensor_config(ImuSensorConfig{});
+  REQUIRE_FALSE(imu.has_value());
+  check_rejected(imu.error(), RetCode::kParamNotSupport, 0x002B);
+
+  const auto st = dev->status();
+  REQUIRE(st.has_value());
+  CHECK(st->fw_type == FwType::kApp);
+}
+
 TEST_CASE(
   "Reconnect replays detect mode, IMU enable, IMU config and time filter", "[settings][sim]")
 {
