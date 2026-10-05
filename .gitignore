@@ -3,6 +3,7 @@ build-*/
 .cache/
 *.pcap
 !tests/data/*.pcap
+!tests/fixtures/*.pcap
 __pycache__/
 *.pyc
 .venv/
