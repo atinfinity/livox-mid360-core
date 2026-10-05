@@ -6,7 +6,7 @@ the stream on; the datagrams are opaque to this SDK. The library part (`debug_da
 described in [api.md](api.md#debug-raw-data), the wire format in
 [protocol_notes.md](protocol_notes.md). This page covers the CLI and its file.
 
-Nothing here has been run against hardware; the open points are tracked on
+The hardware results so far and the open points are tracked on
 [#106](https://github.com/atinfinity/livox-mid360-core/issues/106).
 
 ## CLI
@@ -14,6 +14,7 @@ Nothing here has been run against hardware; the open points are tracked on
 ```sh
 livox-mid360-cli debug-data --out FILE [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] [--sn SN]
                             [--duration SECONDS] [--port N] [--start-sampling] [--max-size BYTES]
+                            [--format raw|sdk2]
 ```
 
 | Option | Meaning |
@@ -25,7 +26,8 @@ livox-mid360-cli debug-data --out FILE [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] 
 | `--duration` | Seconds to collect. Without it the run lasts until Ctrl-C. |
 | `--port` | Host UDP port of the stream, default 44332 (the port Livox-SDK2 uses). |
 | `--start-sampling` | Put the LiDAR into SAMPLING first and back to IDLE at the end. Without it the work state is left alone; the Mid-360 sends the stream only while sampling ([#225](https://github.com/atinfinity/livox-mid360-core/issues/225)), so an IDLE LiDAR gives exit code 3. |
-| `--max-size` | File size limit in bytes, default 4294967296 (4 GiB). Reaching it ends the run with exit code 0. |
+| `--max-size` | File size limit in bytes, default 4294967296 (4 GiB). Reaching it ends the run with exit code 0. A datagram that would cross the limit is not written. |
+| `--format` | `raw` (default): the format below, with receive time and source port per datagram. `sdk2`: the `.LivoxDebugPointCloudData` file of Livox-SDK2, see [SDK2 file format](#sdk2-file-format). |
 
 The stop request (`0x0303` with `enable = 0`) is sent on every exit path after the device was
 opened, including Ctrl-C and a failed start. Progress goes to stderr, the last line is
@@ -34,8 +36,9 @@ datagram received.
 
 ## File format (provisional, version 0)
 
-Private to the CLI and subject to change; the file that Livox-SDK2 writes
-(`.LivoxDebugPointCloudData`) is tracked on [#107](https://github.com/atinfinity/livox-mid360-core/issues/107). All integers are little-endian.
+Private to the CLI and subject to change. It keeps what the SDK2 file drops (receive time,
+source port, datagram boundaries); `--to-sdk2` of the reader converts it. All integers are
+little-endian.
 
 File header, 36 bytes:
 
@@ -58,6 +61,35 @@ Then one record per datagram, in the order of reception:
 A file that was cut (killed process, full disk) ends inside a record; readers keep the
 complete records before it.
 
+## SDK2 file format
+
+What Livox-SDK2 writes when its debug point cloud is switched on
+([#107](https://github.com/atinfinity/livox-mid360-core/issues/107)), read from the SDK2
+source at commit `c0796f0` (`sdk_core/comm/define.h`,
+`sdk_core/debug_point_cloud_handler/debug_point_cloud_handler.cpp`). SDK2 names the file
+`lidar_<handle>_<YYYY_MM_DD_HH_MM_SS>.LivoxDebugPointCloudData`, where the handle is the
+LiDAR IPv4 address as `in_addr.s_addr`. All integers are little-endian.
+
+Header, 128 bytes (packed):
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 1 | `file_ver`, `1` |
+| 1 | 1 | `dev_type` from the discovery answer, `9` for a Mid-360 |
+| 2 | 1 | `data_type`, `1` |
+| 3 | 16 | serial number, ASCII, NUL padded |
+| 19 | 107 | reserved, zero |
+| 126 | 2 | `crc16`: CRC-16/CCITT-FALSE (FastCRC16 `ccitt`) of bytes 0..125 |
+
+Then the UDP payloads of the stream, concatenated in the order of reception with nothing
+between them: no length, time or port. SDK2 keeps only datagrams from LiDAR port 60301 and
+stops writing at 4 GiB. Without framing, datagrams can only be told apart when their size is
+known (`--datagram-size` of the reader).
+
+The header is checked against one built by SDK2's own struct and CRC code (the golden header
+in `tools/test_debug_data.py`). A file written by SDK2 from a real Mid-360 has not been
+compared yet; until then the record part rests on the source alone.
+
 ## Reader
 
 ```sh
@@ -65,9 +97,14 @@ python3 tools/livox_mid360_debug_data.py FILE                 # summary as one J
 python3 tools/livox_mid360_debug_data.py FILE --json          # plus one line per datagram
 python3 tools/livox_mid360_debug_data.py FILE --payload OUT   # concatenated payloads
 python3 tools/livox_mid360_debug_data.py FILE --check-sim     # simulator counter and pattern
+python3 tools/livox_mid360_debug_data.py FILE --to-sdk2 OUT   # raw file -> SDK2 file
 ```
 
-Exit codes: 0 ok, 2 bad or cut file, 3 no datagram.
+The reader takes both formats; it tells them apart by the magic or, failing that, a valid
+SDK2 header CRC. An SDK2 file has no datagram count (`packets` is `null`) unless
+`--datagram-size N` splits it; `--json` and `--check-sim` need that option on an SDK2 file.
+`--to-sdk2` writes the header with `--dev-type` (default 9). Exit codes: 0 ok, 1 usage,
+2 bad or cut file, 3 no datagram.
 
 ## Against the simulator
 
@@ -77,4 +114,5 @@ build/tools/cli/livox-mid360-cli debug-data --out /tmp/debug.bin --lidar-ip 127.
 python3 tools/livox_mid360_debug_data.py /tmp/debug.bin --check-sim
 ```
 
-The ctest `cli_debug_data` runs this sequence.
+The ctest `cli_debug_data` runs this sequence, then the same with `--format sdk2` and a
+`--to-sdk2` conversion, and compares the two. `tools/test_debug_data.py` covers the reader.

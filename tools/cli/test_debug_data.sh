@@ -39,11 +39,22 @@ fi
 "$bin" debug-data --out "$out.small" --lidar-ip 127.0.0.1 --host-ip 127.0.0.1 --max-size 700 \
   2> "$out.small.log"
 status=$?
-kill "$sim_pid" 2>/dev/null
-wait "$sim_pid" 2>/dev/null
 cat "$out.small.log"
 if [ $status -ne 0 ]; then
   echo "debug-data --max-size exited with $status"
+  kill "$sim_pid" 2>/dev/null
+  exit 1
+fi
+# The Livox-SDK2 format (#107): 128-byte header, then the datagrams without framing; the
+# 128 + 3 * 200 bytes of --max-size 728 hold three of them.
+"$bin" debug-data --format sdk2 --out "$out.sdk2" --lidar-ip 127.0.0.1 --host-ip 127.0.0.1 \
+  --max-size 728 2> "$out.sdk2.log"
+status=$?
+kill "$sim_pid" 2>/dev/null
+wait "$sim_pid" 2>/dev/null
+cat "$out.sdk2.log"
+if [ $status -ne 0 ]; then
+  echo "debug-data --format sdk2 exited with $status"
   exit 1
 fi
 written=$(sed -n 's/^wrote .* packets=\([0-9]*\) .*/\1/p' "$out.log")
@@ -63,6 +74,23 @@ echo "reader (small): $summary"
 small_packets=$(echo "$summary" | sed -n 's/.*"packets": \([0-9]*\).*/\1/p')
 if [ "$small_packets" != 3 ]; then
   echo "--max-size 700: expected 3 datagrams, got '$small_packets'"
+  exit 1
+fi
+summary=$("$py" "$reader" "$out.sdk2" --datagram-size 200 --check-sim) ||
+  { echo "reader failed: $summary"; exit 1; }
+echo "reader (sdk2): $summary"
+case $summary in
+  *'"format": "sdk2"'*'"packets": 3,'*'"dev_type": 9'*) ;;
+  *) echo "--format sdk2: expected 3 datagrams of a Mid-360"; exit 1 ;;
+esac
+# A raw file converts to the same bytes as a direct sdk2 run: header, then the payloads.
+"$py" "$reader" "$out" --to-sdk2 "$out.conv" > /dev/null || { echo "--to-sdk2 failed"; exit 1; }
+"$py" "$reader" "$out" --payload "$out.payload" > /dev/null || { echo "--payload failed"; exit 1; }
+head -c 128 "$out.conv" > "$out.conv.head"
+head -c 128 "$out.sdk2" > "$out.sdk2.head"
+tail -c +129 "$out.conv" > "$out.conv.body"
+if ! cmp -s "$out.conv.head" "$out.sdk2.head" || ! cmp -s "$out.conv.body" "$out.payload"; then
+  echo "--to-sdk2 output differs from a direct sdk2 run"
   exit 1
 fi
 echo "ok: packets=$read_packets"

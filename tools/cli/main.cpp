@@ -55,6 +55,7 @@ void usage()
                "         [--window-ms N] [--quiet]\n"
                "  debug-data --out FILE [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] [--sn SN]\n"
                "         [--duration SECONDS] [--port N] [--start-sampling] [--max-size BYTES]\n"
+               "         [--format raw|sdk2]\n"
                "  list [--host-ip A.B.C.D] [--lidar-ip A.B.C.D]... [--timeout-ms N]\n"
                "  info [--lidar-ip A.B.C.D] [--host-ip A.B.C.D] [--sn SN]\n"
                "  --version | --help\n";

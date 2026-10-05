@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// `debug-data`: Device::start_debug_data -> on_debug_data -> file (issue #93). The file format
-// is provisional and private to this CLI (docs/debug_data.md); tools/livox_mid360_debug_data.py
-// reads it.
+// `debug-data`: Device::start_debug_data -> on_debug_data -> file (issue #93). Two formats
+// (docs/debug_data.md): `raw`, provisional and private to this CLI, and `sdk2`, the
+// .LivoxDebugPointCloudData file Livox-SDK2 writes (#107). tools/livox_mid360_debug_data.py
+// reads both.
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -13,10 +15,12 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <thread>
 
 #include "cli.hpp"
+#include "livox/mid360/crc.hpp"
 #include "livox/mid360/mid360.hpp"
 
 namespace cli
@@ -33,6 +37,30 @@ constexpr std::size_t kFileHeaderSize = 36;
 constexpr std::size_t kRecordHeaderSize = 14;
 constexpr std::uint64_t kDefaultMaxSize = 4ULL * 1024 * 1024 * 1024;
 
+// Livox-SDK2 LivoxLidarDebugPointCloudFileHeader (sdk_core/comm/define.h): file_ver u8,
+// dev_type u8, data_type u8, sn u8[16], rsvd u8[107], crc16 u16 (CRC-16/CCITT-FALSE of the
+// 126 bytes before it). The datagrams follow as received, without framing.
+constexpr std::size_t kSdk2HeaderSize = 128;
+constexpr std::size_t kSdk2CrcOffset = 126;
+constexpr std::uint8_t kSdk2FileVersion = 1;
+constexpr std::uint8_t kSdk2DataType = 1;
+
+enum class Format : std::uint8_t
+{
+  kRaw,   ///< provisional format of this CLI: one record header per datagram
+  kSdk2,  ///< .LivoxDebugPointCloudData as Livox-SDK2 writes it
+};
+
+constexpr std::size_t header_size(Format f) noexcept
+{
+  return f == Format::kSdk2 ? kSdk2HeaderSize : kFileHeaderSize;
+}
+
+constexpr std::size_t record_overhead(Format f) noexcept
+{
+  return f == Format::kSdk2 ? 0 : kRecordHeaderSize;
+}
+
 struct Args
 {
   std::filesystem::path out;
@@ -42,6 +70,7 @@ struct Args
   int duration = 0;  // seconds, 0 = until SIGINT
   std::uint16_t port = kDefaultHostDebugDataPort;
   std::uint64_t max_size = kDefaultMaxSize;
+  Format format = Format::kRaw;
   bool start_sampling = false;
 };
 
@@ -80,6 +109,14 @@ std::optional<Args> parse_args(int argc, char ** argv)
         return std::nullopt;
       }
       a.port = static_cast<std::uint16_t>(port);
+    } else if (key == "--format") {
+      if (val == "raw") {
+        a.format = Format::kRaw;
+      } else if (val == "sdk2") {
+        a.format = Format::kSdk2;
+      } else {
+        return std::nullopt;
+      }
     } else if (key == "--max-size") {
       if (val.empty() || val.find_first_not_of("0123456789") != std::string::npos) {
         return std::nullopt;
@@ -89,7 +126,7 @@ std::optional<Args> parse_args(int argc, char ** argv)
       return std::nullopt;
     }
   }
-  if (a.out.empty() || a.duration < 0 || a.max_size < kFileHeaderSize) {
+  if (a.out.empty() || a.duration < 0 || a.max_size < header_size(a.format)) {
     return std::nullopt;
   }
   return a;
@@ -107,12 +144,28 @@ void put_le(std::array<char, N> & buf, std::size_t at, std::uint64_t value, std:
 class Sink
 {
 public:
-  bool open(const std::filesystem::path & path, const std::string & serial, std::uint64_t max_size)
+  bool open(
+    const std::filesystem::path & path, Format format, const DiscoveredDevice & lidar,
+    std::uint64_t max_size)
   {
+    format_ = format;
     max_size_ = max_size;
     out_.open(path, std::ios::binary | std::ios::trunc);
     if (!out_) {
       return false;
+    }
+    const std::string & serial = lidar.serial_number;
+    if (format == Format::kSdk2) {
+      std::array<char, kSdk2HeaderSize> h{};
+      h[0] = static_cast<char>(kSdk2FileVersion);
+      h[1] = static_cast<char>(lidar.dev_type);
+      h[2] = static_cast<char>(kSdk2DataType);
+      std::memcpy(&h.at(3), serial.data(), std::min(serial.size(), kSerialSize));
+      const auto crc = crc::crc16_ccitt_false(std::as_bytes(std::span(h.data(), kSdk2CrcOffset)));
+      put_le(h, kSdk2CrcOffset, crc, 2);
+      out_.write(h.data(), static_cast<std::streamsize>(h.size()));
+      bytes_ = h.size();
+      return static_cast<bool>(out_);
     }
     std::array<char, kFileHeaderSize> h{};
     std::memcpy(h.data(), kMagic.data(), kMagic.size());
@@ -134,15 +187,18 @@ public:
     if (full_ || failed_) {
       return false;
     }
-    if (bytes_ + kRecordHeaderSize + p.data.size() > max_size_) {
+    const std::size_t overhead = record_overhead(format_);
+    if (bytes_ + overhead + p.data.size() > max_size_) {
       full_ = true;
       return false;
     }
-    std::array<char, kRecordHeaderSize> h{};
-    put_le(h, 0, p.host_receive_time_ns, 8);
-    put_le(h, 8, p.from.port, 2);
-    put_le(h, 10, p.data.size(), 4);
-    out_.write(h.data(), static_cast<std::streamsize>(h.size()));
+    if (format_ == Format::kRaw) {
+      std::array<char, kRecordHeaderSize> h{};
+      put_le(h, 0, p.host_receive_time_ns, 8);
+      put_le(h, 8, p.from.port, 2);
+      put_le(h, 10, p.data.size(), 4);
+      out_.write(h.data(), static_cast<std::streamsize>(h.size()));
+    }
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): bytes to the char stream
     out_.write(
       reinterpret_cast<const char *>(p.data.data()), static_cast<std::streamsize>(p.data.size()));
@@ -150,7 +206,7 @@ public:
       failed_ = true;
       return false;
     }
-    bytes_ += kRecordHeaderSize + p.data.size();
+    bytes_ += overhead + p.data.size();
     ++packets_;
     return true;
   }
@@ -168,6 +224,7 @@ public:
 
 private:
   std::ofstream out_;
+  Format format_ = Format::kRaw;
   std::uint64_t max_size_ = kDefaultMaxSize;
   std::uint64_t bytes_ = 0;
   std::uint64_t packets_ = 0;
@@ -182,7 +239,7 @@ int run_debug_data(int argc, char ** argv)
   if (!args) {
     std::cerr << "usage: livox-mid360-cli debug-data --out FILE [--lidar-ip A.B.C.D] "
                  "[--host-ip A.B.C.D] [--sn SN] [--duration SECONDS] [--port N] "
-                 "[--start-sampling] [--max-size BYTES]\n";
+                 "[--start-sampling] [--max-size BYTES] [--format raw|sdk2]\n";
     return 1;
   }
   install_sigint();
@@ -227,7 +284,7 @@ int run_debug_data(int argc, char ** argv)
   }
 
   Sink sink;
-  if (!sink.open(args->out, target->serial_number, args->max_size)) {
+  if (!sink.open(args->out, args->format, *target, args->max_size)) {
     std::cerr << "open " << args->out.string() << " failed\n";
     return 2;
   }
