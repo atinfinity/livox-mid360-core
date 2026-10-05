@@ -13,9 +13,10 @@ except for `rerun/make_blueprint.py`.
 | `cli/` | C++ `livox-mid360-cli` (`record` to lvx2 / `replay`, `debug-data`, `list`, `info`), built with `LIVOX_MID360_BUILD_TOOLS`. See `docs/lvx2.md` and `docs/debug_data.md`. |
 | `rerun/` | C++ `livox-mid360-rerun`: shows a live Mid-360 or an lvx2 file in the Rerun viewer, built with `LIVOX_MID360_BUILD_RERUN` (off by default; needs the Rerun C++ SDK). `rerun/make_blueprint.py` regenerates its default viewer layout and is the one script here that needs a third-party package (`rerun-sdk`). See `docs/rerun.md`. |
 | `livox_mid360_probe.py` | Asks a Mid-360 the protocol questions of [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) (return codes, unknown keys and commands, partial writes, push contents and period) and writes every request and ACK to JSON. Restores what it changes. Run by `scripts/hw-first-run.sh`. |
-| `livox_mid360_debug_data.py` | Reads the file written by `livox-mid360-cli debug-data`. See `docs/debug_data.md`. |
+| `livox_mid360_debug_data.py` | Reads the file written by `livox-mid360-cli debug-data` (raw or Livox-SDK2 format) and converts raw to SDK2. See `docs/debug_data.md`. |
 | `test_sim.py` | `unittest` suite for the simulator (`python3 -m unittest tools/test_sim.py`). |
 | `test_probe.py` | `unittest` suite running `livox_mid360_probe.py` against the simulator. |
+| `test_debug_data.py` | `unittest` suite for `livox_mid360_debug_data.py`. |
 
 ```sh
 python3 tools/gen_golden_vectors.py
@@ -24,5 +25,5 @@ python3 tools/livox_mid360_pcap.py capture.pcap --points > points.csv
 python3 tools/livox_mid360_sim.py --bind 127.0.0.1 --base-port 0 --verbose
 python3 tools/livox_mid360_sim.py --bind 127.0.0.1 --pcap capture.pcap --pcap-rate 0
 python3 tools/livox_mid360_probe.py --lidar-ip 192.168.1.1xx --host-ip 192.168.1.50 --out probe.json
-python3 -m unittest tools/test_sim.py tools/test_probe.py
+python3 -m unittest tools/test_sim.py tools/test_probe.py tools/test_debug_data.py
 ```

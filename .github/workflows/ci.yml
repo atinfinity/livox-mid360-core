@@ -130,7 +130,7 @@ jobs:
           git diff --exit-code -- tests/generated/golden_vectors.hpp tests/fuzz/corpus tests/data/replay.pcap tests/fixtures
           test -z "$(git status --porcelain -- tests/fuzz/corpus tests/fixtures)"
       - name: Simulator and probe unit tests
-        run: python3 -m unittest -v tools/test_sim.py tools/test_probe.py
+        run: python3 -m unittest -v tools/test_sim.py tools/test_probe.py tools/test_debug_data.py
 
   fuzz-smoke:
     name: libFuzzer smoke (clang-19)
