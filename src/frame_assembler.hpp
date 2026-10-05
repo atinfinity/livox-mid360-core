@@ -85,6 +85,13 @@ public:
   [[nodiscard]] bool has_partial() const noexcept { return !cur_.points.empty(); }
   [[nodiscard]] const Counters & counters() const noexcept { return counters_; }
   [[nodiscard]] TimeMapper & time_mapper() noexcept { return time_; }
+  /// The LiDAR restarted or the link came back (#249): `udp_cnt` and the timestamp start
+  /// over, so the drop and timestamp baselines are taken again from the next packet.
+  void rebase() noexcept
+  {
+    time_.reset();
+    drops_.reset();
+  }
   /// True once kFrameCounter has fallen back to the time window.
   [[nodiscard]] bool time_window_active() const noexcept;
 

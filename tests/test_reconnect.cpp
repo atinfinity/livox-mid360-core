@@ -261,6 +261,41 @@ TEST_CASE(
   CHECK(s.reconnects == 1);
 }
 
+TEST_CASE("Reconnect: the udp_cnt restart after reboot() is not a drop (#249)", "[sim][reconnect]")
+{
+  // The backoff holds the reconnect back while the simulator, like a Mid-360, goes back to
+  // SAMPLING by itself: its first data packets arrive before kReconnected.
+  Fixture f({"--reboot-silence", "0.3"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  DeviceOptions o = Fixture::options();
+  o.reconnect.push_timeout = 3s;
+  o.reconnect.initial_backoff = 1500ms;
+  o.reconnect.max_backoff = 1500ms;
+  auto dev = f.open(o);
+  rec.attach(*dev);
+  std::atomic<std::uint64_t> packets_while_down{0};
+  REQUIRE(dev
+            ->on_packet([&](const DataPacketView &, const ReceiveInfo &) {
+              if (rec.disconnected == 1 && rec.reconnected == 0) ++packets_while_down;
+            })
+            .has_value());
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 3; }));
+  REQUIRE(wait_until([&] { return dev->stats().packets >= 20; }));
+
+  REQUIRE(dev->reboot().has_value());
+  REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 10s));
+  const auto frames_after = rec.frames.load();
+  REQUIRE(wait_until([&] { return rec.frames >= frames_after + 3; }));
+  CHECK(packets_while_down > 0);
+  const DeviceStats s = dev->stats();
+  CHECK(s.dropped_packets == 0);
+  CHECK(s.reordered == 0);
+}
+
 TEST_CASE(
   "Reconnect: after reboot() the end of the pushes counts as the power-down (#238)",
   "[sim][reconnect]")
