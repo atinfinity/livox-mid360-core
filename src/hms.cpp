@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "livox/mid360/hms.hpp"
 
+#include <cstdio>
+
+#include "hms_detail.hpp"
+
 namespace livox::mid360
 {
 
@@ -96,6 +100,24 @@ std::string_view hms_suggestion(std::uint16_t abnormal_id) noexcept
 {
   const auto * e = lookup(abnormal_id);
   return e ? e->suggestion : std::string_view{};
+}
+
+std::string detail::hms_list(const std::array<HmsCode, 8> & hms)
+{
+  std::string list = "[";
+  for (const HmsCode & c : hms) {
+    if (!c.active()) {
+      continue;
+    }
+    if (list.size() > 1) {
+      list += ',';
+    }
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "0x%08x:", c.raw);
+    list += buf;
+    list += to_string(c.level);
+  }
+  return list + ']';
 }
 
 }  // namespace livox::mid360
