@@ -212,7 +212,7 @@ TEST_CASE(
   CHECK(to_string(*down) == "disconnected reason=reboot_requested");
 
   REQUIRE(wait_until([&] { return rec.reconnected == 1; }, 8s));
-  // The simulator reboots into a non-sampling state; the replay brings it back.
+  // The simulator boots through SELFCHECK and MOTORSTARTUP before it samples again.
   REQUIRE(wait_until([&] { return dev->work_state() == WorkState::kSampling; }, 5s));
   const auto frames_after = rec.frames.load();
   REQUIRE(wait_until([&] { return rec.frames >= frames_after + 3; }));
