@@ -162,7 +162,9 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   a union-like struct where `kind` selects the meaningful fields (`kStateChanged`, `kHms`,
   `kDiagChanged`, `kDisconnected`, `kReconnected`, `kStats`). `kHms` fires once per change of the *set* of active codes
   (slot order ignored) and carries `hms_level`, the highest active `HmsLevel`, for
-  per-level filtering.
+  per-level filtering. `to_string()` of a `kHms` event lists the active codes as
+  `LidarStatus` does: `hms active=1 level=warning codes=[0x0103800a:warning]`
+  ([#256](https://github.com/atinfinity/livox-mid360-core/issues/256)).
 - `DeviceStats{packets, points, frames, imu_samples, bad_packets, dropped_packets (udp_cnt
   gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, pushes,
   last_push_time_ns, time_offset_ns (re-measured after a sync loss), time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed

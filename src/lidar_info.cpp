@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <string_view>
 
+#include "hms_detail.hpp"
 #include "livox/mid360/transport.hpp"
 
 namespace livox::mid360
@@ -392,22 +393,7 @@ std::string to_string(const LidarStatus & s)
   append(out, "time_sync_type", s.time_sync_type, sv);
   append(out, "lidar_diag_status", s.lidar_diag_status, str);
   append(out, "fw_type", s.fw_type, sv);
-  append(out, "hms", s.hms_code, [](const std::array<HmsCode, 8> & hms) {
-    std::string list = "[";
-    for (const HmsCode & c : hms) {
-      if (!c.active()) {
-        continue;
-      }
-      if (list.size() > 1) {
-        list += ',';
-      }
-      char buf[16];
-      std::snprintf(buf, sizeof buf, "0x%08x:", c.raw);
-      list += buf;
-      list += to_string(c.level);
-    }
-    return list + ']';
-  });
+  append(out, "hms", s.hms_code, detail::hms_list);
   return out;
 }
 
