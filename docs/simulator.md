@@ -35,7 +35,8 @@ python3 tools/livox_mid360_sim.py --pcap capture.pcap --pcap-rate 0.5   # replay
 | `--pcap-rate` | 1.0 | `--pcap` speed: `2` replays twice as fast as recorded, `0` as fast as possible |
 | `--startup-delay` | 0.3 s | time spent in MOTORSTARTUP (after power-on / reboot and whenever the motor starts from IDLE) |
 | `--selfcheck-delay` | 0.1 s | time spent in SELFCHECK after power-on / reboot |
-| `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after 0x0200 / 0x0201 |
+| `--reboot-delay` | 0 s | the LiDAR keeps running for this long after the 0x0200 / 0x0201 ACK before it powers down (a Mid-360 takes about 1.25 s, [#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) |
+| `--reboot-silence` | 0.5 s | commands are ignored and nothing is sent for this long after the power-down that follows 0x0200 / 0x0201 |
 | `--frame-ms` | 100 | `frame_cnt` increments at this period; `0` never increments it (what a non-repetitive scanner is expected to do, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) |
 | `--rate-multiplier` | 1.0 | scales the 2000 pkt/s point-cloud and the IMU rate (200 pkt/s unless `0x002B` selects another) |
 | `--push-rate` | 1.0 | 0x0102 push rate in Hz, not affected by `--rate-multiplier` |
@@ -72,7 +73,7 @@ The process is driven over its standard streams so that any test harness can use
 | `drop_ack` | `count` | do not answer the next `count` requests (the request is still processed) |
 | `fail_cmd` | `cmd_id`, `ret` (default 1), `count` (default 1), `skip` (default 0), `key` (optional) | after letting `skip` of them pass, answer the next `count` requests with this `cmd_id` with `ret` without applying them; with `key` only `0x0100` / `0x0101` requests that name the key match (it is reported as `error_key` of `0x0100`). One rule per `cmd_id` |
 | `inquire_override` | `key`, and one of `value` (hex string, may be empty), `omit`, `unsupported`, `clear` (each `true`) | what `0x0101` answers for `key` from now on: these bytes instead of the stored value, the key left out of the ACK, the whole inquire rejected with `0x20` naming the key, or the normal answer again. The push and `0x0100` are not affected |
-| `reboot` | | same as receiving 0x0200: reboot silence, counters reset; if the stored key 0x0004 address differs from the bound one, every socket is rebound to it keeping the ports and a `rebound` event is emitted (a failed bind emits `error` and keeps the old sockets) |
+| `reboot` | | same as receiving 0x0200: `--reboot-delay`, ERROR push, reboot silence, counters reset; if the stored key 0x0004 address differs from the bound one, every socket is rebound to it keeping the ports and a `rebound` event is emitted (a failed bind emits `error` and keeps the old sockets) |
 | `set_status` | any of `diag` (u16 bitfield), `core_temp` (0.01 °C), `powerup_cnt`, `bad_time_offset` (1: 0x800B answered truncated to 4 bytes), `omit_keys` (list of key ids left out of the push); a value that is not an integer applies nothing | overwrite the read-only status keys the push and 0x0101 report ([#56](https://github.com/atinfinity/livox-mid360-core/issues/56) / [#55](https://github.com/atinfinity/livox-mid360-core/issues/55)); the time keys `0x8009`–`0x800C` follow the clock, see `time_sync` |
 | `time_sync` | any of `type` (`none`, `ptp` or `gps`), `offset_ns` (default 0), `drift_ppm` | `ptp` / `gps`: acquire synchronisation to a master at the host's wall clock plus `offset_ns`, stepping the clock to it; `none`: lose it, free running on from the current time; `drift_ppm`: the free-running rate from now on, without a step ([#133](https://github.com/atinfinity/livox-mid360-core/issues/133)). Emits `time_sync` |
 | `set_state` | `state` | force `cur_work_state` (e.g. 4 ERROR); `work_tgt_mode` is untouched, so forcing a work substate makes the machine chase the target again |
@@ -150,9 +151,13 @@ The process is driven over its standard streams so that any test harness can use
   every transition emits a `state` event. `work_tgt_mode` accepts 1 / 2 / 9 only (4 / 5 / 6 /
   8 → `0x20`, undefined → `0x03`, in ERROR / UPGRADE → `0x02`); a write during SELFCHECK /
   MOTORSTARTUP is stored and followed afterwards. ERROR / UPGRADE are entered only by `set_state` and left by
-  `set_state` or a reboot. Reboot and factory reset go back through SELFCHECK, reset
-  `udp_cnt`/`frame_cnt`/`seq`, stop the debug raw data stream and stay silent for
-  `--reboot-silence`; the push and log chunks resume after the silence. Reboot keeps every
+  `set_state` or a reboot. Reboot and factory reset keep the LiDAR running for
+  `--reboot-delay` after the ACK, then send one push reporting ERROR, power down (reset
+  `udp_cnt`/`frame_cnt`/`seq`, stop the debug raw data stream) and stay silent for
+  `--reboot-silence`; SELFCHECK spans the silence, so the first push after it reports
+  MOTORSTARTUP as on a Mid-360, and the push and log chunks resume after the silence. A
+  second 0x0200 / 0x0201 during the delay does not postpone the power-down; a factory reset
+  among them wins. Reboot keeps every
   setting except `work_tgt_mode`; factory reset restores `factory_settings()` except key
   `0x0004`, which goes back to the address the simulator started on (it cannot move to the
   real factory address 192.168.1.100; after a rebind it moves back). All durations
@@ -280,7 +285,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unicast discovery | answered like broadcast | verified on the same subnet: answered, but the ACK goes to 255.255.255.255 (`--discovery-ack-broadcast`, [#217](https://github.com/atinfinity/livox-mid360-core/issues/217)); from outside the broadcast domain still unverified |
 | Discovery ACK `cmd_port` | the bound command port (56100 by default) | verified: 56100 |
 | Persistence across reboot | all keys except `work_tgt_mode` | wiki only marks `work_tgt_mode` as volatile |
-| Silence after reboot | ~0.5 s, then SELFCHECK → IDLE → target | real durations unknown |
+| Reboot timing ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) | runs on for `--reboot-delay` (0 s), one ERROR push, `--reboot-silence` (0.5 s), then MOTORSTARTUP → target; `udp_cnt` and the clock restart | measured on firmware 13.18.0244: runs on for 1.25 s, ERROR pushes, silent until +8.9 s, first push MOTORSTARTUP (SELFCHECK / IDLE never pushed), READY at +13.5 s, then SAMPLING; the defaults stay short to keep tests fast |
 | SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | SELFCHECK unknown; MOTORSTARTUP measured at 6.1–10.1 s on a Mid-360 ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)), kept short here to keep the tests fast |
 | `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
@@ -296,7 +301,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Unknown `cmd_id` | ret `0x01` | no ACK at all is also plausible |
 | Multi-key config with one bad key | nothing applied | vs. partial application |
 | Push contents and timing | keys `0x0000`, `0x0001`, `0x0004`–`0x0007`, `0x0012`, `0x0015`–`0x0019`, `0x001A`, `0x001C`, then `0x8000`–`0x800C`, `0x800E`, `0x8010`, `0x8011`; an extra push on each state change and after each `0x0100` request | verified on firmware 13.18.0244 ([#235](https://github.com/atinfinity/livox-mid360-core/issues/235)); the real push `seq_num` is not contiguous (about 26 per second at one push per second), the simulator's counts its own pushes |
-| Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93), [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)) | `0x0303` answers `0x00` on the log port in every work state, also when repeated (the stream then moves to the new destination), when disabling a disabled stream and for an enable with port 0 (which stops the stream); the command port does not answer; short payloads answer `0x01`; the stream leaves port 60301 only while sampling, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | verified on firmware 13.18.0244 except the reboot and the datagram content |
+| Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93), [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)) | `0x0303` answers `0x00` on the log port in every work state, also when repeated (the stream then moves to the new destination), when disabling a disabled stream and for an enable with port 0 (which stops the stream); the command port does not answer; short payloads answer `0x01`; the stream leaves port 60301 only while sampling, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | verified on firmware 13.18.0244 except the datagram content |
 | Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)) and resends an unacknowledged chunk; the counting and end-of-file behaviour are unknown |
 | FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
