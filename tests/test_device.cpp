@@ -2,6 +2,7 @@
 // Context / Device (issue #6) against tools/livox_mid360_sim.py: registration, frame and IMU
 // delivery, drop counting, frame_cnt splitting and fallback, idle close, stop / destruction,
 // and 0x0102 push handling (issue #7): work_state(), hms(), kStateChanged / kHms events.
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -164,11 +165,15 @@ struct Recorder
               .has_value());
   }
 
-  [[nodiscard]] Event last_event()
+  /// The newest event of `kind`; a state change of the simulator's start-up may come after it
+  /// (#258).
+  [[nodiscard]] Event last_event(Event::Kind kind)
   {
     const std::lock_guard lock(mutex);
-    REQUIRE(!events.empty());
-    return events.back();
+    const auto it = std::find_if(
+      events.rbegin(), events.rend(), [kind](const Event & e) { return e.kind == kind; });
+    REQUIRE(it != events.rend());
+    return *it;
   }
 
   [[nodiscard]] Event event(std::size_t i)
@@ -531,7 +536,7 @@ TEST_CASE("Device: push snapshot, on_push and diag events", "[sim][device]")
   REQUIRE(f.sim->control(R"({"cmd":"set_status","diag":33,"core_temp":4321})"));  // 0x0021
   REQUIRE(wait_until([&] { return rec.diag_events >= 1; }));
   {
-    const Event e = rec.last_event();
+    const Event e = rec.last_event(Event::Kind::kDiagChanged);
     CHECK(e.kind == Event::Kind::kDiagChanged);
     CHECK(e.diag_old == DiagStatus{});
     CHECK(e.diag_new.system == DiagLevel::kWarning);
@@ -571,7 +576,7 @@ TEST_CASE("Device: push snapshot, on_push and diag events", "[sim][device]")
   REQUIRE(f.sim->control(R"({"cmd":"set_status","omit_keys":[],"diag":0})"));
   REQUIRE(wait_until([&] { return rec.diag_events >= 2; }));
   {
-    const Event e = rec.last_event();
+    const Event e = rec.last_event(Event::Kind::kDiagChanged);
     CHECK(e.diag_old.scan == DiagLevel::kError);
     CHECK(e.diag_new == DiagStatus{});
   }
