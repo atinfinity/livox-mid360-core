@@ -601,7 +601,10 @@ class SimulatorTest(unittest.TestCase):
     """Simulator methods called directly, without the main loop."""
 
     def setUp(self) -> None:
-        args = sim.build_parser().parse_args(['--bind', '127.0.0.1', '--base-port', '0'])
+        # Without the main loop a delayed reboot would never power down.
+        args = sim.build_parser().parse_args(
+            ['--bind', '127.0.0.1', '--base-port', '0', '--reboot-delay', '0']
+        )
         self.out = io.StringIO()
         self.s = sim.Simulator(args, out=self.out, control=None)
         self.s.model.power_on(time.monotonic())
@@ -945,6 +948,8 @@ class EndToEndTest(unittest.TestCase):
                 '0.05',
                 '--selfcheck-delay',
                 '0.05',
+                '--reboot-delay',
+                '0.2',
                 '--reboot-silence',
                 '0.5',
             ]
@@ -1025,11 +1030,12 @@ class EndToEndTest(unittest.TestCase):
             got_push = f.cmd_id == sim.CMD_INFO_PUSH and f.sender_type == 1
         self.assertTrue(got_push)
 
-        # Reboot: ACK, then silence, then back to SAMPLING with udp_cnt reset.
+        # Reboot: ACK, still running for the delay, then silence, then back to SAMPLING with
+        # udp_cnt reset.
         ack = self.request(sim.CMD_REBOOT, struct.pack('<H', 100), cmd)
         self.assertEqual(ack.data, b'\x00')
         self.pcl.settimeout(0.05)
-        time.sleep(0.1)
+        time.sleep(self.s.args.reboot_delay + 0.1)
         while True:  # drain anything already queued
             try:
                 self.pcl.recvfrom(2048)
@@ -1049,8 +1055,49 @@ class EndToEndTest(unittest.TestCase):
         ]
         reboot = len(states) - len(boot)
         self.assertEqual(states[: len(boot)], boot)  # power-on
+        down = [(sim.WS_SAMPLING, sim.WS_ERROR), (sim.WS_ERROR, sim.WS_SELFCHECK)]
+        self.assertEqual(states[reboot - len(down) : reboot], down)
         self.assertEqual(states[reboot:], boot)  # after the reboot
         self.assertEqual(states.count((sim.WS_READY, sim.WS_SAMPLING)), 2)
+
+    def test_reboot_keeps_running_then_pushes_error_and_comes_back_in_motorstartup(self) -> None:
+        # The sequence of a Mid-360 (#236), with the durations scaled down.
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        kvs = [
+            (sim.KEY_PCL_HOST, proto.encode_host_ipcfg('127.0.0.1', self.pcl.getsockname()[1], 0)),
+            (
+                sim.KEY_STATE_HOST,
+                proto.encode_host_ipcfg('127.0.0.1', self.host.getsockname()[1], 0),
+            ),
+        ]
+        ack = self.request(sim.CMD_PARAM_CONFIG, proto.encode_param_config(kvs), cmd)
+        self.assertEqual(proto.parse_param_config_ack(ack.data), (0, 0))
+        self.pcl.recvfrom(2048)  # sampling
+        ack = self.request(sim.CMD_REBOOT, struct.pack('<H', 100), cmd)
+        t_ack = time.monotonic()
+        self.assertEqual(ack.data, b'\x00')
+        pushes = []  # (seconds after the ACK, cur_work_state)
+        while not pushes or pushes[-1][1] != sim.WS_SAMPLING or len(pushes) < 3:
+            f = proto.CommandFrame.parse(self.host.recvfrom(4096)[0])
+            if f.cmd_id == sim.CMD_INFO_PUSH:
+                state = dict(proto.parse_info_push(f.data))[sim.KEY_CUR_WORK_STATE][0]
+                pushes.append((time.monotonic() - t_ack, state))
+        states = [s for _, s in pushes]
+        error = states.index(sim.WS_ERROR)
+        self.assertNotIn(sim.WS_ERROR, states[error + 1 :])
+        self.assertTrue(all(s == sim.WS_SAMPLING for s in states[:error]))
+        self.assertGreaterEqual(pushes[error][0], self.s.args.reboot_delay - 0.05)
+        # Then silence, and SELFCHECK / IDLE are never pushed.
+        self.assertEqual(states[error + 1], sim.WS_MOTORSTARTUP)
+        self.assertNotIn(sim.WS_SELFCHECK, states)
+        self.assertNotIn(sim.WS_IDLE, states)
+        gap = pushes[error + 1][0] - pushes[error][0]
+        self.assertGreaterEqual(gap, self.s.args.reboot_silence - 0.05)
+        # The point cloud kept flowing during the delay: no udp_cnt reset before the ERROR.
+        cnts = [proto.DataPacket.parse(self.pcl.recvfrom(2048)[0]).udp_cnt]
+        while cnts[-1] >= cnts[0]:  # until the first packet after the reboot
+            cnts.append(proto.DataPacket.parse(self.pcl.recvfrom(2048)[0]).udp_cnt)
+        self.assertGreater(len(cnts), 10)
 
     def test_ip_config_change_rebinds_after_reboot(self) -> None:
         cmd = ('127.0.0.1', self.s.ports['cmd'])
