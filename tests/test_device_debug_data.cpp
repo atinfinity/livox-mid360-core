@@ -239,9 +239,9 @@ TEST_CASE("Device: start_debug_data needs the Context's debug data socket", "[si
     SKIP("simulator unavailable: " << err);
   }
   const auto context = loopback_context(std::nullopt);
+  std::atomic<std::uint64_t> n{0};  // before the Device, which may still deliver (#253)
   auto dev = open(*context, *sim);
   // Subscribing is allowed; the callback just never runs.
-  std::atomic<std::uint64_t> n{0};
   REQUIRE(dev->on_debug_data([&](const DebugDataPacket &) { ++n; }).has_value());
   const auto r = dev->start_debug_data();
   REQUIRE_FALSE(r.has_value());

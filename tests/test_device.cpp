@@ -485,13 +485,14 @@ TEST_CASE("Device: push snapshot, on_push and diag events", "[sim][device]")
     SKIP("simulator unavailable: " << f.err);
   }
   Recorder rec;
-  auto dev = f.open();
-  rec.attach(*dev);
+  // Declared before the Device, which may still deliver while the test unwinds (#253).
   std::mutex push_mutex;
   std::optional<LidarStatus> last_push;
   std::uint64_t push_calls = 0;
   bool on_receive_thread = true;
   const auto main_thread = std::this_thread::get_id();
+  auto dev = f.open();
+  rec.attach(*dev);
   REQUIRE(dev
             ->on_push([&](const LidarStatus & s) {
               const std::lock_guard lock(push_mutex);
@@ -1058,6 +1059,7 @@ TEST_CASE("Device: firmware log without on_firmware_log still counts and ACKs", 
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
+  std::atomic<std::uint64_t> n{0};  // before the Device, which may still deliver (#253)
   auto dev = f.open();
   REQUIRE(dev->start_firmware_log().has_value());
   // log_chunks is counted before the ACK goes out, so wait on the ACK counter.
@@ -1065,7 +1067,6 @@ TEST_CASE("Device: firmware log without on_firmware_log still counts and ACKs", 
   CHECK(dev->stats().log_chunks >= 5);
   REQUIRE(dev->stop_firmware_log().has_value());
   // Subscribing afterwards is allowed and works for the next start.
-  std::atomic<std::uint64_t> n{0};
   REQUIRE(dev->on_firmware_log([&](const FirmwareLogChunk &) { ++n; }).has_value());
   REQUIRE(dev->start_firmware_log().has_value());
   REQUIRE(wait_until([&] { return n >= 3; }));
@@ -1080,10 +1081,10 @@ TEST_CASE("Device: firmware log starts when the LiDAR does not support key 0x000
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
+  std::atomic<std::uint64_t> n{0};  // before the Device, which may still deliver (#253)
   auto dev = f.open();
   REQUIRE(f.sim->control(R"({"cmd":"fail_cmd","cmd_id":256,"ret":32,"key":9,"count":100})"));
   REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());  // applied before the 0x0100
-  std::atomic<std::uint64_t> n{0};
   REQUIRE(dev->on_firmware_log([&](const FirmwareLogChunk &) { ++n; }).has_value());
   REQUIRE(dev->start_firmware_log().has_value());
   REQUIRE(wait_until([&] { return n >= 3; }));

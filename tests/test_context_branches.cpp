@@ -120,8 +120,8 @@ TEST_CASE("Context: a serial number or an address is registered once", "[sim][co
     SKIP("simulator unavailable: " << err);
   }
   auto context = loopback_context();
+  std::atomic<std::uint64_t> frames{0};  // before the Device, which may still deliver (#253)
   auto first = open(*context, *sim);
-  std::atomic<std::uint64_t> frames{0};
   REQUIRE(first->on_frame([&](const Frame &) { ++frames; }).has_value());
   REQUIRE(first->start_sampling().has_value());
   REQUIRE(wait_until([&] { return frames >= 2; }));
@@ -199,12 +199,12 @@ TEST_CASE("Context: draining a socket spans several wake-ups", "[sim][context]")
     SKIP("simulator unavailable: " << err);
   }
   auto context = loopback_context(kBatch);
-  auto dev = open(*context, *sim);
-
+  // Declared before the Device, which may still deliver while the test unwinds (#253).
   std::mutex mutex;
   std::vector<std::uint32_t> seen;
   std::atomic<std::size_t> received{0};
   std::atomic<bool> hold{true};
+  auto dev = open(*context, *sim);
   REQUIRE(dev
             ->on_debug_data([&](const DebugDataPacket & p) {
               const auto n = number_of(p.data);
