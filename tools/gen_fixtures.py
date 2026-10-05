@@ -50,16 +50,9 @@ STATUS_KEYS = (0x8000, 0x8001, 0x8002, 0x8003, 0x8004, 0x8005, 0x8006, 0x8007, 0
 STATUS_KEYS += (0x8009, 0x800A, 0x800B, 0x800C, 0x800E, 0x8010, 0x8011)
 
 
-class FixtureModel(sim.DeviceModel):
-    def read_key(self, key: int, now_ns: int) -> bytes | None:
-        if key == sim.KEY_FW_TYPE:
-            return b'\x01'  # a Mid-360 reports 1
-        return super().read_key(key, now_ns)
-
-
 def model() -> sim.DeviceModel:
     """Return the device the pushes and inquire ACKs describe, with the measured identity."""
-    m = FixtureModel(
+    m = sim.DeviceModel(
         sn=SN,
         product_info='DevType:Mid-360 FmType:App FmVer:13180244 BuildTime:2025/04/01',
         version_app=(13, 18, 2, 44),
