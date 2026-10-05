@@ -228,9 +228,11 @@ TEST_CASE("Event / DeviceError to_string", "[device]")
   e.stats.packets = 7;
   CHECK(to_string(e).starts_with("stats packets=7 "));
   e.kind = Event::Kind::kHms;
-  e.hms[0].raw = 1;
+  e.hms_level = HmsLevel::kNone;
+  CHECK(to_string(e) == "hms active=0 level=none codes=[]");
+  e.hms[0] = decode_hms(0x0103'8002);
   e.hms_level = HmsLevel::kWarning;
-  CHECK(to_string(e) == "hms active=1 level=warning");
+  CHECK(to_string(e) == "hms active=1 level=warning codes=[0x01038002:warning]");
   e.kind = Event::Kind::kDiagChanged;
   e.diag_new.scan = DiagLevel::kError;
   CHECK(to_string(e) == "diag_changed sys0/scan0/rng0/comm0 -> sys0/scan2/rng0/comm0");
@@ -446,6 +448,7 @@ TEST_CASE("Device: pushes drive work_state, hms and events", "[sim][device]")
     CHECK(e.hms[0].abnormal_id == 1);
     CHECK(e.hms[1].raw == kWarn);
     CHECK_FALSE(e.hms[2].active());
+    CHECK(to_string(e) == "hms active=2 level=error codes=[0x00010003:error,0x00020002:warning]");
   }
   CHECK(dev->hms()[1].level == HmsLevel::kWarning);
 

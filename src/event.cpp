@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 
+#include "hms_detail.hpp"
 #include "livox/mid360/lidar_info.hpp"
 
 namespace livox::mid360
@@ -66,6 +67,7 @@ std::string to_string(const Event & event)
       out += " active=" + std::to_string(active);
       out += " level=";
       out += to_string(event.hms_level);
+      out += " codes=" + detail::hms_list(event.hms);
       break;
     }
     case Event::Kind::kDiagChanged:
