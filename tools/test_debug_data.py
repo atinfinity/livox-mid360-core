@@ -28,6 +28,15 @@ SERIAL = 'SIM0000000000001'
 # data_type 1, the SN, 107 zero bytes, crc16 0x5A1D little-endian.
 SDK2_HEADER = bytes([1, 9, 1]) + SERIAL.encode() + bytes(107) + b'\x1d\x5a'
 
+# A Mid-360 serial number has 14 characters. A file SDK2 wrote from a real Mid-360 (firmware
+# 13.18.0244) has the same layout: the SN, two NUL bytes, 107 zero bytes, the CRC. This is that
+# header with a made-up SN, again from SDK2's own code: crc16 0x6268.
+SERIAL_14 = 'SIM00000000001'
+SDK2_HEADER_14 = bytes([1, 9, 1]) + SERIAL_14.encode() + bytes(2 + 107) + b'\x68\x62'
+
+# The datagram size of the debug raw data stream of that Mid-360, from port 60301.
+MID360_DATAGRAM = 1114
+
 
 def sim_payload(seq: int, size: int = 20) -> bytes:
     return struct.pack('<I', seq) + bytes((seq + i) & 0xFF for i in range(size - 4))
@@ -62,6 +71,20 @@ class DebugDataTest(unittest.TestCase):
     def test_sdk2_header_matches_livox_sdk2(self) -> None:
         self.assertEqual(len(SDK2_HEADER), 128)
         self.assertEqual(dbg.encode_sdk2_header(SERIAL), SDK2_HEADER)
+
+    def test_sdk2_header_of_a_mid360_serial(self) -> None:
+        self.assertEqual(len(SDK2_HEADER_14), 128)
+        self.assertEqual(dbg.encode_sdk2_header(SERIAL_14, 9), SDK2_HEADER_14)
+        self.assertEqual(dbg.parse_header(SDK2_HEADER_14).serial, SERIAL_14)
+
+    def test_reads_an_sdk2_file_shaped_like_a_mid360_one(self) -> None:
+        body = b''.join(b'\xa5' + sim_payload(i, MID360_DATAGRAM - 1) for i in range(3))
+        path = self.write('m.sdk2', SDK2_HEADER_14 + body)
+        status, lines = self.run_tool(path, '--datagram-size', str(MID360_DATAGRAM), '--json')
+        self.assertEqual(status, 0)
+        self.assertEqual(lines[-1]['serial'], SERIAL_14)
+        self.assertEqual(lines[-1]['packets'], 3)
+        self.assertEqual([x['length'] for x in lines[:-1]], [MID360_DATAGRAM] * 3)
 
     def test_sdk2_header_pads_a_short_serial(self) -> None:
         h = dbg.encode_sdk2_header('ABC', 9)

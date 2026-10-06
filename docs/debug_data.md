@@ -86,9 +86,22 @@ between them: no length, time or port. SDK2 keeps only datagrams from LiDAR port
 stops writing at 4 GiB. Without framing, datagrams can only be told apart when their size is
 known (`--datagram-size` of the reader).
 
-The header is checked against one built by SDK2's own struct and CRC code (the golden header
-in `tools/test_debug_data.py`). A file written by SDK2 from a real Mid-360 has not been
-compared yet; until then the record part rests on the source alone.
+The header is checked against one built by SDK2's own struct and CRC code (the golden headers
+in `tools/test_debug_data.py`).
+
+**Compared with a real file.** SDK2 at `c0796f0` (its `samples/debug_point_cloud`) wrote a
+file from a Mid-360 with firmware 13.18.0244, and `livox-mid360-cli debug-data` recorded the
+same LiDAR right after it, once with `--format sdk2` and once with `--format raw`:
+
+- The 128-byte header of the CLI's `sdk2` file, and of the raw file converted with
+  `--to-sdk2`, is byte for byte the header of the SDK2 file. The 14-character serial number
+  is followed by two NUL bytes.
+- In all three files the body is a whole number of 1114-byte datagrams, each starting with
+  `0xa5`. The raw file shows that every datagram came from port 60301 and was 1114 bytes
+  long, so `--datagram-size 1114` splits a Mid-360 file.
+
+The reference file holds the LiDAR's serial number and is not in the repository; the tests
+use a header of the same layout with a made-up one.
 
 ## Reader
 
