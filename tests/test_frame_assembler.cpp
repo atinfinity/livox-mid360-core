@@ -135,6 +135,76 @@ TEST_CASE("frame assembler: time window closes on the first point past base + wi
   CHECK(fa.time_window_active());
 }
 
+TEST_CASE("frame assembler: time windows stay on a grid between packets", "[frame]")
+{
+  // #260: Mid-360 packets are 480 us apart, so 100 ms is not a whole number of packets. Each
+  // window starts where the last one ended, not at the packet that closed it: frames take 208
+  // or 209 packets and average 100 ms instead of 209 packets / 100.32 ms each.
+  FrameAssembler fa(window_policy(100ms), TimestampPolicy::kLidar);
+  constexpr std::uint64_t kSpacing = 480'000;
+  std::uint16_t cnt = 0;
+  std::vector<Frame> frames;
+  for (std::uint64_t t = 0; t < 10'000 * kMs; t += kSpacing) {
+    auto p = make_packet(cnt++, 0, 5 * kMs + t, 96);
+    if (auto f = fa.push(p.view, 0)) {
+      frames.push_back(std::move(*f));
+    }
+  }
+  REQUIRE(frames.size() == 99);  // [5, 105) ... [9805, 9905); the last window is open
+  for (std::size_t i = 0; i < frames.size(); ++i) {
+    const Frame & f = frames[i];
+    CHECK((f.packets == 208 || f.packets == 209));
+    // The window of frame i is [5 + 100 i, 5 + 100 (i + 1)) ms; packets are not split, so the
+    // last one may reach past its end.
+    CHECK(f.base_time_ns >= 5 * kMs + i * 100 * kMs);
+    CHECK(f.base_time_ns < 5 * kMs + i * 100 * kMs + kSpacing);
+    CHECK(f.end_time_ns < 5 * kMs + (i + 1) * 100 * kMs + kSpacing);
+  }
+  const double mean_ms =
+    static_cast<double>(frames.back().base_time_ns - frames.front().base_time_ns) /
+    static_cast<double>(frames.size() - 1) / 1e6;
+  CHECK(mean_ms > 99.99);
+  CHECK(mean_ms < 100.01);
+}
+
+TEST_CASE("frame assembler: a gap of several windows keeps the grid", "[frame]")
+{
+  FrameAssembler fa(window_policy(100ms), TimestampPolicy::kLidar);
+  std::uint16_t cnt = 0;
+  std::vector<Frame> frames;
+  for (const std::uint64_t t : {0ull, 50ull, 370ull, 420ull, 510ull}) {
+    auto p = make_packet(cnt++, 0, t * kMs);
+    if (auto f = fa.push(p.view, 0)) {
+      frames.push_back(std::move(*f));
+    }
+  }
+  // [0, 100) closes at 370; the window of 370 is [300, 400), closed by 420 in [400, 500),
+  // closed by 510.
+  REQUIRE(frames.size() == 3);
+  CHECK(frames[0].packets == 2);
+  CHECK(frames[1].base_time_ns == 370 * kMs);
+  CHECK(frames[1].packets == 1);
+  CHECK(frames[2].base_time_ns == 420 * kMs);
+}
+
+TEST_CASE("frame assembler: an idle close starts the next window at its first packet", "[frame]")
+{
+  FrameAssembler fa(window_policy(100ms), TimestampPolicy::kLidar);
+  std::uint16_t cnt = 0;
+  auto p = make_packet(cnt++, 0, 0);
+  CHECK_FALSE(fa.push(p.view, 0));
+  REQUIRE(fa.flush());
+  // Off the old grid: [130, 230), so 210 stays in the frame and 230 closes it.
+  for (const std::uint64_t t : {130ull, 210ull}) {
+    auto q = make_packet(cnt++, 0, t * kMs);
+    CHECK_FALSE(fa.push(q.view, 0));
+  }
+  auto q = make_packet(cnt++, 0, 230 * kMs);
+  const auto f = fa.push(q.view, 0);
+  REQUIRE(f);
+  CHECK(f->packets == 2);
+}
+
 TEST_CASE("frame assembler: constant frame_cnt falls back to the time window", "[frame]")
 {
   FrameAssembler fa(counter_policy(100ms), TimestampPolicy::kLidar);

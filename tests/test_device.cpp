@@ -871,6 +871,32 @@ TEST_CASE("Device: --frame-ms 0 falls back to the time window", "[sim][device]")
   REQUIRE(f.sim->wait_event(R"("event":"control")").has_value());
 }
 
+TEST_CASE("Device: fallback frames average the window", "[sim][device]")
+{
+  // #260: packets do not fall on window boundaries (2 ms apart at the fixture's rate), so a
+  // window that restarted at the closing packet would average about a half spacing more.
+  Fixture f;
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 42; }, 10s));
+  REQUIRE(dev->stop_sampling().has_value());
+  CHECK(dev->stats().frame_cnt_fallback == 1);
+  CHECK(rec.ok);
+  const std::lock_guard lock(rec.mutex);
+  // The first frame spans the 2 x window grace period; the grid starts after it.
+  const Frame & first = rec.kept[1];
+  const Frame & last = rec.kept[41];
+  const double mean_ms = static_cast<double>(last.base_time_ns - first.base_time_ns) / 40.0 / 1e6;
+  INFO("mean frame period " << mean_ms << " ms");
+  CHECK(mean_ms > 99.5);
+  CHECK(mean_ms < 100.5);
+}
+
 TEST_CASE("Device: time window mode and kHostReceive", "[sim][device]")
 {
   Fixture f;

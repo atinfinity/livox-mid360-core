@@ -187,31 +187,45 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
   }
 
   std::optional<Frame> out;
+  // Whether the next frame's window continues the grid of window_start_ (#260).
+  bool on_grid = false;
   if (!cur_.points.empty()) {
-    bool close = time_window_active() ? t0 >= cur_.base_time_ns + window : frame_changed;
+    bool close = frame_changed;
+    if (time_window_active()) {
+      close = t0 >= window_start_ + window;
+      on_grid = close;
+    }
     if (h.data_type != cur_.source_type) {
       close = true;  // the point format changed (set_point_format()): one format per Frame
+      on_grid = false;
     }
     if (h.time_type != cur_.time_type) {
       close = true;  // PTP / GPS acquired or lost: one time base per Frame (#145)
+      on_grid = false;
     }
     if (t0 + window <= cur_.base_time_ns) {
       // The clock stepped back by a window or more (a re-synchronisation, #145). A reordered
       // packet is late by far less, and without this close the time window would not close
       // until the clock was back at base_time_ns + window.
       close = true;
+      on_grid = false;
     }
     const std::uint64_t span_ns = static_cast<std::uint64_t>(h.time_interval) * 100u;
     if (
       t0 >= cur_.base_time_ns &&
       t0 - cur_.base_time_ns + span_ns > std::numeric_limits<std::uint32_t>::max()) {
       close = true;  // Point::offset_ns would overflow
+      on_grid = false;
     }
     if (close) {
       out = take_frame();
     }
   }
   if (cur_.points.empty()) {
+    // A window closed by time hands its remainder to the next one: packets do not fall on
+    // window boundaries, and restarting at the closing packet would lengthen every frame by
+    // up to a packet spacing (100.32 ms on a Mid-360, #260).
+    window_start_ = on_grid ? window_start_ + window * ((t0 - window_start_) / window) : t0;
     cur_.base_time_ns = t0;
     cur_.end_time_ns = t0;
     cur_.frame_cnt = h.frame_cnt;

@@ -143,9 +143,12 @@ struct Fixture
   {
     // 100 pkt/s (10 packets per frame): under Debug+ASan on 2 CPUs the receiver cannot keep
     // up with 500 pkt/s, and the 4 MB socket buffer then delays every frame by seconds, past
-    // a format switch the tests wait for.
+    // a format switch the tests wait for. --frame-ms 100: frame_cnt closes the frames and the
+    // ring restarts at each, so a frame starts at ring index 0; with the default frame_cnt 0
+    // (#246) the time window cuts the ring anywhere (#260).
     extra.insert(
-      extra.end(), {"--scene", "ring", "--rate-multiplier", "0.05", "--push-rate", "10"});
+      extra.end(),
+      {"--scene", "ring", "--rate-multiplier", "0.05", "--push-rate", "10", "--frame-ms", "100"});
     sim = SimProcess::start(err, std::move(extra));
     if (sim) {
       ContextOptions o;

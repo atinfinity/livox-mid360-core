@@ -205,8 +205,14 @@ thread feeds it one parsed point-cloud packet at a time and delivers whatever it
   a replay of them takes this fallback and its first frame covers `2 × window`; `kTimeWindow`
   avoids that ([lvx2.md](lvx2.md#livox-sample-files)).
 - **Time window mode**: packets are never split; a packet whose first point is at or past
-  `base_time_ns + window` starts a new frame. `base_time_ns` is the first point of the first
-  packet of the frame.
+  the end of the current window starts a new frame. `base_time_ns` is the first point of the
+  first packet of the frame. Windows follow each other on a grid of `window`: the next one
+  starts where the last one ended (skipping whole windows without packets), not at the packet
+  that closed it, so frames average `window` although packets do not fall on its boundaries
+  (a Mid-360 frame holds 208 or 209 packets of 480 µs,
+  [#260](https://github.com/atinfinity/livox-mid360-core/issues/260)). Any other close (idle,
+  point format, time base, clock step back, `offset_ns` overflow) starts the next window at
+  the next packet.
 - A packet whose `offset_ns` would overflow `uint32` (4.29 s) forces a close. So do, in both
   modes, a change of the header `time_type` (synchronisation acquired or lost: one time base
   per frame, as `Frame::time_type` says) and a packet a whole `window` or more before
