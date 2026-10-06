@@ -105,13 +105,15 @@ decoded fields, so a checklist item can be settled from it without another run.
 
 ## Results
 
-Add one section per run, newest first:
+Add one section per run, newest first. Leave out the serial number, MAC address and IP
+address of the LiDAR, also in what is pasted from `summary.md` and `env.txt`: write
+`<SN>` and `192.168.1.1xx` instead.
 
 ```markdown
 ### YYYY-MM-DD: <what was verified>
 
 - Host: <OS, architecture, compiler, build type>
-- LiDAR: firmware <version_app>, serial <SN>, <direct link / switch>
+- LiDAR: firmware <version_app>, <direct link / switch>
 - Commit: <hash>
 
 <summary.md table>
@@ -185,7 +187,7 @@ of t1 (#262). The comparison with Livox Viewer 2 moved to #263.
   - ufw is installed but not enabled (`ENABLED=no`), so the firewall row of #110 is still
     open.
 - LiDAR:
-  - Mid-360 at 192.168.1.1xx, serial <SN>, MAC <MAC>.
+  - Mid-360 at 192.168.1.1xx.
   - `product_info` is `FmVer:13180244 BuildTime:2025/04/01`, which `version_app` prints as
     13.18.2.44. `version_loader` is 13.17.99.20.
   - Discovery reports `dev_type` 9 and `cmd_port` 56100.
@@ -198,7 +200,7 @@ All four builds passed every step. GCC Release:
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| info | PASS | discovery: sn=<SN> ip=192.168.1.1xx cmd_port=56100 dev_type=9 from=192.168.1.1xx:56000 |
+| info | PASS | discovery: sn=`<SN>` ip=192.168.1.1xx cmd_port=56100 dev_type=9 from=192.168.1.1xx:56000 |
 | minimal_receive | PASS | 60 s: 598 frames, 12022 IMU packets; packets=136556 points=11961024 frames=595 imu=11962 bad=0 dropped=0 reordered=0 |
 | collect_firmware_log | PASS | 429 chunks, 249624 bytes in 2 files, 0 gaps, 9 ACKs sent, 0 bad packets |
 | record / replay | PASS | recorded 20957 packets; replay: packets=20957 frames=100 points=2011872 dropped=0 |
