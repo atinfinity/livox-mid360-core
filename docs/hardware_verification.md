@@ -119,6 +119,60 @@ Add one section per run, newest first:
 Findings: <issues filed, items of #11 confirmed or refuted>
 ```
 
+### 2026-10-06: long-run reception and sanitizers (#13)
+
+- Host: Ubuntu 24.04.3 LTS, x86_64, Linux 7.0.0-28, Intel Core i7-9800X. NIC: Intel I211
+  (`enp2s0`), 100 Mb/s link. Builds: GCC 13.3 Release; Clang 19 with ThreadSanitizer, and
+  Clang 19 with AddressSanitizer and UndefinedBehaviorSanitizer.
+- Network: as in the 2026-10-04 run, the LiDAR directly connected.
+- LiDAR: Mid-360, firmware 13.18.0244, default settings, point data type 1, IMU on.
+- Commit: 18f8e45 for t1 to t3, c70f6a5 for the sanitizer runs and the last release run.
+- Tool: a test program on the public API, not in the repository. It opens one `Device`,
+  starts sampling, and logs `DeviceStats`, `ContextStats`, frame and IMU timing, resident
+  memory and CPU time once per minute, and every event.
+
+| Run | Duration | Timestamp policy | Packets | Dropped / bad / reordered | Disconnects | IMU gaps | Resident memory |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| t1, Release | 8 h | `kHostOffsetOnce` | 65,759,712 | 0 / 0 / 0 | 0 | 0 | 5,072 KB, flat |
+| t2, Release | 1 h | `kLidar` | 8,220,096 | 0 / 0 / 0 | 0 | 0 | 5,004 KB, flat |
+| t3, Release | 1 h | `kHostReceive` | 8,220,118 | 0 / 0 / 0 | 0 | 0 | 5,952 KB, flat |
+| TSan | 30 min | `kHostOffsetOnce` | 4,110,125 | 0 / 0 / 0 | 0 | 0 | about 25 MB, flat |
+| ASan + UBSan | 30 min | `kHostOffsetOnce` | 4,110,099 | 0 / 0 / 0 | 0 | 0 | 254 to 275 MB, no growth |
+| Release, after #260 | 10 min | `kHostOffsetOnce` | 1,370,074 | 0 / 0 / 0 | 0 | 0 | 5,828 KB, flat |
+
+- 200,000 points/s and 200.0 IMU samples/s. The IMU period stayed within 3.0 to 6.9 ms in
+  t2 and t3.
+- `udp_cnt` wrapped about 1,000 times in t1 without a false drop.
+- CPU: about 6.1 % of one core in t1.
+- No ThreadSanitizer, AddressSanitizer, leak or UndefinedBehaviorSanitizer report.
+- No frame time went backwards under any timestamp policy.
+
+Frames:
+
+- The firmware leaves `frame_cnt` at 0, so the `frame_cnt` wrap cannot be checked and every
+  frame comes from the time window fallback (#246).
+- In t1 and t2 the frame period was 100.32 ms: each frame took the next whole packet after
+  the window and the next window started there (#260). t3 also shows the jitter of the host
+  receive time.
+- With #260 the mean period is 100.006 ms over 30 min (17,999 frames).
+- Every run has one period of about 200 ms and one frame of about 40,000 points, two
+  windows. It looks like the start of sampling; the tool does not record which frame it is.
+  All other periods are within 99 to 101 ms.
+
+HMS:
+
+- t1 logged 385 HMS warnings: one at the start and the others between 3,480 s and 6,120 s.
+  Its build predates #256, so the codes were not recorded (#262).
+- A read-only poll of the keys `0x8011`, `0x8007`, `0x8006` and `0x800E` ran for about
+  8,700 s, from the last 14 minutes of t1 to the end of t3. It saw no HMS code; the core
+  temperature stayed at 61 to 64 °C.
+- In the TSan run, `0x04070002` (0x0407, PPS synchronization lost because of the GPS signal,
+  warning) appeared about 2 minutes after the start and cleared about 2 minutes later. No
+  GPS or PPS is connected.
+
+Findings: the frame period (#260), the HMS codes in the event text (#256), the HMS warnings
+of t1 (#262). The comparison with Livox Viewer 2 moved to #263.
+
 ### 2026-10-04: first run of every binary, four builds
 
 - Host: Ubuntu 24.04.3 LTS, x86_64, Linux 7.0.0-28. Builds: GCC 13 and Clang 19, each in
