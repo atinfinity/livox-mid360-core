@@ -898,7 +898,7 @@ TEST_CASE("Device: fallback frames average the window", "[sim][device]")
   constexpr std::int64_t kToleranceNs = 10'000'000;
   int on_grid = 0;
   for (std::size_t i = 2; i <= 41; ++i) {
-    const std::int64_t d = static_cast<std::int64_t>(rec.kept[i].base_time_ns - first.base_time_ns);
+    const auto d = static_cast<std::int64_t>(rec.kept[i].base_time_ns - first.base_time_ns);
     const std::int64_t off = d - (d + kWindowNs / 2) / kWindowNs * kWindowNs;
     UNSCOPED_INFO(
       "frame " << i << " starts " << static_cast<double>(off) / 1e6 << " ms off the grid");
