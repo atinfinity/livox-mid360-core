@@ -187,17 +187,23 @@ nmcli con add type ethernet ifname enp3s0 con-name mid360 connection.autoconnect
 
 | Port | Stream |
 | --- | --- |
+| 56000 | discovery answers, sent to `255.255.255.255` |
 | 56101 | command replies |
 | 56201 | status push |
 | 56301 | point cloud |
 | 56401 | IMU |
 | 56501 | firmware log |
+| 44332 | debug raw data (`livox-mid360-cli debug-data`) |
 
 With `ufw` enabled, allow UDP from the LiDAR's subnet:
 
 ```sh
 sudo ufw allow from 192.168.1.0/24 proto udp
 ```
+
+On a Mid-360 with ufw's default `deny (incoming)` and no rule, discovery finds nothing; with
+this rule every step of `scripts/hw-first-run.sh` passes
+([hardware_verification.md](hardware_verification.md#2026-10-07-firewall-110)).
 
 **Receive.** Without `--lidar-ip`, `minimal_receive` broadcasts a discovery request and uses the
 first LiDAR that answers. It prints that LiDAR's serial number and address:
