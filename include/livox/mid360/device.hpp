@@ -258,8 +258,8 @@ public:
   ///@{
 
   /// install_attitude_valid() → else kInvalidArgument with `key` before any I/O. Only stores
-  /// the value on the LiDAR; whether the firmware applies it to the emitted points is
-  /// unverified (#11). To transform on the host use extrinsic_from() / apply() in frame.hpp.
+  /// the value on the LiDAR; the firmware does not apply it to the emitted points (13.18.0244,
+  /// #11). To transform on the host use extrinsic_from() / apply() in frame.hpp.
   std::expected<SetResult, DeviceError> set_install_attitude(
     const InstallAttitude & a, std::optional<RequestOptions> opts = std::nullopt);
   /// Key 0x0012 as stored by the LiDAR.
@@ -330,7 +330,7 @@ public:
 
   /// @name Firmware log collection
   /// Firmware log collection (issue #44): 0x0301 on the LiDAR's log port, pushes on
-  /// the Context's log socket. Layouts follow SDK2 and are unverified on hardware (#11).
+  /// the Context's log socket. Layouts follow SDK2, checked on hardware (#11).
   ///@{
 
   /// Writes key 0x0009 (this host, the Context's log port) through the session, then sends

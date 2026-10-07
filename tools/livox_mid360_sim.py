@@ -428,7 +428,8 @@ class DeviceModel:
             if key not in WRITABLE_LEN:
                 return RET_PARAM_NOT_SUPPORT, key
             if self.unsupported(key):
-                # [unverified] for 0x0021 / 0x0026 / 0x0029: only the 0x002B write was seen.
+                # 0x0026 / 0x002B writes answer 0x20 on 13.18.0244; 0x0021 / 0x0029 are left
+                # out of an inquire there (#11).
                 return RET_PARAM_NOT_SUPPORT, key
             if len(value) != WRITABLE_LEN[key]:
                 return RET_PARAM_INVALID_LEN, key
@@ -444,11 +445,11 @@ class DeviceModel:
             if key == KEY_FUNC_IO and (
                 value[0] != 0 or value[1] != 0 or value[2] > 2 or value[3] > 2
             ):
-                # [unverified] IN0 / IN1 have a single defined function each (#11, #52).
+                # Measured: IN0 / IN1 other than 0 and OUT0 / OUT1 above 2 answer 0x03 (#11).
                 return RET_OUT_OF_RANGE, key
             if key in (KEY_DETECT_MODE, KEY_TIME_FILTER) and value[0] > 1:
-                # Measured for detect_mode (#11); [unverified] for time_filter. A Mid-360
-                # stores imu_data_en 2 as written, so that key is not checked.
+                # Measured for detect_mode (#11); time_filter is not supported on 13.18.0244.
+                # A Mid-360 stores imu_data_en 2 as written, so that key is not checked.
                 return RET_OUT_OF_RANGE, key
             if key == KEY_IMU_SENSOR_CFG and (value[0] > 3 or value[1] > 3 or value[2] > 7):
                 return RET_OUT_OF_RANGE, key
@@ -465,8 +466,8 @@ class DeviceModel:
             changed = self.settings.get(key) != bytes(value)
             self.settings[key] = bytes(value)
             if key == KEY_LIDAR_IPCFG and changed:
-                # [unverified] the wiki lists 0x21 without naming the keys; the LiDAR's own
-                # address is the obvious candidate (#11, #50).
+                # [unverified] the wiki lists 0x21 without naming the keys. No other key answers
+                # it on 13.18.0244 (#11); a changed 0x0004 needs a reboot to check (#12).
                 ret = RET_PARAM_REBOOT_EFFECT
             if key == KEY_PATTERN_MODE and changed and self.work_state in (WS_SAMPLING, WS_READY):
                 # A changed scan pattern restarts the motor: MOTORSTARTUP, READY, then the
@@ -774,8 +775,8 @@ def transform_mm(attitude: Attitude, xyz: tuple[float, float, float]) -> tuple[f
     """
     Rotate a point in mm by Rz(yaw) * Ry(pitch) * Rx(roll), then add the translation.
 
-    The same convention as the SDK's extrinsic_from() (#135); whether the firmware applies key
-    0x0012 at all, and how, is [unverified] (#11).
+    The same convention as the SDK's extrinsic_from() (#135). Firmware 13.18.0244 does not
+    apply key 0x0012 to the points (#11); --apply-attitude models a firmware that would.
     """
     roll, pitch, yaw, tx, ty, tz = attitude
     cr, sr = math.cos(math.radians(roll)), math.sin(math.radians(roll))
@@ -1752,7 +1753,7 @@ class Simulator:
         """
         m = self.model
         # --apply-attitude (#135): Cartesian points leave in the attitude's frame; the FOV
-        # crops them before that, in the sensor frame [unverified, #11].
+        # crops them before that, in the sensor frame.
         att = m.install_attitude() if self.apply_attitude and dt != 3 else None
         if self.scene == 'ring':
             # The next POINTS_PER_PACKET ring points, cropped on their exact angles whatever the

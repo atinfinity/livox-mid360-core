@@ -34,7 +34,9 @@ struct TagInfo
 /// One line such as "glue=high particles=low other=high"; `reserved` is shown only when set.
 [[nodiscard]] std::string to_string(const TagInfo & t);
 
-/// Splits a raw tag byte into its four fields.
+/// Splits a raw tag byte into its four fields. The documented layout fits points with a return.
+/// The reserved bits 6-7 are not always 0 on a Mid-360 (13.18.0244, #11): about 20 % of the
+/// points without a return carry `0x80` or `0xC0`, and a few returns carry `0x40`.
 [[nodiscard]] constexpr TagInfo decode_tag(std::uint8_t tag) noexcept
 {
   return {

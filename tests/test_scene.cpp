@@ -302,8 +302,8 @@ TEST_CASE("ring scene: FOV cropping keeps exactly the points inside the window",
   auto dev = f.open();
   rec.attach(*dev);
   // Yaw [0, 90) and pitch [0, 15]: azimuth 0 is kept and 90 is not, pitch 15 is kept and
-  // -5 is not. The simulator crops on the exact angles, whatever the data type [unverified
-  // firmware behaviour, #11]. As on a Mid-360 (#246), a cropped point stays in the packet at
+  // -5 is not. The simulator crops on the exact angles, whatever the data type; a Mid-360's
+  // edges are within about 0.1 degrees (#11). As on a Mid-360 (#246), a cropped point stays in the packet at
   // the origin with reflectivity 60 and tag 0.
   REQUIRE(dev
             ->set_fov(FovSettings{

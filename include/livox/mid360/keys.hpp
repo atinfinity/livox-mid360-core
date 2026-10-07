@@ -224,7 +224,8 @@ enum class TimeSyncType : std::uint8_t
 };
 
 /// key 0x800E: per-module abnormality level 0 normal / 1 warning / 2 error / 3 safety_err.
-/// One nibble of key 0x800E [unverified on hardware, #11]: 0 normal .. 3 safety error.
+/// One nibble of key 0x800E: 0 normal .. 3 safety error. Only 0 has been seen on hardware
+/// (13.18.0244); the field layout is still open (#111).
 enum class DiagLevel : std::uint8_t
 {
   kNormal = 0,

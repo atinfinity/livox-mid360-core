@@ -151,7 +151,7 @@ class DeviceModelTest(unittest.TestCase):
 
     def test_target_written_during_timed_state_is_followed_afterwards(self) -> None:
         # During SELFCHECK / MOTORSTARTUP the target is stored and chased once the timed
-        # state completes ([unverified] on hardware, #11).
+        # state completes, as a Mid-360 does in MOTORSTARTUP (#11).
         self.m.power_on(10.0)
         self._set_target(sim.WS_IDLE, 10.01)
         self.assertEqual(self.m.work_state, sim.WS_SELFCHECK)
