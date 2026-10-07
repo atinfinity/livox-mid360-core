@@ -162,7 +162,12 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
 
   const std::uint64_t t0 = time_.map(h, recv_time_ns);
   const bool frame_changed = have_prev_ && h.frame_cnt != prev_frame_cnt_;
-  const auto drop = drops_.observe(h.udp_cnt, frame_changed);
+  auto drop = drops_.observe(h.udp_cnt, frame_changed);
+  if (drop.dropped == 1 && have_prev_ && h.data_type != prev_data_type_) {
+    // A Mid-360 skips one udp_cnt at every pcl_data_type switch: nothing was lost (#271).
+    drop.dropped = 0;
+    ++counters_.type_switch_gaps;
+  }
   counters_.dropped_packets += drop.dropped;
   counters_.reordered += drop.reordered ? 1u : 0u;
   if (drop.reordered && frame_changed && !time_window_active()) {
@@ -239,6 +244,7 @@ std::optional<Frame> FrameAssembler::push(const DataPacketView & pkt, std::uint6
   counters_.points += h.dot_num;
   have_prev_ = true;
   prev_frame_cnt_ = h.frame_cnt;
+  prev_data_type_ = h.data_type;
   return out;
 }
 

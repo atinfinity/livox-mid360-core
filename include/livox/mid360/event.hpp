@@ -24,15 +24,19 @@ namespace livox::mid360
 /// Counters of one Device, snapshot via Device::stats(). Monotonic since open().
 struct DeviceStats
 {
-  std::uint64_t packets = 0;              ///< data packets accepted (point cloud + IMU)
-  std::uint64_t points = 0;               ///< samples delivered in Frames
-  std::uint64_t frames = 0;               ///< Frames delivered
-  std::uint64_t imu_samples = 0;          ///< ImuSamples delivered
-  std::uint64_t bad_packets = 0;          ///< parse_data_packet failures
-  std::uint64_t dropped_packets = 0;      ///< udp_cnt gaps (per source port)
-  std::uint64_t reordered = 0;            ///< udp_cnt went backwards (duplicate / reordered)
-  std::uint64_t queue_drops = 0;          ///< reserved for internal queues
-  std::uint64_t frame_cnt_fallback = 0;   ///< times frame_cnt mode fell back to the time window
+  std::uint64_t packets = 0;             ///< data packets accepted (point cloud + IMU)
+  std::uint64_t points = 0;              ///< samples delivered in Frames
+  std::uint64_t frames = 0;              ///< Frames delivered
+  std::uint64_t imu_samples = 0;         ///< ImuSamples delivered
+  std::uint64_t bad_packets = 0;         ///< parse_data_packet failures
+  std::uint64_t dropped_packets = 0;     ///< udp_cnt gaps (per source port)
+  std::uint64_t reordered = 0;           ///< udp_cnt went backwards (duplicate / reordered)
+  std::uint64_t queue_drops = 0;         ///< reserved for internal queues
+  std::uint64_t frame_cnt_fallback = 0;  ///< times frame_cnt mode fell back to the time window
+  /// Point cloud udp_cnt gaps of exactly one packet at a pcl_data_type change. A Mid-360
+  /// skips one udp_cnt at every switch without losing a packet, so these are not in
+  /// dropped_packets (#271).
+  std::uint64_t type_switch_gaps = 0;
   std::uint64_t last_packet_time_ns = 0;  ///< host receive time of the last packet, 0 = none
   /// 0x0102 pushes accepted. A push is counted once it has been applied: whoever reads
   /// the new count also sees the work_state() / pushed_status() it established and the

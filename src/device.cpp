@@ -194,6 +194,7 @@ struct Device::Impl : detail::Receiver
   std::atomic<std::uint64_t> dropped_packets{0};
   std::atomic<std::uint64_t> reordered{0};
   std::atomic<std::uint64_t> frame_cnt_fallback{0};
+  std::atomic<std::uint64_t> type_switch_gaps{0};
   std::atomic<std::uint64_t> last_packet_time_ns{0};
   std::atomic<std::uint64_t> pushes{0};
   std::atomic<std::uint64_t> last_push_time_ns{0};
@@ -219,6 +220,7 @@ struct Device::Impl : detail::Receiver
       .reordered = reordered.load(kRelaxed),
       .queue_drops = 0,
       .frame_cnt_fallback = frame_cnt_fallback.load(kRelaxed),
+      .type_switch_gaps = type_switch_gaps.load(kRelaxed),
       .last_packet_time_ns = last_packet_time_ns.load(kRelaxed),
       .pushes = pushes.load(std::memory_order_acquire),
       .last_push_time_ns = last_push_time_ns.load(kRelaxed),
@@ -284,6 +286,7 @@ struct Device::Impl : detail::Receiver
     dropped_packets.store(c.dropped_packets + imu_dropped, kRelaxed);
     reordered.store(c.reordered + imu_reordered, kRelaxed);
     frame_cnt_fallback.store(c.frame_cnt_fallback, kRelaxed);
+    type_switch_gaps.store(c.type_switch_gaps, kRelaxed);
     if (const auto off = assembler.time_mapper().offset_ns()) {
       time_offset_ns.store(*off, kRelaxed);
       time_offset_valid.store(true, kRelaxed);
