@@ -326,3 +326,35 @@ TEST_CASE(
   REQUIRE_FALSE(many.has_value());
   CHECK(many.error().key == Key::kFovCfgEn);
 }
+
+TEST_CASE(
+  "Device: a stored imu_data_en 2 is kDecodeFailed, settings() keeps the other keys",
+  "[device][keys][sim]")
+{
+  Fixture f;
+  if (!f.sim) {
+    SKIP(f.err);
+  }
+  auto dev = f.open();
+  // A Mid-360 accepts and stores 2 (#11); what it means is unknown, so the library does not
+  // map it to a bool (#277).
+  const auto two = encode_u8(2);
+  const KeyValue kv[] = {{static_cast<std::uint16_t>(Key::kImuDataEn), two}};
+  REQUIRE(dev->configure(kv).has_value());
+
+  const auto on = dev->imu_enabled();
+  REQUIRE_FALSE(on.has_value());
+  CHECK(on.error().kind == DeviceError::Kind::kDecodeFailed);
+  CHECK(on.error().key == Key::kImuDataEn);
+
+  const auto s = dev->settings();
+  REQUIRE(s.has_value());
+  CHECK_FALSE(s->imu_data_en.has_value());
+  CHECK(s->pcl_data_type.has_value());
+  CHECK(s->detect_mode.has_value());
+  CHECK(s->work_tgt_mode.has_value());
+
+  // A typed write brings the key back to a value the library reads.
+  REQUIRE(dev->set_imu_enabled(true).has_value());
+  CHECK(dev->imu_enabled() == true);
+}

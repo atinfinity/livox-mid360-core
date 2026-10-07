@@ -556,7 +556,11 @@ the replayed `HostSetup` (rule above), whose new optionals `detect_mode`, `time_
   any I/O.
 - `Device::set_imu_enabled(bool)` / `imu_enabled()`: key 0x001C, the same key
   `HostSetup::imu_enable` writes at open. Disabling stops the IMU stream at the LiDAR; the
-  `on_imu` callback simply stops being called.
+  `on_imu` callback simply stops being called. A Mid-360 also accepts and stores the value 2
+  (written raw with `configure()`, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)), whose meaning is unknown. The library does not map it
+  to a `bool`: `imu_enabled()` then fails with `kDecodeFailed` and `key` 0x001C,
+  `settings()` leaves `imu_data_en` empty and returns the other keys, and a reconnect replays
+  the last typed value ([#277](https://github.com/atinfinity/livox-mid360-core/issues/277)).
 - `Device::set_imu_sensor_config(const ImuSensorConfig &)` / `imu_sensor_config()`: key
   0x002B, output rate (200 / 500 / 100 / 50 Hz), accelerometer range (±4 g … ±32 g) and
   gyroscope range (±2000 dps … ±15.625 dps). A field past its last enumerator is

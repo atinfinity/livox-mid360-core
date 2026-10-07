@@ -297,7 +297,8 @@ public:
   /// Key 0x001C: whether the LiDAR sends IMU data.
   std::expected<SetResult, DeviceError> set_imu_enabled(
     bool on, std::optional<RequestOptions> opts = std::nullopt);
-  /// Key 0x001C as stored by the LiDAR.
+  /// Key 0x001C as stored by the LiDAR. A stored 2, which a Mid-360 accepts with an unknown
+  /// meaning, is kDecodeFailed with `key` 0x001C (#277).
   std::expected<bool, DeviceError> imu_enabled(std::optional<RequestOptions> opts = std::nullopt);
   /// Key 0x002B is absent on older firmware: the LiDAR then answers kLidarRejected with
   /// ret_code kParamNotSupport and error_key 0x002B (no distinct Kind).
