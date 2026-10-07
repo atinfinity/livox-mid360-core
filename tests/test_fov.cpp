@@ -308,7 +308,8 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   REQUIRE_FALSE(host.has_value());
   CHECK(host.error().kind == DeviceError::Kind::kInvalidArgument);
   CHECK(host.error().key == Key::kFovCfg1);
-  const KeyValue rev{static_cast<std::uint16_t>(Key::kFovCfg1), encode_fov_config(reversed)};
+  const auto rev_bytes = encode_fov_config(reversed);
+  const KeyValue rev{static_cast<std::uint16_t>(Key::kFovCfg1), rev_bytes};
   const auto lidar = dev->configure(std::span<const KeyValue>(&rev, 1));
   REQUIRE_FALSE(lidar.has_value());
   REQUIRE(lidar.error().session.has_value());
