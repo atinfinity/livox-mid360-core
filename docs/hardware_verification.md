@@ -121,6 +121,29 @@ address of the LiDAR, also in what is pasted from `summary.md` and `env.txt`: wr
 Findings: <issues filed, items of #11 confirmed or refuted>
 ```
 
+### 2026-10-07: firewall (#110)
+
+- Host and LiDAR: as in the 2026-10-04 run, firmware 13.18.0244, directly connected.
+- ufw enabled: `Default: deny (incoming), allow (outgoing)`, logging `low`.
+- Commit: f957a28 and docs only. GCC Release, `--seconds 15`.
+
+| Step | No allow rule | `ufw allow from 192.168.1.0/24 proto udp` |
+| --- | --- | --- |
+| info | FAIL: `discovery: no LiDAR answered` | PASS |
+| minimal_receive | FAIL: no LiDAR found | PASS: 147 frames, bad=0 dropped=0 reordered=0 |
+| collect_firmware_log | FAIL: nothing collected | PASS: 114 chunks, 0 gaps |
+| record / replay | FAIL | PASS: 20976 packets on both sides |
+| debug-data | FAIL: 0 packets | PASS: 40088 packets |
+| probe | FAIL | PASS: 14 probes |
+
+- Without a rule every step stops at discovery: the LiDAR answers to `255.255.255.255:56000`
+  (#217), which the default policy drops.
+- The kernel log has only six `UFW BLOCK` entries, all for the status push (`56200 -> 56201`).
+  The discovery answers and the other streams were not logged, so the log does not list the
+  ports to open; the table in [getting_started.md](getting_started.md#6-connect-a-real-mid-360)
+  does.
+- With the rule, every step passes and nothing is logged.
+
 ### 2026-10-06: long-run reception and sanitizers (#13)
 
 - Host: Ubuntu 24.04.3 LTS, x86_64, Linux 7.0.0-28, Intel Core i7-9800X. NIC: Intel I211
@@ -184,8 +207,8 @@ of t1 (#262). The comparison with Livox Viewer 2 moved to #263.
     `192.168.1.1xx/32` route).
   - Wi-Fi is on the same subnet (192.168.1.8/24) and holds the default route.
   - The LiDAR is directly connected.
-  - ufw is installed but not enabled (`ENABLED=no`), so the firewall row of #110 is still
-    open.
+  - ufw is installed but not enabled (`ENABLED=no`). The firewall row of #110 is the
+    2026-10-07 run.
 - LiDAR:
   - Mid-360 at 192.168.1.1xx.
   - `product_info` is `FmVer:13180244 BuildTime:2025/04/01`, which `version_app` prints as
