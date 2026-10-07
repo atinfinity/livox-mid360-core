@@ -143,7 +143,7 @@ The process is driven over its standard streams so that any test harness can use
   `pcl_data_type` outside 1–3 → `0x03`, `pattern_mode` 1 / 2 → `0x20` and any other non-zero
   value → `0x03` (the base Mid-360 only scans non-repetitively, [unverified] which code, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)),
   a FOV window (`0x0015` / `0x0016`) with yaw
-  outside [0, 360) or pitch outside (-10, 60) → `0x03`, `detect_mode` / `time_filter` /
+  outside [0, 360], pitch outside [-10, 60] or start > stop → `0x03` (measured), `detect_mode` / `time_filter` /
   `imu_data_en` above 1 → `0x03`, an `imu_sensor_cfg` byte past its last enumerator (rate
   > 3, accel > 3, gyro > 7) → `0x03`. All keys are applied only if none failed; the ACK's
   `error_key` names the offender. An inquire `0x0101` naming an unknown key answers `0x20` with
@@ -242,8 +242,8 @@ The process is driven over its standard streams so that any test harness can use
   enabled window stays in its packet as (0, 0, 0) with reflectivity 60 and tag 0, so every
   packet keeps 96 points and an empty window zeroes them all, as on a Mid-360 ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246); measured
   in Cartesian32, [unverified] that spherical points zero depth, theta and phi alike). The
-  window test is [unverified]: yaw `[start, stop)` with wrap-around when `start > stop`,
-  `start == stop` empty; pitch `[start, stop]`. Cartesian points use `yaw = atan2(y, x)`,
+  window test: yaw `[start, stop)`, so `start == stop` is empty; pitch `[start, stop]`; no
+  wrap-around, since a reversed window is rejected (measured in [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). Cartesian points use `yaw = atan2(y, x)`,
   `pitch = atan2(z, hypot(x, y))`; spherical ones `phi` and `90° - theta`. The ring scene
   crops its next 96 points on their exact angles, whatever the data type, so the kept set is
   known: a window of yaw `[0, 90)` and pitch `[0, 15]` keeps exactly the `k < 64` with
@@ -313,11 +313,11 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Push contents and timing | keys `0x0000`, `0x0001`, `0x0004`–`0x0007`, `0x0012`, `0x0015`–`0x0019`, `0x001A`, `0x001C`, then `0x8000`–`0x800C`, `0x800E`, `0x8010`, `0x8011`; an extra push on each state change and after each `0x0100` request | verified on firmware 13.18.0244 ([#235](https://github.com/atinfinity/livox-mid360-core/issues/235)); the real push `seq_num` is not contiguous (about 26 per second at one push per second), the simulator's counts its own pushes |
 | Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93), [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)) | `0x0303` answers `0x00` on the log port in every work state, also when repeated (the stream then moves to the new destination), when disabling a disabled stream and for an enable with port 0 (which stops the stream); the command port does not answer; short payloads answer `0x01`; the stream leaves port 60301 only while sampling, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | verified on firmware 13.18.0244 except the datagram content |
 | Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)) and resends an unacknowledged chunk; the counting and end-of-file behaviour are unknown |
-| FOV window ranges | yaw outside [0, 360) or pitch outside (-10, 60) → `0x03`; equal / reversed start-stop accepted | the wiki gives the ranges, not the code, nor what a reversed window means |
+| FOV window ranges | yaw outside [0, 360], pitch outside [-10, 60] or start > stop → `0x03`; equal start-stop accepted (measured) | the wiki gives half-open ranges; a Mid-360 includes both ends |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
 | `pattern_mode` | only 0 accepted; 1 / 2 → `0x20`, others → `0x03`; never restarts the motor | the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code |
 | `pcl_data_type` change while SAMPLING | the next packet is already in the new format | the wiki does not say whether the switch is immediate or aligned to a frame |
 | Install attitude `0x0012` | stored only; with `--apply-attitude`, Cartesian points moved by `Rz * Ry * Rx` + translation after the FOV crop, spherical untouched | whether the firmware applies the key to its output at all, in which convention and to which data types ([#110](https://github.com/atinfinity/livox-mid360-core/issues/110)) |
-| FOV cropping | yaw `[start, stop)` wrapping when `start > stop`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window, else a zero point with reflectivity 60 (measured) | the wiki defines neither the edge inclusivity nor the wrap-around |
+| FOV cropping | yaw `[start, stop)`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window, else a zero point with reflectivity 60 (measured) | the wiki defines neither the edge inclusivity nor how the windows combine |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |
 | `frame_cnt` period | none: stays 0, as on a Mid-360 ([#246](https://github.com/atinfinity/livox-mid360-core/issues/246)); `--frame-ms` for tests | the wiki marks `frame_cnt` invalid for a non-repetitive scanner. Livox's sample `.lvx2` files have `frame_counter` 0 in every package, but the LVX2 spec marks that field reserved, so they say nothing about the firmware ([#164](https://github.com/atinfinity/livox-mid360-core/issues/164), [lvx2.md](lvx2.md#livox-sample-files)); a Mid-360 on 13.18.0244 was seen to keep it 0 |

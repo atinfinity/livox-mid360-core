@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // FOV configuration (issue #39): fov_in_range(), FovSettings in HostSetup, Device::set_fov()
-// / Device::fov() and the simulator's [unverified] cropping of the point cloud.
+// / Device::fov() and the simulator's cropping of the point cloud.
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -159,45 +159,29 @@ bool same(const std::optional<FovConfig> & a, const FovConfig & b)
 
 }  // namespace
 
-TEST_CASE("fov_in_range: yaw 0..359, pitch -9..59, reversed windows allowed", "[fov]")
+TEST_CASE("fov_in_range: yaw 0..360, pitch -10..60, start <= stop", "[fov]")
 {
+  const auto w = [](std::int32_t y0, std::int32_t y1, std::int32_t p0, std::int32_t p1) {
+    return FovConfig{
+      .yaw_start_deg = y0,
+      .yaw_stop_deg = y1,
+      .pitch_start_deg = p0,
+      .pitch_stop_deg = p1,
+      .rsvd = 7};
+  };
+  // Measured on a Mid-360 (#11): both ends are included, an equal window is accepted.
   CHECK(fov_in_range(kFront));
-  CHECK(fov_in_range(
-    {.yaw_start_deg = 359,
-     .yaw_stop_deg = 0,
-     .pitch_start_deg = 59,
-     .pitch_stop_deg = -9,
-     .rsvd = 0}));
-  CHECK(fov_in_range(
-    {.yaw_start_deg = 20,
-     .yaw_stop_deg = 20,
-     .pitch_start_deg = 0,
-     .pitch_stop_deg = 0,
-     .rsvd = 7}));
-  CHECK_FALSE(fov_in_range(
-    {.yaw_start_deg = 360,
-     .yaw_stop_deg = 0,
-     .pitch_start_deg = 0,
-     .pitch_stop_deg = 0,
-     .rsvd = 0}));
-  CHECK_FALSE(fov_in_range(
-    {.yaw_start_deg = 0,
-     .yaw_stop_deg = -1,
-     .pitch_start_deg = 0,
-     .pitch_stop_deg = 0,
-     .rsvd = 0}));
-  CHECK_FALSE(fov_in_range(
-    {.yaw_start_deg = 0,
-     .yaw_stop_deg = 0,
-     .pitch_start_deg = -10,
-     .pitch_stop_deg = 0,
-     .rsvd = 0}));
-  CHECK_FALSE(fov_in_range(
-    {.yaw_start_deg = 0,
-     .yaw_stop_deg = 0,
-     .pitch_start_deg = 0,
-     .pitch_stop_deg = 60,
-     .rsvd = 0}));
+  CHECK(fov_in_range(w(0, 360, -10, 60)));
+  CHECK(fov_in_range(w(360, 360, 60, 60)));
+  CHECK(fov_in_range(w(45, 45, 10, 10)));
+  // Outside the ranges.
+  CHECK_FALSE(fov_in_range(w(-1, 90, 0, 10)));
+  CHECK_FALSE(fov_in_range(w(0, 361, 0, 10)));
+  CHECK_FALSE(fov_in_range(w(0, 90, -11, 10)));
+  CHECK_FALSE(fov_in_range(w(0, 90, 0, 61)));
+  // Reversed windows: the LiDAR answers 0x03, there is no wrap-around.
+  CHECK_FALSE(fov_in_range(w(300, 60, 0, 10)));
+  CHECK_FALSE(fov_in_range(w(0, 90, 30, 0)));
 }
 
 TEST_CASE("to_string(FovSettings) lists the present fields", "[fov]")
@@ -264,7 +248,7 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
     .fov1 =
       FovConfig{
         .yaw_start_deg = 0,
-        .yaw_stop_deg = 360,
+        .yaw_stop_deg = 361,
         .pitch_start_deg = 0,
         .pitch_stop_deg = 0,
         .rsvd = 0},
@@ -302,7 +286,7 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
 
   // The simulator range-checks too: a raw out-of-range window is answered with 0x03.
   const auto raw = encode_fov_config(
-    {.yaw_start_deg = 0, .yaw_stop_deg = 0, .pitch_start_deg = 0, .pitch_stop_deg = 60, .rsvd = 0});
+    {.yaw_start_deg = 0, .yaw_stop_deg = 0, .pitch_start_deg = 0, .pitch_stop_deg = 61, .rsvd = 0});
   const KeyValue kv{static_cast<std::uint16_t>(Key::kFovCfg0), raw};
   const auto rejected = dev->configure(std::span<const KeyValue>(&kv, 1));
   REQUIRE_FALSE(rejected.has_value());
@@ -311,6 +295,27 @@ TEST_CASE("Device::set_fov / fov round trip and rejections", "[fov][sim]")
   CHECK(rejected.error().session->ret_code == RetCode::kOutOfRange);
   CHECK(rejected.error().session->error_key == 0x0015);
   CHECK(same(dev->fov()->fov0, kFront));
+
+  // set_fov() refuses a reversed window, and so does the simulator, as a Mid-360 does (#268).
+  const FovConfig reversed{
+    .yaw_start_deg = 300,
+    .yaw_stop_deg = 60,
+    .pitch_start_deg = 0,
+    .pitch_stop_deg = 10,
+    .rsvd = 0};
+  const auto host =
+    dev->set_fov(FovSettings{.fov0 = std::nullopt, .fov1 = reversed, .enable = std::nullopt});
+  REQUIRE_FALSE(host.has_value());
+  CHECK(host.error().kind == DeviceError::Kind::kInvalidArgument);
+  CHECK(host.error().key == Key::kFovCfg1);
+  const auto rev_bytes = encode_fov_config(reversed);
+  const KeyValue rev{static_cast<std::uint16_t>(Key::kFovCfg1), rev_bytes};
+  const auto lidar = dev->configure(std::span<const KeyValue>(&rev, 1));
+  REQUIRE_FALSE(lidar.has_value());
+  REQUIRE(lidar.error().session.has_value());
+  CHECK(lidar.error().session->ret_code == RetCode::kOutOfRange);
+  CHECK(lidar.error().session->error_key == 0x0016);
+  CHECK(same(dev->fov()->fov1, kBack));
 }
 
 TEST_CASE("Device::set_install_attitude / install_attitude round trip and rejection", "[sim]")

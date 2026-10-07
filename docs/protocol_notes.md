@@ -163,13 +163,14 @@ unchanged value still does; the simulator answers `0x21` only for a changed `lid
 
 ## FOV keys 0x0015 / 0x0016 / 0x0017
 
-`fov_cfg0` / `fov_cfg1` are `int32` yaw start / stop in [0, 360) and pitch start / stop in
-(-10, 60), all in degrees, plus a reserved `uint32`; `fov_cfg_en` is a bit mask (bit 0 / bit
-1). The library range-checks in `fov_in_range()` (`Device::set_fov()`, `HostSetup::fov`) but
-lets equal or reversed start / stop through. **[unverified]** the return code for an
-out-of-range value (the simulator answers `0x03`), whether a reversed yaw window wraps around
-0°, whether the edges are inclusive, whether both windows combine as a union, and whether a
-FOV change needs a reboot (`0x21`) or a motor restart. See [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) and [#39](https://github.com/atinfinity/livox-mid360-core/issues/39).
+`fov_cfg0` / `fov_cfg1` are `int32` yaw start / stop in [0, 360] and pitch start / stop in
+[-10, 60], all in degrees and both ends included, plus a reserved `uint32`; `fov_cfg_en` is a
+bit mask (bit 0 / bit 1). Measured on a Mid-360 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): a value outside the ranges or a
+reversed window (start > stop) answers `0x03` with the key as `error_key`, so there is no
+wrap-around; an equal yaw start / stop is accepted and crops every point. Yaw is the azimuth
+`atan2(y, x)`, counter-clockwise from +x. Both windows combine as a union. A change answers
+`0x00` and applies from the next packet, without a reboot or a motor restart. The library
+checks the same in `fov_in_range()` (`Device::set_fov()`, `HostSetup::fov`). See [#11](https://github.com/atinfinity/livox-mid360-core/issues/11) and [#39](https://github.com/atinfinity/livox-mid360-core/issues/39).
 
 ## Debug raw data collection (0x0303)
 

@@ -243,7 +243,8 @@ public:
 
   /// One 0x0100 with the present fields of `fov` (the LiDAR applies all or none). Validated
   /// before any I/O: no field → kInvalidArgument without `key`; a window outside
-  /// fov_in_range() → kInvalidArgument with `key` = 0x0015 / 0x0016. HostSetup::fov does the
+  /// fov_in_range() (ranges or a reversed window) → kInvalidArgument with `key` = 0x0015 /
+  /// 0x0016. HostSetup::fov does the
   /// same at open() and after a reconnect.
   std::expected<SetResult, DeviceError> set_fov(
     const FovSettings & fov, std::optional<RequestOptions> opts = std::nullopt);

@@ -186,10 +186,11 @@ bool func_io_config_valid(const FuncIoConfig & c) noexcept
 
 bool fov_in_range(const FovConfig & f) noexcept
 {
-  const auto yaw = [](std::int32_t v) { return v >= 0 && v < 360; };
-  const auto pitch = [](std::int32_t v) { return v > -10 && v < 60; };
+  const auto yaw = [](std::int32_t v) { return v >= 0 && v <= 360; };
+  const auto pitch = [](std::int32_t v) { return v >= -10 && v <= 60; };
   return yaw(f.yaw_start_deg) && yaw(f.yaw_stop_deg) && pitch(f.pitch_start_deg) &&
-         pitch(f.pitch_stop_deg);
+         pitch(f.pitch_stop_deg) && f.yaw_start_deg <= f.yaw_stop_deg &&
+         f.pitch_start_deg <= f.pitch_stop_deg;
 }
 
 std::array<std::byte, 1> encode_fov_enable(FovEnable e) noexcept
