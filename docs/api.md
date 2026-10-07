@@ -278,7 +278,7 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 | Key | Type (`key_value_t`) | Notes |
 | --- | --- | --- |
 | `kPclDataType` 0x0000 | `DataType` | 1–3; `kImu` (0) is out of range |
-| `kPatternMode` 0x0001 | `std::uint8_t` | only 0 is documented |
+| `kPatternMode` 0x0001 | `std::uint8_t` | 0 / 1 / 2 accepted; a change restarts the motor |
 | `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `set_lidar_ip_config()`; `reboot_required` after a change (simulator behaviour, [unverified]) |
 | `kStateInfoHostIpCfg` / `kPointCloudHostIpCfg` / `kImuHostIpCfg` 0x0005–0x0007 | `HostIpConfig` | normally set by `open()` |
 | `kInstallAttitude` 0x0012 | `InstallAttitude` | `set_install_attitude()`; host transform via `extrinsic_from()` |
@@ -455,9 +455,11 @@ point-cloud frame rate":
   a raw `configure()` of 0x0000, since the assembler decides on the packet header, not on the
   request.
 - `Device::set_scan_pattern(ScanPattern)` / `scan_pattern()`: key 0x0001 with the enum
-  `kNonRepetitive` (0) / `kRepetitive` (1) / `kLowRateRepetitive` (2). Nothing is pre-checked:
-  the base Mid-360 has only the non-repetitive pattern, and the LiDAR's ACK
-  (`kLidarRejected`, `ret_code` 0x20 on the simulator) is the answer for the others.
+  `kNonRepetitive` (0) / `kRepetitive` (1) / `kLowRateRepetitive` (2). Nothing is pre-checked.
+  A Mid-360 accepts all three, although the wiki says only the non-repetitive one is
+  effective on the base model; a changed value restarts the motor (MOTORSTARTUP for about
+  1 s, then the target again), so the point cloud pauses. A value above 2 is answered with
+  `kLidarRejected`, `ret_code` 0x03 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)).
   `LidarSettings::pattern_mode` and `HostSetup::scan_pattern` use the same enum.
 - `Device::set_frame_policy(const FramePolicy &)` / `frame_policy()`: the base Mid-360 has
   no frame-rate key (0x0029 exists on other Livox models only and is not modelled), so the
@@ -470,8 +472,8 @@ point-cloud frame rate":
 ```cpp
 dev->set_point_format(DataType::kSpherical);  // frames from now on: source_type kSpherical
 dev->set_frame_policy({.mode = FramePolicy::Mode::kTimeWindow, .window = 50ms});  // 20 Hz frames
-if (auto p = dev->set_scan_pattern(ScanPattern::kRepetitive); !p) {
-  // kLidarRejected
+if (auto p = dev->set_scan_pattern(ScanPattern::kRepetitive); p) {
+  // accepted; the motor restarts and sampling resumes after MOTORSTARTUP
 }
 ```
 

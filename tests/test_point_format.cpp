@@ -238,27 +238,60 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "Device::set_scan_pattern: 0 round-trips, 1 is rejected by the simulator", "[point_format][sim]")
+  "Device::set_scan_pattern: 1 / 2 restart the motor, 3 is rejected by the simulator",
+  "[point_format][sim]")
 {
+  // As on a Mid-360 (#11, #269).
   Fixture f;
   if (!f.sim) {
     SKIP("simulator unavailable: " << f.err);
   }
+  std::mutex mutex;
+  std::vector<WorkState> states;  // outlives the Device
   auto dev = f.open();
+  REQUIRE(dev
+            ->on_event([&](const Event & e) {
+              if (e.kind == Event::Kind::kStateChanged) {
+                const std::lock_guard lock(mutex);
+                states.push_back(e.new_state);
+              }
+            })
+            .has_value());
+  const auto seen = [&] {
+    const std::lock_guard lock(mutex);
+    return states;
+  };
+  REQUIRE(dev->start_sampling().has_value());
   CHECK(dev->scan_pattern().value() == ScanPattern::kNonRepetitive);
-  const auto ok = dev->set_scan_pattern(ScanPattern::kNonRepetitive);
-  REQUIRE(ok.has_value());
-  CHECK_FALSE(ok->reboot_required);
 
-  const auto rejected = dev->set_scan_pattern(ScanPattern::kRepetitive);
+  // The same value: no restart.
+  const auto same = dev->set_scan_pattern(ScanPattern::kNonRepetitive);
+  REQUIRE(same.has_value());
+  CHECK_FALSE(same->reboot_required);
+
+  for (const auto p : {ScanPattern::kRepetitive, ScanPattern::kLowRateRepetitive}) {
+    const auto before = seen().size();
+    const auto r = dev->set_scan_pattern(p);
+    REQUIRE(r.has_value());
+    CHECK_FALSE(r->reboot_required);
+    CHECK(dev->scan_pattern().value() == p);
+    REQUIRE(wait_until([&] {
+      const auto s = seen();
+      return s.size() > before + 1 && s.back() == WorkState::kSampling;
+    }));
+    const auto s = seen();
+    CHECK(s[before] == WorkState::kMotorStartup);
+  }
+
+  const auto rejected = dev->set_scan_pattern(static_cast<ScanPattern>(3));
   REQUIRE_FALSE(rejected.has_value());
   CHECK(rejected.error().kind == DeviceError::Kind::kSession);
   REQUIRE(rejected.error().session.has_value());
   CHECK(rejected.error().session->kind == SessionErrorKind::kLidarRejected);
-  CHECK(rejected.error().session->ret_code == RetCode::kParamNotSupport);
+  CHECK(rejected.error().session->ret_code == RetCode::kOutOfRange);
   CHECK(rejected.error().session->error_key == 0x0001);
-  CHECK(dev->scan_pattern().value() == ScanPattern::kNonRepetitive);
-  CHECK(dev->settings().value().pattern_mode == ScanPattern::kNonRepetitive);
+  CHECK(dev->settings().value().pattern_mode == ScanPattern::kLowRateRepetitive);
+  dev.reset();
 }
 
 TEST_CASE("Device::set_frame_policy changes the frame period mid-stream", "[point_format][sim]")
@@ -329,7 +362,7 @@ TEST_CASE(
               .fov0 = kWin, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = true, .fov1 = false}})
             .has_value());
   // A rejected write must not be absorbed.
-  REQUIRE_FALSE(dev->set_scan_pattern(ScanPattern::kRepetitive).has_value());
+  REQUIRE_FALSE(dev->set_scan_pattern(static_cast<ScanPattern>(3)).has_value());
 
   // Something the Device does not see changes the LiDAR: a second host opens it with other
   // values. `dev` keeps its session; the reboot() below is what makes it reconnect.

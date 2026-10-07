@@ -88,8 +88,11 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual(r['write_read_only_key']['ret_code'], '0x22')
         self.assertEqual(r['write_unknown_key']['ret_code'], '0x20')
         self.assertEqual(r['write_wrong_length']['ret_code'], '0x23')
-        for name in ('detect_mode', 'time_filter', 'imu_data_en'):
+        for name in ('detect_mode', 'time_filter'):
             self.assertEqual(r[f'write_out_of_range_{name}']['ret_code'], '0x03')
+        # A Mid-360 stores imu_data_en 2 (#269); the probe writes the old value back.
+        self.assertEqual(r['write_out_of_range_imu_data_en']['ret_code'], '0x00')
+        self.assertTrue(r['write_out_of_range_imu_data_en']['restored'])
         self.assertEqual(r['partial_write']['error_key'], '0x7FFF')
         self.assertFalse(r['partial_write']['good_key_applied'])
         self.assertGreaterEqual(r['push']['pushes'], 1)

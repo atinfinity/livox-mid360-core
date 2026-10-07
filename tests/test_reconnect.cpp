@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -372,6 +373,16 @@ TEST_CASE("Reconnect: set_lidar_ip_config + reboot lands on the new address", "[
   REQUIRE_FALSE(bad.has_value());
   CHECK(bad.error().kind == DeviceError::Kind::kInvalidArgument);
   CHECK(bad.error().key == Key::kLidarIpCfg);
+  // Past the host-side check, the simulator answers 0x03 and keeps the value, as a Mid-360
+  // does (#269).
+  const auto raw = encode_lidar_ip_config({.ip = {}, .netmask = {255, 0, 0, 0}, .gateway = {}});
+  const KeyValue kv{static_cast<std::uint16_t>(Key::kLidarIpCfg), raw};
+  const auto lidar = dev->configure(std::span<const KeyValue>(&kv, 1));
+  REQUIRE_FALSE(lidar.has_value());
+  REQUIRE(lidar.error().session.has_value());
+  CHECK(lidar.error().session->ret_code == RetCode::kOutOfRange);
+  CHECK(lidar.error().session->error_key == 0x0004);
+  CHECK(dev->lidar_ip_config()->ip == Ipv4{127, 0, 0, 1});
 
   const LidarIpConfig moved{.ip = {127, 0, 0, 2}, .netmask = {255, 0, 0, 0}, .gateway = {}};
   const auto r = dev->set_lidar_ip_config(moved);

@@ -221,8 +221,9 @@ public:
   /// Key 0x0000 as stored by the LiDAR.
   std::expected<DataType, DeviceError> point_format(
     std::optional<RequestOptions> opts = std::nullopt);
-  /// Key 0x0001. Not pre-checked: the wiki says only kNonRepetitive works on the base
-  /// Mid-360, and the LiDAR's ACK (kSession / kLidarRejected) is the answer for the others.
+  /// Key 0x0001. Not pre-checked. A Mid-360 accepts all three patterns and restarts the
+  /// motor when the value changes (MOTORSTARTUP, READY, then the target again); a value
+  /// past kLowRateRepetitive is answered with kLidarRejected, ret_code 0x03.
   std::expected<SetResult, DeviceError> set_scan_pattern(
     ScanPattern pattern, std::optional<RequestOptions> opts = std::nullopt);
   /// Key 0x0001 as stored by the LiDAR.

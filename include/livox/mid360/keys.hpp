@@ -32,7 +32,7 @@ enum class Key : std::uint16_t
 {
   // ---- writable (0x0100) -------------------------------------------------
   kPclDataType = 0x0000,          ///< u8, DataType 1/2/3
-  kPatternMode = 0x0001,          ///< u8 ScanPattern; only 0 (non-repetitive) on the base Mid-360
+  kPatternMode = 0x0001,          ///< u8 ScanPattern; a change restarts the motor
   kLidarIpCfg = 0x0004,           ///< u8[12] ip, mask, gateway
   kStateInfoHostIpCfg = 0x0005,   ///< u8[8] ip, dst port, src port
   kPointCloudHostIpCfg = 0x0006,  ///< u8[8]
@@ -129,8 +129,8 @@ struct FovConfig
   std::uint32_t rsvd = 0;            ///< reserved; encoded as given
 };
 
-/// key 0x0001. The wiki documents all three but says only kNonRepetitive is effective on
-/// the base Mid-360; the others are passed through and the ACK decides (#11).
+/// key 0x0001. The wiki says only kNonRepetitive is effective on the base Mid-360, but the
+/// LiDAR accepts all three; a change restarts the motor (#11, #269).
 enum class ScanPattern : std::uint8_t
 {
   kNonRepetitive = 0,

@@ -434,11 +434,10 @@ class DeviceModel:
                 return RET_PARAM_INVALID_LEN, key
             if key == KEY_PCL_DATA_TYPE and value[0] not in (1, 2, 3):
                 return RET_OUT_OF_RANGE, key
-            if key == KEY_PATTERN_MODE and value[0] != 0:
-                # [unverified] the base Mid-360 has only the non-repetitive pattern (#11):
-                # the defined 1 / 2 are "not supported", anything else is out of range.
-                if value[0] in (1, 2):
-                    return RET_PARAM_NOT_SUPPORT, key
+            if key == KEY_PATTERN_MODE and value[0] > 2:
+                # A Mid-360 accepts 0 / 1 / 2 and answers 3 with 0x03 (#11, #269).
+                return RET_OUT_OF_RANGE, key
+            if key == KEY_LIDAR_IPCFG and not lidar_ipcfg_valid(value):
                 return RET_OUT_OF_RANGE, key
             if key in (KEY_FOV0, KEY_FOV1) and not fov_in_range(value):
                 return RET_OUT_OF_RANGE, key
@@ -447,17 +446,18 @@ class DeviceModel:
             ):
                 # [unverified] IN0 / IN1 have a single defined function each (#11, #52).
                 return RET_OUT_OF_RANGE, key
-            if key in (KEY_DETECT_MODE, KEY_TIME_FILTER, KEY_IMU_EN) and value[0] > 1:
+            if key in (KEY_DETECT_MODE, KEY_TIME_FILTER) and value[0] > 1:
+                # Measured for detect_mode (#11); [unverified] for time_filter. A Mid-360
+                # stores imu_data_en 2 as written, so that key is not checked.
                 return RET_OUT_OF_RANGE, key
             if key == KEY_IMU_SENSOR_CFG and (value[0] > 3 or value[1] > 3 or value[2] > 7):
                 return RET_OUT_OF_RANGE, key
             if key == KEY_WORK_TGT_MODE:
-                # [unverified] return codes, see #11. ERROR / UPGRADE are left only by
-                # reboot / "abnormal disappearance"; 4/5/6/8 exist but are "Not Support".
+                # A Mid-360 answers every value but 1 / 2 / 9 with 0x03 (#11, #269; 8 not
+                # written). [unverified] 0x02 in ERROR / UPGRADE, left only by reboot /
+                # "abnormal disappearance".
                 if self.work_state in (WS_ERROR, WS_UPGRADE):
                     return RET_NOT_PERMIT_NOW, key
-                if value[0] in WS_ALL and value[0] not in WS_REQUESTABLE:
-                    return RET_PARAM_NOT_SUPPORT, key
                 if value[0] not in WS_REQUESTABLE:
                     return RET_OUT_OF_RANGE, key
         ret = RET_OK
@@ -468,6 +468,10 @@ class DeviceModel:
                 # [unverified] the wiki lists 0x21 without naming the keys; the LiDAR's own
                 # address is the obvious candidate (#11, #50).
                 ret = RET_PARAM_REBOOT_EFFECT
+            if key == KEY_PATTERN_MODE and changed and self.work_state in (WS_SAMPLING, WS_READY):
+                # A changed scan pattern restarts the motor: MOTORSTARTUP, READY, then the
+                # target again (measured from SAMPLING, 1.0 s on a Mid-360, #11).
+                self._enter_timed(WS_MOTORSTARTUP, now)
         self._follow_target(now)
         return ret, 0
 
@@ -636,6 +640,22 @@ class DeviceModel:
             return True
         yaw, pitch = point_angles(data_type, sample)
         return any(in_fov_window(w, yaw, pitch) for w in windows)
+
+
+def lidar_ipcfg_valid(value: bytes) -> bool:
+    """
+    Check key 0x0004 as lidar_ip_config_valid() in keys.cpp does.
+
+    A Mid-360 answers 0x03 for every value that check rejects (#11, #269).
+    """
+    ip, mask, gw = (int.from_bytes(value[i : i + 4], 'big') for i in (0, 4, 8))
+    host = ~mask & 0xFFFFFFFF
+    if mask == 0 or host == 0 or host & (host + 1) or mask == 0xFFFFFFFE:
+        return False
+    net = ip & mask
+    if ip in (0, 0xFFFFFFFF, net, net | host):
+        return False
+    return gw == 0 or (gw & mask == net and gw not in (ip, net, net | host))
 
 
 # --------------------------------------------------------------------------- FOV
@@ -876,8 +896,16 @@ class Simulator:
         self.pending_rebind: str | None = None
         # Key 0x0004 reports the address the simulator actually answers from.
         # A factory reset returns to this address: the simulator cannot move to 192.168.1.100.
+        # The gateway is dropped when it lies outside the new subnet, so the value stays one
+        # a Mid-360 accepts (#269).
         own = bytes(int(x) for x in self.lidar_ip().split('.'))
-        self.model.settings[KEY_LIDAR_IPCFG] = own + self.model.settings[KEY_LIDAR_IPCFG][4:]
+        mask, gw = (
+            self.model.settings[KEY_LIDAR_IPCFG][4:8],
+            self.model.settings[KEY_LIDAR_IPCFG][8:],
+        )
+        if any((g ^ o) & m for g, o, m in zip(gw, own, mask, strict=True)):
+            gw = bytes(4)
+        self.model.settings[KEY_LIDAR_IPCFG] = own + mask + gw
         self.model.factory_lidar_ipcfg = self.model.settings[KEY_LIDAR_IPCFG]
         self.points = PointSource(args.seed)
         self.scene = args.scene
