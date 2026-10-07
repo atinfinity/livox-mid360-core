@@ -377,6 +377,28 @@ TEST_CASE("frame assembler: udp_cnt wrap-around is in sequence", "[frame]")
   CHECK(r.dropped == 0);
 }
 
+TEST_CASE("frame assembler: a one-packet gap at a data_type switch is not a drop", "[frame]")
+{
+  // A Mid-360 skips one udp_cnt at every pcl_data_type switch (#271).
+  FrameAssembler fa(counter_policy(), TimestampPolicy::kLidar);
+  const auto feed = [&](std::uint16_t cnt, DataType type) {
+    auto p = make_packet(cnt, 0, 1'000'000ULL * cnt, 4, type);
+    (void)fa.push(p.view, 0);
+  };
+  feed(0, DataType::kCartesian32);
+  feed(1, DataType::kCartesian32);
+  feed(3, DataType::kCartesian16);  // switch, one skipped: counted apart
+  CHECK(fa.counters().dropped_packets == 0);
+  CHECK(fa.counters().type_switch_gaps == 1);
+  feed(5, DataType::kCartesian16);  // same type: a real drop
+  CHECK(fa.counters().dropped_packets == 1);
+  feed(8, DataType::kSpherical);  // switch with two missing: a drop
+  CHECK(fa.counters().dropped_packets == 3);
+  feed(9, DataType::kCartesian32);  // switch without a gap
+  CHECK(fa.counters().dropped_packets == 3);
+  CHECK(fa.counters().type_switch_gaps == 1);
+}
+
 TEST_CASE("frame assembler: timestamp policies", "[frame]")
 {
   SECTION("kHostOffsetOnce measures once and keeps the offset")

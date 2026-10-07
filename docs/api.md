@@ -166,7 +166,9 @@ the same layout; `tests/test_api_skeleton.cpp` pins this with `static_assert`s.
   `LidarStatus` does: `hms active=1 level=warning codes=[0x0103800a:warning]`
   ([#256](https://github.com/atinfinity/livox-mid360-core/issues/256)).
 - `DeviceStats{packets, points, frames, imu_samples, bad_packets, dropped_packets (udp_cnt
-  gaps), reordered, queue_drops, frame_cnt_fallback, last_packet_time_ns, pushes,
+  gaps), reordered, queue_drops, frame_cnt_fallback, type_switch_gaps (one-packet `udp_cnt` gaps
+  at a `pcl_data_type` switch, which a Mid-360 makes without losing a packet, not counted in
+  `dropped_packets`), last_packet_time_ns, pushes,
   last_push_time_ns, time_offset_ns (re-measured after a sync loss), time_offset_valid}` and `ContextStats{datagrams, unknown_source}`. Counters are relaxed
   atomics written by the receive thread only.
 - `DeviceError{kind, optional<SessionError> session, optional<Key> key}` with kinds `kSession`,

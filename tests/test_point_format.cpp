@@ -212,6 +212,29 @@ TEST_CASE(
   CHECK(i > first_sph);
   CHECK(i == types.size());
   CHECK(dev->stats().bad_packets == 0);
+  // The simulator skips one udp_cnt at each switch, as a Mid-360 does (#271): not a drop.
+  CHECK(dev->stats().dropped_packets == 0);
+  CHECK(dev->stats().type_switch_gaps == 2);
+}
+
+TEST_CASE(
+  "Device::set_point_format: no type_switch_gaps when udp_cnt stays contiguous",
+  "[point_format][sim]")
+{
+  Fixture f({"--type-switch-gap", "0"});
+  if (!f.sim) {
+    SKIP("simulator unavailable: " << f.err);
+  }
+  Recorder rec;  // outlives the Device
+  auto dev = f.open();
+  rec.attach(*dev);
+  REQUIRE(dev->start_sampling().has_value());
+  REQUIRE(wait_until([&] { return rec.frames >= 2; }));
+  REQUIRE(dev->set_point_format(DataType::kCartesian16).has_value());
+  REQUIRE(wait_until([&] { return rec.count(DataType::kCartesian16) >= 2; }));
+  REQUIRE(dev->stop_sampling().has_value());
+  CHECK(dev->stats().dropped_packets == 0);
+  CHECK(dev->stats().type_switch_gaps == 0);
 }
 
 TEST_CASE(

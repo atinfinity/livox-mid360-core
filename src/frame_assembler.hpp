@@ -65,6 +65,8 @@ public:
     std::uint64_t dropped_packets = 0;
     std::uint64_t reordered = 0;
     std::uint64_t frame_cnt_fallback = 0;
+    /// udp_cnt gaps of one packet at a data_type change, not in dropped_packets (#271).
+    std::uint64_t type_switch_gaps = 0;
   };
 
   FrameAssembler(FramePolicy policy, TimestampPolicy timestamps);
@@ -107,6 +109,7 @@ private:
   std::uint32_t next_index_ = 0;
   bool have_prev_ = false;
   std::uint8_t prev_frame_cnt_ = 0;
+  DataType prev_data_type_ = DataType::kImu;
   bool frame_cnt_changed_ever_ = false;
   bool fallback_ = false;
   std::optional<std::uint64_t> first_time_;

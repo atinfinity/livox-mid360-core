@@ -897,6 +897,7 @@ class Simulator:
         self.seq = 0  # LiDAR-originated frames (push)
         self.udp_cnt_pcl = 0
         self.udp_cnt_imu = 0
+        self.last_pcl_type: int | None = None  # data_type of the last point-cloud packet
         self.frame_cnt = 0
         self.frame_started = 0.0
         self.next_pcl = self.next_imu = self.next_push = self.next_stats = 0.0
@@ -1287,6 +1288,7 @@ class Simulator:
         self.push_due = False
         self.seq = 0
         self.udp_cnt_pcl = self.udp_cnt_imu = 0
+        self.last_pcl_type = None
         self.frame_cnt = 0
         self.ring_next = 0
         up = now + self.args.reboot_silence
@@ -1742,6 +1744,10 @@ class Simulator:
 
     def _send_pcl(self, host, interval_s: float) -> None:
         dt = self.model.pcl_data_type
+        if self.last_pcl_type is not None and dt != self.last_pcl_type:
+            # A Mid-360 skips one udp_cnt at a pcl_data_type switch (#11, #271).
+            self.udp_cnt_pcl = (self.udp_cnt_pcl + self.args.type_switch_gap) & 0xFFFF
+        self.last_pcl_type = dt
         samples = self._cropped_samples(dt)
         pkt = proto.DataPacket(
             time_interval=min(round(interval_s * 1e7 * PCL_TIME_INTERVAL_RATIO), 0xFFFF),
@@ -1942,6 +1948,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         '--drop-rate', type=float, default=0.0, help='fraction of point-cloud packets to drop'
+    )
+    p.add_argument(
+        '--type-switch-gap',
+        type=int,
+        default=1,
+        help='udp_cnt values skipped at a pcl_data_type switch (1 on a Mid-360, 0 for none)',
     )
     p.add_argument(
         '--imu-cfg-unsupported',
