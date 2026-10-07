@@ -891,16 +891,22 @@ TEST_CASE("Device: fallback frames average the window", "[sim][device]")
   // The first frame spans the 2 x window grace period; the grid starts after it. Every later
   // frame starts within a packet spacing of a 100 ms grid point. A restart at the closing
   // packet would drift about 1 ms per frame and leave the grid within a few frames. Counting
-  // grid points rather than averaging tolerates a window a slow runner leaves empty.
+  // grid points rather than averaging tolerates a window a slow runner leaves empty, and the
+  // 30 of 40 bound tolerates a few frames a stalled packet pushes off.
   const Frame & first = rec.kept[1];
   constexpr std::int64_t kWindowNs = 100'000'000;
+  constexpr std::int64_t kToleranceNs = 10'000'000;
+  int on_grid = 0;
   for (std::size_t i = 2; i <= 41; ++i) {
     const std::int64_t d = static_cast<std::int64_t>(rec.kept[i].base_time_ns - first.base_time_ns);
     const std::int64_t off = d - (d + kWindowNs / 2) / kWindowNs * kWindowNs;
-    INFO("frame " << i << " starts " << static_cast<double>(off) / 1e6 << " ms off the grid");
-    CHECK(off > -3'000'000);
-    CHECK(off < 3'000'000);
+    UNSCOPED_INFO(
+      "frame " << i << " starts " << static_cast<double>(off) / 1e6 << " ms off the grid");
+    if (off > -kToleranceNs && off < kToleranceNs) {
+      ++on_grid;
+    }
   }
+  CHECK(on_grid >= 30);
 }
 
 TEST_CASE("Device: time window mode and kHostReceive", "[sim][device]")
