@@ -526,6 +526,17 @@ IN0 / IN1 pins of the function IO config, [#52](https://github.com/atinfinity/li
 so a caller that wants confirmation reads `time_sync_status()` (`type` becomes `kGps`; the
 simulator steps its clock to the GPS time, see [simulator.md](simulator.md)).
 
+`type` is the last sync source, not proof of a live sync. On hardware ([#111](https://github.com/atinfinity/livox-mid360-core/issues/111)) it stayed
+`kPtp` after the PTP master stopped, and `offset_ns` kept its last value; only
+`last_sync_time_ns` showed the sync was gone, as it stopped advancing. A caller that needs a
+live sync compares `last_sync_time_ns` with `local_time_ns`, or watches the HMS codes
+`0x0402` (PTP stopped) and `0x0405` (sync exception) in the push
+([protocol_notes.md](protocol_notes.md#hms-table)).
+
+The LiDAR speaks PTP v2.0 only. linuxptp 4.0's `ptp4l` defaults to v2.1
+(`ptp_minor_version 1`), which the LiDAR answers with HMS `0x0403`; run it as
+`ptp4l --ptp_minor_version=0`.
+
 `TimestampPolicy` is not coupled to these keys. Each data packet says in `time_type` whether
 its stamp is synchronised, and `kHostOffsetOnce` acts on that per packet: synced stamps pass
 through, unsynced ones get the host offset, which is measured at the first unsynced

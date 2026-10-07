@@ -226,6 +226,27 @@ reconnect replay re-enables it when it was requested.
 The wiki lists `0x0210–0x0219` twice (error: "trying to recover"; fatal: "abnormal"). The
 level byte in the code distinguishes them; the library carries one description for the range.
 
+Codes seen on hardware ([#111](https://github.com/atinfinity/livox-mid360-core/issues/111), firmware 13.18.0244). All were warning level;
+`lidar_diag_status` (0x800E) stayed zero and `cur_work_state` stayed `SAMPLING` with up to
+four of them active.
+
+| Cause | Raw code | Appears | Clears |
+| --- | --- | --- | --- |
+| Window fully or partly covered | `0x01040002` | within about 6 s | within 3.5 s of uncovering |
+| No GPS / PPS connected | `0x04070002` | 10 s to about 2 min after power-up or sampling | sometimes by itself, otherwise at a power cycle |
+| `ptp4l` at PTP v2.1 (linuxptp's default) | `0x04030002` | about 1 s after ptp4l started | not within 90 min |
+| PTP master stopped after a lock | `0x04020002` | within seconds | 1 s after the master came back |
+| same | `0x04050002` | in the same push as `0x04020002` | not within 88 min |
+| PTP master back after a loss | `0x04060002` | right after the master came back | in the next push |
+
+- A healthy push carries key 0x8011 with eight zero slots; the key is never omitted.
+- The raw slot bytes are `level, reserved (0), id low, id high`, e.g. `02 00 04 01` for
+  `0x01040002`, as `decode_hms()` assumes.
+- A new code takes the first free slot, and one cause can fill several slots in the same push.
+  Whether the LiDAR moves the remaining codes up when an earlier one clears was not observed.
+- Strong light on the window and an unreachable point cloud host (key 0x0006) gave no code.
+- Not provoked: the `0x0210–0x0219` range, an error-level code and a temperature code.
+
 ## Variants
 
 v1 targets the base Mid-360. `speed_mode` (0x0021) and `pc_freq_mod` (0x0029) exist in the
