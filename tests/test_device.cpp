@@ -897,7 +897,7 @@ TEST_CASE("Device: fallback frames average the window", "[sim][device]")
   for (std::size_t i = 2; i <= 41; ++i) {
     const std::int64_t d = static_cast<std::int64_t>(rec.kept[i].base_time_ns - first.base_time_ns);
     const std::int64_t off = d - (d + kWindowNs / 2) / kWindowNs * kWindowNs;
-    INFO("frame " << i << " starts " << off / 1e6 << " ms off the grid");
+    INFO("frame " << i << " starts " << static_cast<double>(off) / 1e6 << " ms off the grid");
     CHECK(off > -3'000'000);
     CHECK(off < 3'000'000);
   }
