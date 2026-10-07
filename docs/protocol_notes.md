@@ -234,9 +234,9 @@ four of them active.
 | --- | --- | --- | --- |
 | Window fully or partly covered | `0x01040002` | within about 6 s | within 3.5 s of uncovering |
 | No GPS / PPS connected | `0x04070002` | 10 s to about 2 min after power-up or sampling | sometimes by itself, otherwise at a power cycle |
-| `ptp4l` at PTP v2.1 (linuxptp's default) | `0x04030002` | about 1 s after ptp4l started | not within 90 min |
+| `ptp4l` at PTP v2.1 (linuxptp's default) | `0x04030002` | about 1 s after ptp4l started | not by itself (90 min seen); at a power cycle |
 | PTP master stopped after a lock | `0x04020002` | within seconds | 1 s after the master came back |
-| same | `0x04050002` | in the same push as `0x04020002` | not within 88 min |
+| same | `0x04050002` | in the same push as `0x04020002` | not by itself (88 min seen); at a power cycle |
 | PTP master back after a loss | `0x04060002` | right after the master came back | in the next push |
 
 - A healthy push carries key 0x8011 with eight zero slots; the key is never omitted.
