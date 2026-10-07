@@ -126,13 +126,13 @@ TEST_CASE("Session: typed commands and rejections", "[sim][session]")
   }
   Session s = f.connect();
 
-  // Read-only key -> 0x22 with error_key.
+  // Read-only key -> 0x20 with error_key, as on a Mid-360 (#276; the wiki says 0x22).
   const std::byte one{1};
   const KeyValue ro{static_cast<std::uint16_t>(Key::kSn), std::span<const std::byte>(&one, 1)};
   const auto rej = s.configure(std::span<const KeyValue>(&ro, 1));
   REQUIRE_FALSE(rej.has_value());
   CHECK(rej.error().kind == SessionErrorKind::kLidarRejected);
-  CHECK(rej.error().ret_code == RetCode::kParamReadOnly);
+  CHECK(rej.error().ret_code == RetCode::kParamNotSupport);
   CHECK(rej.error().error_key == 0x8000);
   CHECK(rej.error().cmd_id == 0x0100);
   CHECK(to_string(rej.error()).find("lidar_rejected") == 0);

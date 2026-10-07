@@ -116,7 +116,8 @@ The process is driven over its standard streams so that any test harness can use
 
 - **Firmware log** ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)): a sixth socket at `+500` answers `0x0301` (payload `{log_type,
   enable}`) and streams `0x0300` chunks of `--log-chunk-bytes` synthetic text every
-  `--log-chunk-interval` for each enabled type. As on a Mid-360 on 13.18.0244 ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)), a
+  `--log-chunk-interval` for each enabled type. An undefined `log_type` is answered with
+  `0x00` and streams nothing ([#276](https://github.com/atinfinity/livox-mid360-core/issues/276)). As on a Mid-360 on 13.18.0244 ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)), a
   file begins at `trans_index` 0 with the begin flag, byte 2 (`file_num`) is 0 in that chunk
   and 1 afterwards, `timestamp` is 0, the first `--log-ack-first` chunks ask for an ACK, and
   disabling a type stops it without an end chunk. Only `log_new_file` sends an empty
@@ -137,10 +138,11 @@ The process is driven over its standard streams so that any test harness can use
 
 - **Commands** `0x0000` discovery (unicast or broadcast; the ACK carries the `--dev-type`
   value, the bound address and the real command port), `0x0100` configure, `0x0101`
-  inquire, `0x0200` reboot, `0x0201` factory reset, `0x0202` GPS time. Anything else is
-  answered with ret `0x01`.
+  inquire, `0x0200` reboot, `0x0201` factory reset, `0x0202` GPS time. Anything else gets no
+  ACK, as on a Mid-360 ([#276](https://github.com/atinfinity/livox-mid360-core/issues/276)).
 - **Configure** validates every key first with the wiki return codes (`RetCode` in
-  `protocol.hpp`): read-only → `0x22`, unknown → `0x20`, wrong length → `0x23`,
+  `protocol.hpp`): read-only or unknown → `0x20` (a Mid-360 does not use the wiki's `0x22`,
+  [#276](https://github.com/atinfinity/livox-mid360-core/issues/276)), wrong length → `0x23`,
   `pcl_data_type` outside 1–3 → `0x03`, `pattern_mode` above 2 → `0x03`, a `lidar_ipcfg`
   that `lidar_ip_config_valid()` rejects → `0x03` (both measured, [#269](https://github.com/atinfinity/livox-mid360-core/issues/269)),
   a FOV window (`0x0015` / `0x0016`) with yaw
@@ -299,7 +301,7 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Reboot timing ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) | runs on for `--reboot-delay` (0.3 s), one ERROR push, `--reboot-silence` (0.5 s), then MOTORSTARTUP → target; `udp_cnt` and the clock restart | measured on firmware 13.18.0244: runs on for 1.25 s, ERROR pushes, silent until +8.9 s, first push MOTORSTARTUP (SELFCHECK / IDLE never pushed), READY at +13.5 s, then SAMPLING; the defaults stay short to keep tests fast |
 | SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | SELFCHECK unknown; MOTORSTARTUP measured at 6.1–10.1 s on a Mid-360 ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)), kept short here to keep the tests fast |
 | `work_tgt_mode` rejections | `0x03` for anything but 1 / 2 / 9; `0x02` in ERROR / UPGRADE | `0x03` measured on firmware 13.18.0244 for 0, 3–7 and 10 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); 8 and the ERROR / UPGRADE answer are not |
-| Write of a read-only key | ret `0x22`, `error_key` = that key | a Mid-360 on 13.18.0244 answers `0x20` with that `error_key` ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the simulator still answers `0x22` |
+| Write of a read-only key | ret `0x20`, `error_key` = that key | verified on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the wiki lists `0x22` for it |
 | Unknown key | ret `0x20` | verified on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) |
 | `0x0101` inquire with an unknown key | ret `0x20` with the known keys, the unknown ones left out | verified on firmware 13.18.0244 ([#228](https://github.com/atinfinity/livox-mid360-core/issues/228)); a request naming only unknown keys gets `key_num` 0 |
 | `detect_mode` / `time_filter` values > 1, `imu_data_en` | ret `0x03`; `imu_data_en` stored as written | measured for `detect_mode` 2 and `imu_data_en` 2 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); 13.18.0244 does not support `time_filter`, and `imu_data_en` above 2 is not checked |
@@ -309,11 +311,11 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | `0x0202` GPS time | the request's arrival is taken as the PPS edge; answered `0x00` whatever the PPS input | the LiDAR latches the PPS edge in hardware |
 | `time_filter` | stored only; the simulator has no time source to roll back | key `0x0026` is not supported on 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)), so the rollback behaviour cannot be checked there |
 | `lidar_ipcfg` write | ret `0x21` (reboot required) when the value changes, `0x03` for a value `lidar_ip_config_valid()` rejects | on 13.18.0244 the current value answers `0x00`, the rejected values `0x03`, and no other key answers `0x21` ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); a changed value needs a reboot to check ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12)) |
-| Unknown `cmd_id` | ret `0x01` | a Mid-360 on 13.18.0244 sends no ACK at all ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the simulator still answers `0x01` |
+| Unknown `cmd_id` | no ACK | verified on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) |
 | Multi-key config with one bad key | nothing applied | verified on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) |
 | Push contents and timing | keys `0x0000`, `0x0001`, `0x0004`–`0x0007`, `0x0012`, `0x0015`–`0x0019`, `0x001A`, `0x001C`, then `0x8000`–`0x800C`, `0x800E`, `0x8010`, `0x8011`; an extra push on each state change and after each `0x0100` request | verified on firmware 13.18.0244 ([#235](https://github.com/atinfinity/livox-mid360-core/issues/235)); the real push `seq_num` is not contiguous (about 26 per second at one push per second), the simulator's counts its own pushes |
 | Debug raw data ([#93](https://github.com/atinfinity/livox-mid360-core/issues/93), [#106](https://github.com/atinfinity/livox-mid360-core/issues/106)) | `0x0303` answers `0x00` on the log port in every work state, also when repeated (the stream then moves to the new destination), when disabling a disabled stream and for an enable with port 0 (which stops the stream); the command port does not answer; short payloads answer `0x01`; the stream leaves port 60301 only while sampling, does not stop the point cloud and ends with a reboot; the datagram content is synthetic | verified on firmware 13.18.0244 except the datagram content |
-| Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 0 with the begin flag, `file_num` is 0 in that chunk and 1 afterwards, `timestamp` is 0; a disable sends no end chunk ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)) | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)), resends an unacknowledged chunk, answers `0x0301` with `0x00` in every case (an undefined `log_type` included) and does not answer `0x0302` ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); how a file ends is unknown |
+| Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated or for an undefined `log_type`; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 0 with the begin flag, `file_num` is 0 in that chunk and 1 afterwards, `timestamp` is 0; a disable sends no end chunk ([#244](https://github.com/atinfinity/livox-mid360-core/issues/244)) | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)), resends an unacknowledged chunk, answers `0x0301` with `0x00` in every case (an undefined `log_type` included) and does not answer `0x0302` ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); how a file ends is unknown |
 | FOV window ranges | yaw outside [0, 360], pitch outside [-10, 60] or start > stop → `0x03`; equal start-stop accepted (measured) | the wiki gives half-open ranges; a Mid-360 includes both ends |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
 | `pcl_data_type` change while SAMPLING | the next packet is already in the new format and `udp_cnt` skips one value (`--type-switch-gap`) | measured on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): the switch is immediate (1.3–3 ms), not aligned to a frame, and `udp_cnt` skips one value at every switch |
