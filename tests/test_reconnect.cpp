@@ -390,7 +390,7 @@ TEST_CASE("Reconnect: set_lidar_ip_config + reboot lands on the new address", "[
   CHECK(r->reboot_required);
   const auto again = dev->set_lidar_ip_config(moved);
   REQUIRE(again.has_value());
-  CHECK_FALSE(again->reboot_required);  // unchanged value [unverified on hardware]
+  CHECK_FALSE(again->reboot_required);  // unchanged value: 0x00 on a Mid-360 (#11)
   CHECK(dev->lidar_ip_config()->ip == moved.ip);
   CHECK(dev->info().ip == Ipv4{127, 0, 0, 1});  // nothing moves before the reboot
 

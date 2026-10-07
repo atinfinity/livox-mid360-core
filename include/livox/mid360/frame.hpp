@@ -196,8 +196,8 @@ private:
 };
 
 /// Host-side install attitude transform (issue #51). The SDK never applies it by itself:
-/// key 0x0012 is stored on the LiDAR and whether the firmware transforms the emitted points
-/// is unverified (#11). `p' = r * p + t`, the livox_ros_driver2 extrinsic convention.
+/// key 0x0012 is stored on the LiDAR, but the firmware does not transform the emitted points
+/// (measured on 13.18.0244, #11). `p' = r * p + t`, the livox_ros_driver2 extrinsic convention.
 struct Extrinsic
 {
   float r[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  ///< row-major rotation

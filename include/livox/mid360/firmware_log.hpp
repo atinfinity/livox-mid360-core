@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /// @file
 /// Firmware log collection (issue #44): the 0x03xx command group on the LiDAR's log port
-/// (56500). The layouts follow Livox-SDK2 (sdk_core/comm/define.h) and are unverified on
-/// hardware (#11). Unrelated to the SDK's own diagnostic logging (log.hpp).
+/// (56500). The layouts follow Livox-SDK2 (sdk_core/comm/define.h) and match a Mid-360 on
+/// firmware 13.18.0244 (#11). Unrelated to the SDK's own diagnostic logging (log.hpp).
 #pragma once
 
 #include <array>
@@ -25,7 +25,7 @@ namespace livox::mid360
 enum class FirmwareLogType : std::uint8_t
 {
   kRealTime = 0,   ///< real-time log
-  kException = 1,  ///< [unverified] accepted by the API, untested on hardware (#11)
+  kException = 1,  ///< ACKed by 13.18.0244, but no chunk arrived on demand (#11)
 };
 
 /// `flag` bits of a 0x0300 push (SDK2 logger_manager.cpp).
@@ -62,9 +62,9 @@ struct FirmwareLogPushHeader
 {
   FirmwareLogType log_type = FirmwareLogType::kRealTime;  ///< log this push belongs to
   std::uint8_t file_index = 0;    ///< which file of the transfer; a begin flag opens a new one
-  std::uint8_t file_num = 0;      ///< [unverified] total files; SDK2 never reads it
+  std::uint8_t file_num = 0;      ///< SDK2 never reads it; 13.18.0244: 0 in the first chunk, then 1
   FirmwareLogFlags flags;         ///< ack / begin / end bits
-  std::uint32_t timestamp = 0;    ///< [unverified] raw, unit unknown; SDK2 never reads it
+  std::uint32_t timestamp = 0;    ///< SDK2 never reads it; always 0 on 13.18.0244
   std::uint16_t rsvd = 0;         ///< reserved, carried through unchanged
   std::uint32_t trans_index = 0;  ///< +1 per packet inside one file
   std::uint16_t data_length = 0;  ///< number of data bytes after the header

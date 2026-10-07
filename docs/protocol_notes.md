@@ -2,7 +2,8 @@
 
 Observations, ambiguities and decisions that go beyond the wiki text
 ("Livox LiDAR Communication Protocol – Mid360", rev v1.4.12, 2026-09-21).
-Items marked **[unverified]** must be confirmed against hardware in phase 2 and updated here.
+Hardware results are from a Mid-360 with firmware 13.18.0244, the minimum supported version
+([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). Items still marked **[unverified]** have not been checked on hardware.
 
 ## Data packet header, bytes 12–23
 
@@ -10,8 +11,12 @@ The table defines offset 12, size 12 as `reserved`. The accompanying diagram, an
 changelog ("Add tag_type to the point cloud frame header"), show a `pack_info` field before
 `reserved`. Neither the size of `pack_info` nor the encoding of `tag_type` is documented.
 The library exposes the 12 bytes verbatim as `DataPacketHeader::reserved` and `decode_tag()`
-assumes the single documented tag layout. **[unverified]** Capture real packets and record the
-actual contents here.
+assumes the single documented tag layout. Measured on a Mid-360 with firmware 13.18.0244
+([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): the 12 bytes are 0 in every packet, `frame_cnt` and `time_type` are 0, and
+the point cloud `crc32` is 0 (the IMU packets carry a valid one). The documented tag layout
+fits points with a return, but the reserved bits 6–7 are not always 0: about 20 % of the
+points without a return carry `0x80` or `0xC0`, and about 0.07 % of the returns `0x40` or
+`0x48`. `is_noise()` does not read them.
 
 ## Discovery ACK `dev_type`
 
@@ -70,9 +75,10 @@ request whatever its result (not after `0x0101`). Its `seq_num` advances by abou
 second, so gaps in it do not mean lost pushes. The SDK merges every status key
 (0x8006–0x8011) into `Device::pushed_status()`, tolerating any missing key.
 Key `0x800E` `lidar_diag_status` is read as four 2-bit-wide nibbles (system, scan, ranging,
-communication; 0 normal, 1 warning, 2 error, 3 safety error) [unverified, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)]. Whether
-`0x8007` `core_temp` and the time-sync keys `0x8009`–`0x800C` are refreshed in every push or
-only on change is likewise unverified; the SDK carries the last value over either way.
+communication; 0 normal, 1 warning, 2 error, 3 safety error). Only 0 has been seen on
+hardware, so the decoding is still open ([#111](https://github.com/atinfinity/livox-mid360-core/issues/111)). Every push of a Mid-360 on 13.18.0244
+carries every supported settings and status key ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the SDK carries the last value
+over anyway.
 
 ## Working state
 
@@ -161,8 +167,12 @@ Measured on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid36
 
 Treated as success-with-note by callers: the parameter was stored but needs a reboot
 (`lidar_ipcfg` is the obvious case; `Device::set<K>()` reports it as
-`SetResult::reboot_required`). **[unverified]** Which keys answer `0x21`, and whether an
-unchanged value still does; the simulator answers `0x21` only for a changed `lidar_ipcfg`.
+`SetResult::reboot_required`). On firmware 13.18.0244 no key answered `0x21`
+([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): writing the current value answers `0x00` for all 14 supported writable keys,
+and a changed value answers `0x00` and reads back at once for `0x0000`, `0x0001`, `0x0005`,
+`0x0012`, `0x0015`, `0x0017`, `0x0018`, `0x0019` and `0x001C`. **[unverified]** whether a
+changed `lidar_ipcfg` answers `0x21`, which needs a reboot to check ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12)); the simulator
+answers `0x21` only for that case.
 
 ## FOV keys 0x0015 / 0x0016 / 0x0017
 
@@ -204,13 +214,10 @@ Measured on a Mid-360, firmware 13.18.0244 ([#106](https://github.com/atinfinity
   defaults to 0, like SDK2.
 - The stream did not stop on its own within 30 s.
 
-Still **[unverified]**:
+The layout of the file SDK2 writes (`.LivoxDebugPointCloudData`) was compared byte for byte
+with a real one ([#107](https://github.com/atinfinity/livox-mid360-core/issues/107), [debug_data.md](debug_data.md#sdk2-file-format)).
 
-- Whether the setting survives a reboot.
-- The layout of the file SDK2 writes (`.LivoxDebugPointCloudData`: a header with `file_ver`,
-  `dev_type`, `data_type`, `sn` and a CRC16, then the datagrams unmodified). Field widths
-  and the size of the reserved area have to be read from a file written by SDK2 or Livox
-  Viewer 2.
+Still **[unverified]**: whether the setting survives a reboot.
 
 ## HMS table
 

@@ -131,7 +131,7 @@ Fixed in phase 0 (2026-09-25) and not expected to change within v1.
 | Device scope | Base Mid-360 only. Mid-360S / Mid-360L keys (`speed_mode` `0x0021`, `pc_freq_mod` `0x0029`) are listed in the key enum but get no typed helpers. |
 | Language standard | C++20 code built with `-std=c++23`, because `std::expected` is only enabled under C++23 in libstdc++ and libc++. Clang 18 with libstdc++ cannot use `<expected>`, so Clang 19+ is required. |
 | Platform | Ubuntu 24.04 and later only. No Windows, no Ubuntu 18.04 / 20.04 / 22.04. |
-| Minimum firmware | Undecided. Firmware v13.18.0244 is the baseline for hardware verification ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). |
+| Minimum firmware | **13.18.0244**, the only version tested on hardware ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). It does not support keys `0x0021`, `0x0026`, `0x0029` and `0x002B` (a write answers `0x20`, an inquire leaves them out), so `set_imu_sensor_config()` and `set_time_filter()` fail on it. The first version that adds `0x002B` is not known. |
 | Tests | Catch2 v3 from apt when available, otherwise FetchContent. |
 | Repository split | Core library here; ROS 2 driver and CLI in sister repositories `livox-mid360-ros2` and `livox-mid360-cli`. |
 | Third-party code | None in the library or the default build. The one exception is the opt-in viewer `livox-mid360-rerun` (`LIVOX_MID360_BUILD_RERUN`, Rerun C++ SDK + Apache Arrow, [#147](https://github.com/atinfinity/livox-mid360-core/issues/147)), which lives in `tools/rerun/` and is not linked by the library. |

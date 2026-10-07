@@ -279,7 +279,7 @@ dev->set_many<Key::kFovCfg0, Key::kFovCfgEn>(fov0, FovEnable{.fov0 = true});
 | --- | --- | --- |
 | `kPclDataType` 0x0000 | `DataType` | 1–3; `kImu` (0) is out of range |
 | `kPatternMode` 0x0001 | `std::uint8_t` | 0 / 1 / 2 accepted; a change restarts the motor |
-| `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `set_lidar_ip_config()`; `reboot_required` after a change (simulator behaviour, [unverified]) |
+| `kLidarIpCfg` 0x0004 | `LidarIpConfig` | `set_lidar_ip_config()`; `reboot_required` after a change in the simulator; [unverified] on hardware, which needs a reboot to check ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12)) |
 | `kStateInfoHostIpCfg` / `kPointCloudHostIpCfg` / `kImuHostIpCfg` 0x0005–0x0007 | `HostIpConfig` | normally set by `open()` |
 | `kInstallAttitude` 0x0012 | `InstallAttitude` | `set_install_attitude()`; host transform via `extrinsic_from()` |
 | `kFovCfg0` / `kFovCfg1` 0x0015 / 0x0016 | `FovConfig` | |
@@ -338,10 +338,10 @@ if (id) {
   omits keeps the value an earlier push carried and a field is empty only until the first
   push that carries it. `time_ns` is the receive time of the last push. Kept under the push
   lock, returned without a round trip, `nullopt` before the first push; not cleared by a
-  reconnect. `work_state()` and `hms()` are views of it. Which keys the real push carries is
-  unverified ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the simulator pushes all read-only keys.
+  reconnect. `work_state()` and `hms()` are views of it. A Mid-360 on 13.18.0244 pushes every
+  supported settings and status key about once a second ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)), as the simulator does.
 - `DiagStatus` (key 0x800E, [#55](https://github.com/atinfinity/livox-mid360-core/issues/55)) is four `DiagLevel` nibbles (`system`, `scan`, `ranging`,
-  `communication`; `kNormal` .. `kSafetyError`, meanings unverified on hardware) with
+  `communication`; `kNormal` .. `kSafetyError`; only 0 has been seen on hardware, [#111](https://github.com/atinfinity/livox-mid360-core/issues/111)) with
   `worst()` / `normal()` and `operator==`. `diag_status()` inquires it; the pushed value is
   `pushed_status()->lidar_diag_status`.
 
@@ -415,9 +415,10 @@ if (cur) {
 `Device::set_install_attitude(InstallAttitude)` / `install_attitude()` (issue [#51](https://github.com/atinfinity/livox-mid360-core/issues/51)) wrap key
 0x0012 (`roll_deg`, `pitch_deg`, `yaw_deg` as float degrees, `x_mm`, `y_mm`, `z_mm` as
 int32). `install_attitude_valid()` in `keys.hpp` is checked before any I/O
-(`kInvalidArgument` with `key` = 0x0012): the angles are finite and within ±180°. The
-value is only stored on the LiDAR; whether the firmware applies it to the emitted points,
-and in which convention, is [unverified] ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). The SDK never transforms points by itself.
+(`kInvalidArgument` with `key` = 0x0012): the angles are finite and within ±180°. This is
+stricter than the firmware, which also accepts roll 200° or yaw −181°. The value is only
+stored on the LiDAR: firmware 13.18.0244 does not apply it to the emitted points ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)),
+and the SDK never transforms points by itself.
 
 To transform on the host, `frame.hpp` provides an opt-in extrinsic:
 
@@ -506,9 +507,9 @@ the LiDAR and not replayed on reconnect.
 Time synchronisation: the PPS / GPS inputs are where an external clock arrives; the host
 pushes a GPS timestamp with `set_gps_time()` (0x0202) and reads the resulting state with
 `time_sync_status()` (0x8009–0x800C), both in the time-sync section. `time_type` in the
-data packets is the per-packet signal `TimestampPolicy` acts on. How the firmware treats a
-write of an undefined input function is [unverified] ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the simulator answers
-`kOutOfRange`.
+data packets is the per-packet signal `TimestampPolicy` acts on. A Mid-360 answers a write of
+an undefined input or output function with `0x03` ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)), surfaced as `kOutOfRange`, as the
+simulator does.
 
 | C++ | C |
 | --- | --- |
@@ -566,11 +567,13 @@ the replayed `HostSetup` (rule above), whose new optionals `detect_mode`, `time_
   rollback in the sync source interrupts the point cloud, with 1 (GPS-sync abnormal-time
   filtering) it does not. The SDK only stores the bit.
 
-Key 0x002B is absent on older firmware ([unverified] which version added it, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). No
-distinct error kind exists for that: the LiDAR rejects the write, the read and any batched
-inquire naming the key with `ret_code` 0x20, which surfaces as the ordinary `kSession` /
-`kLidarRejected` error. `settings()` drops such a key and asks again, so
-`LidarSettings::imu_sensor_cfg` is simply empty there.
+Keys 0x002B and 0x0026 are absent on firmware 13.18.0244, the minimum supported version
+([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)), so the IMU rate and the
+time filter cannot be changed there; which version added them is not known. No distinct error
+kind exists for that: the LiDAR rejects the write, the read and any batched inquire naming one
+of them with `ret_code` 0x20, which surfaces as the ordinary `kSession` / `kLidarRejected`
+error. `settings()` drops such a key and asks again, so `LidarSettings::imu_sensor_cfg` and
+`time_filter` are simply empty there.
 
 ```cpp
 dev->set_detect_mode(DetectMode::kSensitive);
@@ -603,9 +606,10 @@ dev->set_time_filter(true);
 before any I/O (`kInvalidArgument` with `key` = 0x0004): the address is neither unspecified,
 broadcast nor the subnet's network / broadcast address, the mask is a contiguous prefix of 1
 to 30 bits, and the gateway is 0.0.0.0 or inside the subnet and different from the address.
-The LiDAR answers a change with `ret_code` 0x21, surfaced as `SetResult::reboot_required`
-exactly as received (whether an unchanged value also answers 0x21 is [unverified], [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); the
-SDK never reboots on its own.
+A `ret_code` 0x21 is surfaced as `SetResult::reboot_required` exactly as received; the
+simulator answers a change with it. On a Mid-360 an unchanged value answers `0x00` and a
+rejected one `0x03` ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); whether a change answers 0x21 is [unverified] ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12)). The SDK
+never reboots on its own.
 
 ```cpp
 auto r = dev->set_lidar_ip_config(

@@ -228,7 +228,7 @@ TEST_CASE("Session: wait_for_state", "[sim][session]")
   CHECK(to.error().work_state == WorkState::kSampling);
 
   // A LiDAR sitting in ERROR: wait_for_state() gives up at once instead of timing out,
-  // and work_tgt_mode is refused with 0x02 (docs/protocol_notes.md, [unverified]).
+  // and work_tgt_mode is refused with 0x02 (docs/protocol_notes.md; assumed, not checked on hardware).
   f.control(R"({"cmd":"set_state","state":4})");
   const auto bad = s.wait_for_state(WorkState::kIdle, 2s);
   REQUIRE_FALSE(bad.has_value());
