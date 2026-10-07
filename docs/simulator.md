@@ -141,11 +141,11 @@ The process is driven over its standard streams so that any test harness can use
   answered with ret `0x01`.
 - **Configure** validates every key first with the wiki return codes (`RetCode` in
   `protocol.hpp`): read-only → `0x22`, unknown → `0x20`, wrong length → `0x23`,
-  `pcl_data_type` outside 1–3 → `0x03`, `pattern_mode` 1 / 2 → `0x20` and any other non-zero
-  value → `0x03` (the base Mid-360 only scans non-repetitively, [unverified] which code, [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)),
+  `pcl_data_type` outside 1–3 → `0x03`, `pattern_mode` above 2 → `0x03`, a `lidar_ipcfg`
+  that `lidar_ip_config_valid()` rejects → `0x03` (both measured, [#269](https://github.com/atinfinity/livox-mid360-core/issues/269)),
   a FOV window (`0x0015` / `0x0016`) with yaw
-  outside [0, 360], pitch outside [-10, 60] or start > stop → `0x03` (measured), `detect_mode` / `time_filter` /
-  `imu_data_en` above 1 → `0x03`, an `imu_sensor_cfg` byte past its last enumerator (rate
+  outside [0, 360], pitch outside [-10, 60] or start > stop → `0x03` (measured), `detect_mode` / `time_filter`
+  above 1 → `0x03` (`imu_data_en` is stored as written, 2 included, as on a Mid-360), an `imu_sensor_cfg` byte past its last enumerator (rate
   > 3, accel > 3, gyro > 7) → `0x03`. All keys are applied only if none failed; the ACK's
   `error_key` names the offender. An inquire `0x0101` naming an unknown key answers `0x20` with
   the known keys and leaves the unknown ones out, as a Mid-360 does ([#228](https://github.com/atinfinity/livox-mid360-core/issues/228)). A *changed* `lidar_ipcfg` is stored and answered with `0x21`
@@ -157,8 +157,8 @@ The process is driven over its standard streams so that any test harness can use
   power-on → SELFCHECK (`--selfcheck-delay`, commands are answered) → IDLE, then the machine
   chases `work_tgt_mode` (SAMPLING by default): IDLE → MOTORSTARTUP (`--startup-delay`) →
   READY → SAMPLING. The pass-through READY has no dwell (SAMPLING → IDLE is immediate), but
-  every transition emits a `state` event. `work_tgt_mode` accepts 1 / 2 / 9 only (4 / 5 / 6 /
-  8 → `0x20`, undefined → `0x03`, in ERROR / UPGRADE → `0x02`); a write during SELFCHECK /
+  every transition emits a `state` event. `work_tgt_mode` accepts 1 / 2 / 9 only (any other
+  value → `0x03` as on a Mid-360, in ERROR / UPGRADE → `0x02`); a write during SELFCHECK /
   MOTORSTARTUP is stored and followed afterwards. ERROR / UPGRADE are entered only by `set_state` and left by
   `set_state` or a reboot. Reboot and factory reset keep the LiDAR running for
   `--reboot-delay` after the ACK, then send one push reporting ERROR, power down (reset
@@ -298,11 +298,11 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Persistence across reboot | all keys, `work_tgt_mode` included; `src_port` of `0x0005`–`0x0007` reads back 0 | verified on firmware 13.18.0244 for the keys a host writes ([#12](https://github.com/atinfinity/livox-mid360-core/issues/12), [#250](https://github.com/atinfinity/livox-mid360-core/issues/250)); the wiki marks `work_tgt_mode` as volatile, the firmware keeps it |
 | Reboot timing ([#236](https://github.com/atinfinity/livox-mid360-core/issues/236)) | runs on for `--reboot-delay` (0.3 s), one ERROR push, `--reboot-silence` (0.5 s), then MOTORSTARTUP → target; `udp_cnt` and the clock restart | measured on firmware 13.18.0244: runs on for 1.25 s, ERROR pushes, silent until +8.9 s, first push MOTORSTARTUP (SELFCHECK / IDLE never pushed), READY at +13.5 s, then SAMPLING; the defaults stay short to keep tests fast |
 | SELFCHECK / MOTORSTARTUP | 0.1 s / 0.3 s, commands answered | SELFCHECK unknown; MOTORSTARTUP measured at 6.1–10.1 s on a Mid-360 ([#221](https://github.com/atinfinity/livox-mid360-core/issues/221)), kept short here to keep the tests fast |
-| `work_tgt_mode` rejections | `0x20` / `0x03` / `0x02` (see State machine) | wiki lists the codes but not which the firmware uses |
+| `work_tgt_mode` rejections | `0x03` for anything but 1 / 2 / 9; `0x02` in ERROR / UPGRADE | `0x03` measured on firmware 13.18.0244 for 0, 3–7 and 10 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); 8 and the ERROR / UPGRADE answer are not |
 | Write of a read-only key | ret `0x22`, `error_key` = that key | wiki lists the codes but not which the firmware actually uses |
 | Unknown key | ret `0x20` | same |
 | `0x0101` inquire with an unknown key | ret `0x20`, `key_num` 1 and the offending key with length 0 | wiki does not describe a failed inquire ACK |
-| `detect_mode` / `time_filter` / `imu_data_en` values > 1 | ret `0x03` | wiki gives the codes, not which one |
+| `detect_mode` / `time_filter` values > 1, `imu_data_en` | ret `0x03`; `imu_data_en` stored as written | measured for `detect_mode` 2 and `imu_data_en` 2 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)); `time_filter` and `imu_data_en` above 2 are not |
 | `imu_sensor_cfg` | per-byte range → `0x03`; accepted rate switches the IMU stream to 200 / 500 / 100 / 50 pkt/s at once (and `time_interval`); factory default `0/0/0`; `--imu-cfg-unsupported` → `0x20` on write and read | the wiki gives no default, no firmware version and does not say whether the rate change is immediate |
 | Free-running clock | counts from power-on at the host's rate (plus `drift_ppm`), restarts at 0 at a reboot | the protocol says only "counts from power-on" ([#133](https://github.com/atinfinity/livox-mid360-core/issues/133), [#109](https://github.com/atinfinity/livox-mid360-core/issues/109)) |
 | Time sync acquired / lost | a step to the master time; `0x800A` = the master time, `0x800B` = local − source at the step; a loss continues from the current time, `0x800A` / `0x800B` unchanged; a reboot loses it | how the firmware steps, slews or refreshes these keys ([#109](https://github.com/atinfinity/livox-mid360-core/issues/109)) |
@@ -316,8 +316,8 @@ stdout line, so later session-layer tests can inject reboots, HMS codes or dropp
 | Firmware log ([#44](https://github.com/atinfinity/livox-mid360-core/issues/44)) | `0x0301` on the log socket enables / disables a type, ret `0x00` even when repeated; chunks go to key `0x0009` (else to the `0x0301` sender); `file_index` starts at 1, `trans_index` at 1 with the begin flag, `file_num` is 1, `timestamp` is Unix seconds; a disable sends one empty end-flagged chunk | firmware 13.18.0244 rejects key `0x0009` with `0x20` and sends to the `0x0301` sender (`--log-ignore-hostcfg` plus a `fail_cmd` on key 9 reproduce it, [#223](https://github.com/atinfinity/livox-mid360-core/issues/223)) and resends an unacknowledged chunk; the counting and end-of-file behaviour are unknown |
 | FOV window ranges | yaw outside [0, 360], pitch outside [-10, 60] or start > stop → `0x03`; equal start-stop accepted (measured) | the wiki gives half-open ranges; a Mid-360 includes both ends |
 | FOV write while SAMPLING | applied at once, ret `0x00` (no `0x21`) | the wiki does not say whether FOV keys need a reboot or a motor restart |
-| `pattern_mode` | only 0 accepted; 1 / 2 → `0x20`, others → `0x03`; never restarts the motor | the wiki gives the values and the "scan mode changed" edge, not which ones the base Mid-360 accepts nor the code |
 | `pcl_data_type` change while SAMPLING | the next packet is already in the new format and `udp_cnt` skips one value (`--type-switch-gap`) | measured on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): the switch is immediate (1.3–3 ms), not aligned to a frame, and `udp_cnt` skips one value at every switch |
+| `pattern_mode` | 0 / 1 / 2 accepted, above → `0x03`; a change while SAMPLING or READY restarts the motor (MOTORSTARTUP for `--startup-delay`, READY, then the target), the same value does not | measured on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)): the restart takes 1.0 s from SAMPLING; whether 1 / 2 change the scan is not known, the simulator's points do not change |
 | Install attitude `0x0012` | stored only; with `--apply-attitude`, Cartesian points moved by `Rz * Ry * Rx` + translation after the FOV crop, spherical untouched | whether the firmware applies the key to its output at all, in which convention and to which data types ([#110](https://github.com/atinfinity/livox-mid360-core/issues/110)) |
 | FOV cropping | yaw `[start, stop)`, `start == stop` empty; pitch `[start, stop]`; keep if inside any enabled window, else a zero point with reflectivity 60 (measured) | the wiki defines neither the edge inclusivity nor how the windows combine |
 | Inquire of all settings / status keys at once | one ACK with every key | wiki gives no limit on keys per `0x0101` |

@@ -285,7 +285,7 @@ TEST_CASE("Device::set<K>: LiDAR rejections carry ret_code and error_key", "[dev
     CHECK(r.error().kind == DeviceError::Kind::kSession);
     REQUIRE(r.error().session.has_value());
     CHECK(r.error().session->kind == SessionErrorKind::kLidarRejected);
-    CHECK(r.error().session->ret_code == RetCode::kParamNotSupport);
+    CHECK(r.error().session->ret_code == RetCode::kOutOfRange);  // as on a Mid-360 (#269)
     CHECK(r.error().session->error_key == static_cast<std::uint16_t>(Key::kWorkTgtMode));
     CHECK_FALSE(r.error().key.has_value());
   }

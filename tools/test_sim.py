@@ -45,6 +45,28 @@ class DeviceModelTest(unittest.TestCase):
         )
         self.assertEqual(self.m.settings[sim.KEY_LIDAR_IPCFG], new)
 
+    def test_lidar_ipcfg_invalid_values_are_rejected(self) -> None:
+        # The seven values a Mid-360 answered with 0x03 and did not store (#11, #269).
+        cur = self.m.settings[sim.KEY_LIDAR_IPCFG]
+        for ip, mask, gw in (
+            ('192.168.1.100', '255.0.255.0', '192.168.1.1'),
+            ('192.168.1.100', '0.0.0.0', '192.168.1.1'),
+            ('192.168.1.100', '255.255.255.255', '0.0.0.0'),
+            ('192.168.1.0', '255.255.255.0', '192.168.1.1'),
+            ('192.168.1.255', '255.255.255.0', '192.168.1.1'),
+            ('0.0.0.0', '255.255.255.0', '0.0.0.0'),
+            ('192.168.1.100', '255.255.255.0', '192.168.2.1'),
+        ):
+            value = proto.encode_lidar_ipcfg(ip, mask, gw)
+            self.assertEqual(
+                self.m.configure([(sim.KEY_LIDAR_IPCFG, value)]),
+                (sim.RET_OUT_OF_RANGE, sim.KEY_LIDAR_IPCFG),
+                (ip, mask, gw),
+            )
+        self.assertEqual(self.m.settings[sim.KEY_LIDAR_IPCFG], cur)
+        ok = proto.encode_lidar_ipcfg('10.0.0.5', '255.0.0.0', '0.0.0.0')
+        self.assertTrue(sim.lidar_ipcfg_valid(ok))
+
     def test_power_on_selfcheck_idle_motorstartup_ready_sampling(self) -> None:
         # Figure: POWEROFF -> SELFCHECK -> IDLE, then IDLE -> MOTORSTARTUP -> READY -> target.
         self.m.power_on(now=100.0)
@@ -147,13 +169,8 @@ class DeviceModelTest(unittest.TestCase):
 
     def test_work_tgt_mode_rejects_intermediate_and_undefined_values(self) -> None:
         self._boot()
-        for v in (sim.WS_ERROR, sim.WS_SELFCHECK, sim.WS_MOTORSTARTUP, sim.WS_UPGRADE):
-            self.assertEqual(
-                self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([v]))], 20.0),
-                (sim.RET_PARAM_NOT_SUPPORT, sim.KEY_WORK_TGT_MODE),
-                v,
-            )
-        for v in (0, 3, 7, 10, 255):
+        # A Mid-360 answers 0x03 for the defined states 4 / 5 / 6 too (#269).
+        for v in (0, 3, 4, 5, 6, 7, 8, 10, 255):
             self.assertEqual(
                 self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([v]))], 20.0),
                 (sim.RET_OUT_OF_RANGE, sim.KEY_WORK_TGT_MODE),
@@ -199,28 +216,51 @@ class DeviceModelTest(unittest.TestCase):
         self.m.tick(24.0)
         self.assertEqual(self.m.work_state, sim.WS_IDLE)
 
-    def test_pattern_mode_accepts_only_non_repetitive(self) -> None:
+    def test_pattern_mode_change_restarts_the_motor(self) -> None:
+        # As on a Mid-360 (#269): 0 / 1 / 2 accepted, a change restarts the motor, the same
+        # value does not, 3 is out of range.
         self._boot()
         self.assertEqual(
             self.m.configure([(sim.KEY_PATTERN_MODE, b'\x00')], 20.0), (sim.RET_OK, 0)
         )
-        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # no motor restart
-        for value in (b'\x01', b'\x02'):
+        self.assertEqual(self.m.work_state, sim.WS_SAMPLING)  # same value: no restart
+        self.assertEqual(self.events, [])
+        for t, value in ((21.0, b'\x01'), (22.0, b'\x02'), (23.0, b'\x00')):
+            self.events.clear()
+            self.assertEqual(self.m.configure([(sim.KEY_PATTERN_MODE, value)], t), (sim.RET_OK, 0))
+            self.assertEqual(self.m.settings[sim.KEY_PATTERN_MODE], value)
+            self.assertEqual(self.m.work_state, sim.WS_MOTORSTARTUP)
+            self.m.tick(t + self.m.startup_delay)
+            self.assertEqual(self.m.work_state, sim.WS_SAMPLING)
             self.assertEqual(
-                self.m.configure([(sim.KEY_PATTERN_MODE, value)], 21.0),
-                (sim.RET_PARAM_NOT_SUPPORT, sim.KEY_PATTERN_MODE),
+                self.events,
+                [
+                    (sim.WS_SAMPLING, sim.WS_MOTORSTARTUP),
+                    (sim.WS_MOTORSTARTUP, sim.WS_READY),
+                    (sim.WS_READY, sim.WS_SAMPLING),
+                ],
             )
         self.assertEqual(
-            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x03')], 22.0),
+            self.m.configure([(sim.KEY_PATTERN_MODE, b'\x03')], 25.0),
             (sim.RET_OUT_OF_RANGE, sim.KEY_PATTERN_MODE),
         )
         self.assertEqual(self.m.settings[sim.KEY_PATTERN_MODE], b'\x00')
 
+    def test_pattern_mode_change_while_idle_does_not_start_the_motor(self) -> None:
+        self._boot()
+        self.m.configure([(sim.KEY_WORK_TGT_MODE, bytes([sim.WS_IDLE]))], 20.0)
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+        self.assertEqual(self.m.configure([(sim.KEY_PATTERN_MODE, b'\x01')], 21.0), (0, 0))
+        self.assertEqual(self.m.work_state, sim.WS_IDLE)
+
     def test_settings_keys_range_checks(self) -> None:
-        for key in (sim.KEY_DETECT_MODE, sim.KEY_TIME_FILTER, sim.KEY_IMU_EN):
+        for key in (sim.KEY_DETECT_MODE, sim.KEY_TIME_FILTER):
             self.assertEqual(self.m.configure([(key, b'\x01')]), (sim.RET_OK, 0))
             self.assertEqual(self.m.configure([(key, b'\x02')]), (sim.RET_OUT_OF_RANGE, key))
             self.assertEqual(self.m.settings[key], b'\x01')
+        # A Mid-360 stores imu_data_en 2 as written (#269).
+        self.assertEqual(self.m.configure([(sim.KEY_IMU_EN, b'\x02')]), (sim.RET_OK, 0))
+        self.assertEqual(self.m.settings[sim.KEY_IMU_EN], b'\x02')
         key = sim.KEY_IMU_SENSOR_CFG
         self.assertEqual(self.m.configure([(key, b'\x01\x03\x07')]), (sim.RET_OK, 0))
         self.assertEqual(self.m.imu_rate, 500.0)

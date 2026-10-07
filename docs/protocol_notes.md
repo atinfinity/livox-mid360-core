@@ -146,13 +146,16 @@ Settled by the figure: the states, the edges and which targets are requestable. 
 **unverified** ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) and
 therefore assumptions in the simulator: the duration of `SELFCHECK` and whether commands are
 answered during it; whether the pass-through `READY` is visible in the push (it is in a
-`0x0101` poll, see above); the return codes for a `work_tgt_mode` write of 4 / 5 / 6 / 8 (assumed
-`0x20`), of an undefined value (assumed `0x03`) and in `ERROR` / `UPGRADE` (assumed `0x02`);
-whether a write during `SELFCHECK` / `MOTORSTARTUP` is accepted and followed (assumed yes);
-whether `0x07` is ever reported; and whether a changed
-`pattern_mode` really restarts the motor ("scan mode changed" edge). The simulator no longer
-models that edge: it accepts only `pattern_mode` 0, the one pattern the base Mid-360 has, and
-answers 1 / 2 with `0x20`.
+`0x0101` poll, see above); the return code for a `work_tgt_mode` write of 8 (assumed `0x03`) and
+for any write in `ERROR` / `UPGRADE` (assumed `0x02`).
+
+Measured on firmware 13.18.0244 ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)):
+- `work_tgt_mode` 0, 3, 4, 5, 6, 7 and 10 answer `0x03` with `error_key` 0x001A.
+- A write during `MOTORSTARTUP` answers `0x00` and is followed once the start-up ends.
+- `0x07` is never reported, and `SELFCHECK` is not seen in the push.
+- `pattern_mode` 1 and 2 are accepted (`0x03` for 3); a changed value restarts the motor
+  ("scan mode changed" edge): MOTORSTARTUP for 1.0 s, READY, SAMPLING. The same value does
+  not. The simulator models this.
 
 ## Return code 0x21 (PARAM_REBOOT_EFFECT)
 
