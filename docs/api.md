@@ -844,7 +844,8 @@ opaque to this SDK, which delivers the datagrams as they arrive. The codec lives
   - The point cloud keeps flowing.
   - Every enable and disable is ACKed with `0x00`, also when repeated.
   - Details are in [protocol_notes.md](protocol_notes.md).
-- **Unverified on hardware**: whether the setting survives a reboot.
+- **Reboot**: the setting does not survive a reboot on a Mid-360 ([#106](https://github.com/atinfinity/livox-mid360-core/issues/106)); the reconnect
+  replay above enables the stream again.
 
 ## lvx2 record / replay
 

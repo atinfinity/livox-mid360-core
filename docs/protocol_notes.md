@@ -217,7 +217,9 @@ Measured on a Mid-360, firmware 13.18.0244 ([#106](https://github.com/atinfinity
 The layout of the file SDK2 writes (`.LivoxDebugPointCloudData`) was compared byte for byte
 with a real one ([#107](https://github.com/atinfinity/livox-mid360-core/issues/107), [debug_data.md](debug_data.md#sdk2-file-format)).
 
-Still **[unverified]**: whether the setting survives a reboot.
+The setting does not survive a reboot ([#106](https://github.com/atinfinity/livox-mid360-core/issues/106)): after `0x0200`, the host setup and
+`SAMPLING` again without a new `0x0303`, no debug datagram arrived in 5 s. The Device's
+reconnect replay re-enables it when it was requested.
 
 ## HMS table
 
