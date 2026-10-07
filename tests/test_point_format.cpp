@@ -283,6 +283,7 @@ TEST_CASE(
     CHECK(s[before] == WorkState::kMotorStartup);
   }
 
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
   const auto rejected = dev->set_scan_pattern(static_cast<ScanPattern>(3));
   REQUIRE_FALSE(rejected.has_value());
   CHECK(rejected.error().kind == DeviceError::Kind::kSession);
@@ -362,6 +363,7 @@ TEST_CASE(
               .fov0 = kWin, .fov1 = std::nullopt, .enable = FovEnable{.fov0 = true, .fov1 = false}})
             .has_value());
   // A rejected write must not be absorbed.
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): out-of-enum value on purpose
   REQUIRE_FALSE(dev->set_scan_pattern(static_cast<ScanPattern>(3)).has_value());
 
   // Something the Device does not see changes the LiDAR: a second host opens it with other
