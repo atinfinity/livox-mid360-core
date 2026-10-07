@@ -122,10 +122,10 @@ struct InstallAttitude
 /// Keys 0x0015 / 0x0016: one FOV window in degrees.
 struct FovConfig
 {
-  std::int32_t yaw_start_deg = 0;    ///< [0, 360)
-  std::int32_t yaw_stop_deg = 0;     ///< [0, 360)
-  std::int32_t pitch_start_deg = 0;  ///< (-10, 60)
-  std::int32_t pitch_stop_deg = 0;   ///< (-10, 60)
+  std::int32_t yaw_start_deg = 0;    ///< [0, 360]
+  std::int32_t yaw_stop_deg = 0;     ///< [0, 360]
+  std::int32_t pitch_start_deg = 0;  ///< [-10, 60]
+  std::int32_t pitch_stop_deg = 0;   ///< [-10, 60]
   std::uint32_t rsvd = 0;            ///< reserved; encoded as given
 };
 
@@ -277,9 +277,10 @@ struct FovSettings
   std::optional<FovEnable> enable;  ///< key 0x0017
 };
 
-/// Wiki ranges for a FOV window: yaw in [0, 360), pitch in (-10, 60). Equal or reversed
-/// start / stop are accepted (a wrapped or empty window). The codecs do not check this;
-/// Device::set_fov() and HostSetup do.
+/// What a Mid-360 accepts for a FOV window (#268): yaw in [0, 360] and pitch in [-10, 60],
+/// both ends included, and start <= stop for both. A reversed window is rejected (no
+/// wrap-around); an equal yaw start / stop is accepted and crops every point. The codecs do
+/// not check this; Device::set_fov() and HostSetup do.
 [[nodiscard]] bool fov_in_range(const FovConfig & f) noexcept;
 /// Key 0x0004 sanity (issue #50): `ip` neither 0.0.0.0 nor 255.255.255.255 nor the subnet's
 /// network / broadcast address, `netmask` a contiguous prefix of 1 to 30 bits, `gateway`

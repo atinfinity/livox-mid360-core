@@ -300,13 +300,20 @@ class DeviceModelTest(unittest.TestCase):
         self.assertFalse(self.m.imu_enabled)
 
     def test_fov_out_of_range_is_rejected(self) -> None:
-        ok = proto.encode_fov_cfg(0, 359, -9, 59)
-        self.assertEqual(self.m.configure([(sim.KEY_FOV0, ok)]), (sim.RET_OK, 0))
+        # Measured on a Mid-360 (#11): both ends included, start > stop rejected.
+        for ok in (
+            proto.encode_fov_cfg(45, 45, 10, 10),
+            proto.encode_fov_cfg(360, 360, 60, 60),
+            proto.encode_fov_cfg(0, 360, -10, 60),
+        ):
+            self.assertEqual(self.m.configure([(sim.KEY_FOV0, ok)]), (sim.RET_OK, 0))
         for bad in (
-            proto.encode_fov_cfg(360, 0, 0, 0),
+            proto.encode_fov_cfg(0, 361, 0, 0),
             proto.encode_fov_cfg(-1, 0, 0, 0),
-            proto.encode_fov_cfg(0, 0, -10, 0),
-            proto.encode_fov_cfg(0, 0, 0, 60),
+            proto.encode_fov_cfg(0, 0, -11, 0),
+            proto.encode_fov_cfg(0, 0, 0, 61),
+            proto.encode_fov_cfg(300, 60, 0, 10),
+            proto.encode_fov_cfg(0, 90, 30, 0),
         ):
             self.assertEqual(
                 self.m.configure([(sim.KEY_FOV1, bad)]), (sim.RET_OUT_OF_RANGE, sim.KEY_FOV1)
@@ -326,13 +333,14 @@ class DeviceModelTest(unittest.TestCase):
         self.assertTrue(self.m.keeps_point(2, (100, 100, 0, 0, 0)))
         self.assertTrue(self.m.keeps_point(3, (5000, 9000, 4500, 0, 0)))  # zenith 90 = pitch 0
         self.assertFalse(self.m.keeps_point(3, (5000, 9000, 27000, 0, 0)))  # yaw 270
-        # Wrap-around and half-open yaw; pitch closed; start == stop empty.
-        self.m.configure([(sim.KEY_FOV0, proto.encode_fov_cfg(350, 10, 0, 0))])
-        self.assertTrue(sim.in_fov_window((350, 10, 0, 0), 355.0, 0.0))
-        self.assertTrue(sim.in_fov_window((350, 10, 0, 0), 5.0, 0.0))
-        self.assertFalse(sim.in_fov_window((350, 10, 0, 0), 10.0, 0.0))
-        self.assertFalse(sim.in_fov_window((350, 10, 0, 0), 5.0, 0.5))
+        # Half-open yaw, no wrap-around; pitch closed; start == stop empty; 0..360 keeps all.
+        self.assertTrue(sim.in_fov_window((350, 360, 0, 0), 355.0, 0.0))
+        self.assertFalse(sim.in_fov_window((350, 360, 0, 0), 5.0, 0.0))
+        self.assertFalse(sim.in_fov_window((0, 10, 0, 0), 10.0, 0.0))
+        self.assertTrue(sim.in_fov_window((0, 10, 0, 0), 5.0, 0.0))
+        self.assertFalse(sim.in_fov_window((0, 10, 0, 0), 5.0, 0.5))
         self.assertFalse(sim.in_fov_window((20, 20, -5, 5), 20.0, 0.0))
+        self.assertTrue(sim.in_fov_window((0, 360, -10, 60), 359.9, -10.0))
         # Second window adds points; mask decides which windows count.
         self.m.configure([(sim.KEY_FOV1, proto.encode_fov_cfg(90, 180, -5, 5))])
         self.assertFalse(self.m.keeps_point(1, (-1000, 1000, 0, 0, 0)))

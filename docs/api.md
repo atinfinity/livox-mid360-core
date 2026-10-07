@@ -391,9 +391,11 @@ if (cur) {
 
 - `set_fov()` sends the present fields in one request, so the LiDAR applies all or none. It
   validates before any I/O: no field at all → `kInvalidArgument` without `key`; a window
-  outside `fov_in_range()` (yaw in [0, 360), pitch in (-10, 60), the wiki ranges) →
-  `kInvalidArgument` with `key` naming the window. Equal or reversed start / stop values pass:
-  what the LiDAR makes of a wrapped or empty window is unverified ([#11](https://github.com/atinfinity/livox-mid360-core/issues/11)). `rsvd` is sent as
+  outside `fov_in_range()` (yaw in [0, 360], pitch in [-10, 60], start <= stop for both, as
+  measured on a Mid-360 in [#11](https://github.com/atinfinity/livox-mid360-core/issues/11)) →
+  `kInvalidArgument` with `key` naming the window. The LiDAR itself rejects a reversed window
+  with `0x03`; there is no wrap-around. An equal yaw start / stop passes and crops every
+  point. `rsvd` is sent as
   given. The codecs in `keys.hpp` stay pure; `set<Key::kFovCfg0>()` skips the range check.
 - `fov()` tolerates a key missing from the ACK (its field stays empty).
 - `HostSetup::fov` applies the same settings in the first 0x0100 of `Device::open()` (after

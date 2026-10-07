@@ -625,11 +625,11 @@ class DeviceModel:
 
     def keeps_point(self, data_type: int, sample: tuple) -> bool:
         """
-        Decide whether a sample survives the [unverified] FOV cropping (see #11).
+        Decide whether a sample survives the FOV cropping (measured in #11).
 
         No enabled window keeps everything; otherwise a point stays when it lies inside any
-        enabled window. Yaw is [start, stop) with wrap-around when start > stop (start ==
-        stop is empty); pitch is [start, stop].
+        enabled window (a union). Yaw is [start, stop), so start == stop is empty; pitch is
+        [start, stop]. A Mid-360 rejects start > stop, so there is no wrap-around.
         """
         windows = self.fov_windows()
         if not windows:
@@ -640,9 +640,13 @@ class DeviceModel:
 
 # --------------------------------------------------------------------------- FOV
 def fov_in_range(value: bytes) -> bool:
-    """Wiki ranges for keys 0x0015 / 0x0016: yaw in [0, 360), pitch in (-10, 60)."""
+    """
+    Check keys 0x0015 / 0x0016 as a Mid-360 does (#268).
+
+    Yaw in [0, 360] and pitch in [-10, 60], both ends included, and start <= stop for both.
+    """
     yaw0, yaw1, pitch0, pitch1, _ = struct.unpack('<iiiiI', value)
-    return all(0 <= y < 360 for y in (yaw0, yaw1)) and all(-10 < p < 60 for p in (pitch0, pitch1))
+    return 0 <= yaw0 <= yaw1 <= 360 and -10 <= pitch0 <= pitch1 <= 60
 
 
 def point_angles(data_type: int, sample: tuple) -> tuple[float, float]:
@@ -657,13 +661,7 @@ def point_angles(data_type: int, sample: tuple) -> tuple[float, float]:
 
 def in_fov_window(window: tuple[int, int, int, int], yaw: float, pitch: float) -> bool:
     yaw0, yaw1, pitch0, pitch1 = window
-    if pitch < min(pitch0, pitch1) or pitch > max(pitch0, pitch1):
-        return False
-    if yaw0 == yaw1:
-        return False
-    if yaw0 < yaw1:
-        return yaw0 <= yaw < yaw1
-    return yaw >= yaw0 or yaw < yaw1
+    return pitch0 <= pitch <= pitch1 and yaw0 <= yaw < yaw1
 
 
 # --------------------------------------------------------------------------- data generation

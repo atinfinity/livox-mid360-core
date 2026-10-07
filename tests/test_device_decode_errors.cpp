@@ -174,7 +174,7 @@ TEST_CASE("Device::set_fov validates its argument before any I/O", "[sim][device
   CHECK(bad0.error().key == Key::kFovCfg0);
 
   const auto bad1 =
-    dev->set_fov(FovSettings{.fov0 = good, .fov1 = FovConfig{.pitch_stop_deg = 60}, .enable = {}});
+    dev->set_fov(FovSettings{.fov0 = good, .fov1 = FovConfig{.pitch_stop_deg = 61}, .enable = {}});
   REQUIRE_FALSE(bad1.has_value());
   CHECK(bad1.error().kind == DeviceError::Kind::kInvalidArgument);
   CHECK(bad1.error().key == Key::kFovCfg1);
