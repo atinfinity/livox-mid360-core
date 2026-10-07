@@ -321,7 +321,7 @@ class DeviceModelTest(unittest.TestCase):
 
     def test_configure_rejects_read_only_unknown_and_wrong_length(self) -> None:
         self.assertEqual(
-            self.m.configure([(sim.KEY_SN, b'x' * 16)]), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN)
+            self.m.configure([(sim.KEY_SN, b'x' * 16)]), (sim.RET_PARAM_NOT_SUPPORT, sim.KEY_SN)
         )
         self.assertEqual(
             self.m.configure([(0x7FFF, b'\x00')]), (sim.RET_PARAM_NOT_SUPPORT, 0x7FFF)
@@ -336,7 +336,7 @@ class DeviceModelTest(unittest.TestCase):
         )
         # Atomic: a bad key later in the list leaves earlier keys unapplied.
         ret, err = self.m.configure([(sim.KEY_IMU_EN, b'\x01'), (sim.KEY_SN, b'x' * 16)])
-        self.assertEqual((ret, err), (sim.RET_PARAM_READ_ONLY, sim.KEY_SN))
+        self.assertEqual((ret, err), (sim.RET_PARAM_NOT_SUPPORT, sim.KEY_SN))
         self.assertFalse(self.m.imu_enabled)
 
     def test_fov_out_of_range_is_rejected(self) -> None:
@@ -1117,6 +1117,31 @@ class EndToEndTest(unittest.TestCase):
     def events(self) -> list[dict]:
         return [json.loads(line) for line in self.out.getvalue().splitlines()]
 
+    def test_unknown_cmd_id_is_not_acked(self) -> None:
+        # A Mid-360 sends no ACK for an unknown cmd_id (#11, #276).
+        cmd = ('127.0.0.1', self.s.ports['cmd'])
+        self.seq += 1
+        unknown_seq = self.seq
+        self.host.sendto(proto.CommandFrame(unknown_seq, 0x0FFF, 0, 0, b'').encode(), cmd)
+        # A later request is answered, and nothing answered the unknown one before it.
+        self.seq += 1
+        self.host.sendto(
+            proto.CommandFrame(
+                self.seq, sim.CMD_PARAM_INQUIRE, 0, 0, b'\x01\x00\x00\x00\x00\x80'
+            ).encode(),
+            cmd,
+        )
+        acks = []
+        while True:
+            f = proto.CommandFrame.parse(self.host.recvfrom(2048)[0])
+            if f.cmd_type == 1:
+                acks.append(f.seq_num)
+                if f.seq_num == self.seq:
+                    break
+        self.assertNotIn(unknown_seq, acks)
+        cmds = [e for e in self.events() if e.get('event') == 'cmd' and e['cmd_id'] == 0x0FFF]
+        self.assertEqual(len(cmds), 1)
+
     def test_discovery_configure_stream_reboot(self) -> None:
         ports = self.s.ports
         ack = self.request(sim.CMD_DISCOVERY, b'', ('127.0.0.1', ports['discovery']))
@@ -1350,7 +1375,9 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(ack.data[0], sim.RET_OK)
             self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x00\x01', log).data, b'\x00')
             self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x00\x01', log).data, b'\x00')
-            self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x05\x01', log).data, b'\x01')
+            # An undefined log_type is ACKed with 0x00 as on a Mid-360 (#276); nothing streams.
+            self.assertEqual(self.request(sim.CMD_COLLECTION_LOG, b'\x05\x01', log).data, b'\x00')
+            self.assertEqual(list(self.s.log_streams), [0])
 
             def chunk():
                 d, addr = host_log.recvfrom(2048)

@@ -424,7 +424,8 @@ class DeviceModel:
         """0x0100 semantics: validate everything first, then apply. Returns (ret, error_key)."""
         for key, value in kvs:
             if key in READ_ONLY:
-                return RET_PARAM_READ_ONLY, key
+                # A Mid-360 answers 0x20, not the wiki's 0x22 (#11, #276).
+                return RET_PARAM_NOT_SUPPORT, key
             if key not in WRITABLE_LEN:
                 return RET_PARAM_NOT_SUPPORT, key
             if self.unsupported(key):
@@ -1465,16 +1466,18 @@ class Simulator:
             m.set_gps_time(ns, now, time.time_ns())
             return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_COLLECTION_LOG:
-            if len(f.data) < 2 or f.data[0] not in LOG_TYPES:
+            if len(f.data) < 2:
                 return RET_FAIL, struct.pack('<B', RET_FAIL)
-            self._log_control(f.data[0], f.data[1] != 0, addr)
+            # A Mid-360 answers an undefined log_type with 0x00 too (#276); nothing streams.
+            if f.data[0] in LOG_TYPES:
+                self._log_control(f.data[0], f.data[1] != 0, addr)
             return RET_OK, struct.pack('<B', RET_OK)
         if f.cmd_id == CMD_DEBUG_DATA:
             req = proto.parse_debug_data_control(f.data)
             if req is None or not self._debug_control(req[0], (req[1], req[2])):
                 return RET_FAIL, struct.pack('<B', RET_FAIL)
             return RET_OK, struct.pack('<B', RET_OK)
-        return RET_FAIL, struct.pack('<B', RET_FAIL)  # unknown cmd_id
+        return RET_FAIL, None  # unknown cmd_id: a Mid-360 sends no ACK (#276)
 
     # -- firmware log (#44) --------------------------------------------------
     def _log_control(self, log_type: int, enable: bool, addr) -> None:

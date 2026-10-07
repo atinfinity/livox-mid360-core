@@ -84,8 +84,8 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual(r['inquire_unknown_key']['ret_code'], '0x20')
         # The supported key is answered, the unknown one omitted (#228).
         self.assertEqual(r['inquire_unknown_key']['entries'], ['0x8000:16'])
-        self.assertEqual(r['unknown_cmd_id']['ret_code'], '0x01')
-        self.assertEqual(r['write_read_only_key']['ret_code'], '0x22')
+        self.assertFalse(r['unknown_cmd_id']['acked'])
+        self.assertEqual(r['write_read_only_key']['ret_code'], '0x20')
         self.assertEqual(r['write_unknown_key']['ret_code'], '0x20')
         self.assertEqual(r['write_wrong_length']['ret_code'], '0x23')
         for name in ('detect_mode', 'time_filter'):
